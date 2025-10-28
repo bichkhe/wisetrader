@@ -1,0 +1,14 @@
+{
+    "bot": "Rust + teloxide",
+    "backend_framework": "Axum or Actix Web (Rust)",
+    "queue": "Redis Streams",
+    "db": "MySQL",
+    "cache": "Redis",
+    "strategy_engine": "freqtrade (python) in docker",
+    "order_execution": "Rust service per-exchange (Binance/OKX)",
+    "orchestration": "Kubernetes (production), docker-compose (dev)",
+    "monitoring": "Prometheus + Grafana",
+    "secrets": "Vault or K8s Secrets",
+    "payments": "Stripe (recommended) or local gateway"
+  }
+  

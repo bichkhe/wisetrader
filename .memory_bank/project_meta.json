@@ -1,0 +1,9 @@
+{
+    "project_name": "teloxide-freqtrade-bot",
+    "short_description": "Telegram trading signals bot (Rust/teloxide) integrated with freqtrade for backtests/hyperopt and live trading on Binance/OKX.",
+    "owner": "Kitto Katty",
+    "repo_url": "",
+    "contact": "you@example.com",
+    "created_at": "2025-10-27"
+  }
+  

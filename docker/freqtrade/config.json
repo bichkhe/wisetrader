@@ -1,0 +1,72 @@
+{
+    "max_open_trades": 3,
+    "stake_currency": "USDT",
+    "stake_amount": "unlimited",
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "cancel_open_orders_on_exit": true,
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 10,
+        "exit_timeout_count": 0,
+        "unit": "minutes"
+    },
+    "entry_pricing": {
+        "price_side": "same",
+        "check_depth_of_market": {
+            "enabled": false,
+            "bids_to_ask_delta": 1
+        },
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0,
+        "use_order_book": false,
+        "order_book_top": 1
+    },
+    "exit_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1
+    },
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "ccxt_config": {},
+        "ccxt_async_config": {},
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT",
+            "BNB/USDT"
+        ],
+        "pair_blacklist": []
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+    "edge": {
+        "enabled": false
+    },
+    "telegram": {
+        "enabled": false,
+        "token": "dummy_token_not_used",
+        "chat_id": "0"
+    },
+    "api_server": {
+        "enabled": true,
+        "listen_ip_address": "0.0.0.0",
+        "listen_port": 8081,
+        "verbosity": "error",
+        "enable_openapi": false,
+        "jwt_secret_key": "jwt_secret_key_change_in_production",
+        "ws_token": "ws_token_change_in_production",
+        "CORS_origins": [],
+        "username": "freqtrader",
+        "password": "freqtraderpass"
+    }
+}
+

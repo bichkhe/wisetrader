@@ -1,0 +1,27 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = "1.1"
+redis = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+dotenv = { workspace = true }
+askama = "0.12"
+reqwest = { workspace = true }
+
+[build-dependencies]
+askama = "0.12"
+

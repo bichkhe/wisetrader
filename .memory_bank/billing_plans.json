@@ -1,0 +1,22 @@
+[
+    {
+      "id": "free_trial",
+      "name": "Free Trial",
+      "price_monthly_usd": 0,
+      "duration_days": 7,
+      "features": ["signals (delayed)", "1 backtest job"]
+    },
+    {
+      "id": "basic",
+      "name": "Basic",
+      "price_monthly_usd": 29,
+      "features": ["signals (real-time)", "1 strategy", "no live trading"]
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "price_monthly_usd": 99,
+      "features": ["live trading", "3 strategies", "priority support"]
+    }
+  ]
+  

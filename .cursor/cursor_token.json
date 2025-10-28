@@ -1,0 +1,27 @@
+[
+    {
+      "id": "0.1",
+      "title": "Repo skeleton + CI",
+      "desc": "Create monorepo layout, initial README, GitHub Actions: rust fmt, clippy, cargo check. Add docker-compose dev.",
+      "assignee": "backend",
+      "estimate": "2d",
+      "acceptance": "Repo exists with folders bot/, backend/, workers/, freqtrade-adapter/, infra/. CI passes on PR."
+    },
+    {
+      "id": "0.2",
+      "title": "Teloxide minimal bot",
+      "desc": "Implement /start and /help, save user id to Postgres. Dockerfile for bot.",
+      "assignee": "bot",
+      "estimate": "1d",
+      "acceptance": "Bot responds and user persisted."
+    },
+    {
+      "id": "0.3",
+      "title": "Freqtrade integration PoC",
+      "desc": "Run freqtrade container and call backtest via adapter. Return JSON report.",
+      "assignee": "integration",
+      "estimate": "3d",
+      "acceptance": "Backtest returns report saved in DB."
+    }
+  ]
+  

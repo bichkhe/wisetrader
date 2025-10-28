@@ -1,0 +1,15 @@
+[
+    {
+      "id": "persona_basic",
+      "name": "Retail trader - Basic",
+      "description": "Wants signals only, no live trading; uses free or basic subscription.",
+      "features": ["signals", "backtest view"]
+    },
+    {
+      "id": "persona_pro",
+      "name": "Pro trader",
+      "description": "Uses live trading, custom params, multiple strategies.",
+      "features": ["live trading", "custom strategy", "higher rate limits"]
+    }
+  ]
+  

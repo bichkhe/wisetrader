@@ -1,0 +1,67 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: wisetrader_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root2025
+      MYSQL_DATABASE: wisetrader_db
+      MYSQL_USER: wisetrader
+      MYSQL_PASSWORD: wisetrader2025
+    ports:
+      - "23306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wisetrader_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: wisetrader_freqtrade
+    command:
+      - "trade"
+      - "--config"
+      - "/freqtrade/user_data/config.json"
+      - "--strategy-path"
+      - "/freqtrade/user_data/strategies"
+      - "--strategy"
+      - "SampleStrategy"
+    ports:
+      - "9080:8080"  # Web UI (optional)
+      - "9081:8081"  # API
+    volumes:
+      - freqtrade_data:/freqtrade/user_data
+      - ./docker/freqtrade/config.json:/freqtrade/user_data/config.json
+      - ./docker/freqtrade/strategies:/freqtrade/user_data/strategies
+    environment:
+      - FT_ENFORCE_ENV=false
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9081/api/v1/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  redis_data:
+  freqtrade_data:
+

@@ -1,0 +1,24 @@
+[package]
+name = "bot"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bot"
+path = "src/main.rs"
+
+[dependencies]
+shared = { path = "../shared" }
+log = "0.4.27"
+pretty_env_logger = "0.5.0"
+home = "0.5.5"
+teloxide = { version = "0.17.0", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
+url = "2.5.4"
+anyhow = "1.0.99"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+dotenv = { workspace = true }
+serde_json = { workspace = true }
+sea-orm = { version = "1.1.17", features = [ "sqlx-mysql", "runtime-tokio-native-tls", "macros", "debug-print" ] }

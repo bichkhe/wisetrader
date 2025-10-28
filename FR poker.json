@@ -1,0 +1,125 @@
+# WiseTrader - Freqtrade Integration Complete!
+
+## Summary
+
+✅ **Bot compiles successfully with freqtrade integration!**
+
+## What's Been Added
+
+### 1. Docker Integration
+- ✅ **Freqtrade container** added to docker-compose.yml
+- ✅ **Config file** created at docker/freqtrade/config.json
+- ✅ **Strategies directory** mounted for dynamic strategy generation
+- ✅ **API enabled** on port 8081
+- ✅ **Web UI** available on port 8080 (optional)
+
+### 2. Askama Template System
+- ✅ **Strategy template** created using Jinja2/Python syntax
+- ✅ **Build system** configured with askama_derive
+- ✅ **Template located** at shared/templates/strategy_template.py
+- ✅ **Dynamic generation** ready for per-user strategies
+
+### 3. Freqtrade API Client
+- ✅ **FreqtradeApiClient** in shared/src/freqtrade.rs
+- ✅ **Ping method** to check freqtrade status
+- ✅ **Status method** to get trading status
+- ✅ **Backtest method** to run backtests on strategies
+
+### 4. Bot Commands (Ready to Enhance)
+- ✅ **Basic bot** compiles and runs
+- ⏳ **Strategy configuration** via Telegram commands (next step)
+- ⏳ **Dynamic FAQ**
+
+## How It Works
+
+### Architecture
+```
+Telegram User
+    ↓
+Bot (Rust/teloxide)
+    ↓
+1. Receive strategy config via Telegram
+2. Generate strategy.py using Askama template
+3. Save to docker/freqtrade/strategies/
+    ↓
+Freqtrade (Python)
+    ↓
+1. Auto-reload strategy
+2. Execute trades
+3. Return results via API
+    ↓
+Bot sends results back to Telegram
+```
+
+### Strategy Generation Flow
+1. User sends Telegram command with strategy parameters
+2. Bot creates `StrategyTemplate` struct
+3. Askama renders template to Python code
+4. Python file saved to freqtrade strategies directory
+5. Freqtrade auto-reloads new strategy
+6. Bot calls freqtrade API to run backtest
+7. Results sent back to user via Telegram
+
+## Files Added
+
+### Docker
+- `docker-compose.yml` - Added freqtrade service
+- `docker/freqtrade/config.json` - Freqtrade config
+- `docker/freqtrade/strategies/` - Strategy storage
+
+### Rust Code
+- `shared/src/templates.rs` - Askama template definition
+- `shared/src/freqtrade.rs` - API client
+- `shared/templates/strategy_template.py` - Python strategy template
+- `shared/build.rs` - Build script for templates
+
+## Compilation Status
+
+```bash
+$ cargo build --bin bot
+✅ Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.78s
+```
+
+## Next Steps
+
+1. **Add Telegram commands** for strategy configuration:
+   - `/create_strategy <name>` - Start strategy creation
+   - `/set_roi <value>` - Set ROI targets
+   - `/set_stoploss <value>` - Set stop loss
+   - `/add_indicator <type>` - Add indicators (RSI, MACD, EMA, BB)
+   - `/backtest <strategy>` - Run backtest on strategy
+   
+2. **Implement strategy generation** in bot
+3. **Add freqtrade API integration** to bot commands
+4. **Test full flow**: Telegram → Bot → Freqtrade → Results → Telegram
+
+## Usage Example (Future)
+
+```
+User: /create_strategy MyStrategy
+Bot: Creating strategy. Send /set_roi 2% to set ROI
+
+User: /set_roi 2%
+Bot: ROI set to 2%. Use /add_indicator RSI to add indicators
+
+User: /add_indicator RSI
+Bot: RSI added. Use /generate to create the strategy
+
+User: /generate
+Bot: Strategy generated! Use /backtest MyStrategy to test it
+
+User: /backtest MyStrategy
+Bot: Running backtest...
+Bot: ✅ Backtest complete! Profit: +5.2%, Trades: 23
+```
+
+## Technology Stack
+
+- **Rust Bot**: Teloxide + Askama
+- **Strategy Engine**: Freqtrade (Python)
+- **Template Engine**: Askama (Jinja2-like)
+- **API Client**: Reqwest
+- **Orchestration**: Docker Compose
+
+The foundation is complete and ready for strategy configuration commands!
+
