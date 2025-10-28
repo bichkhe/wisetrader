@@ -1,3 +1,4 @@
+use std::process::Command;
 fn main() {
     askama_derive::rerun_if_changed("templates");
     let hash = Command::new("git")
