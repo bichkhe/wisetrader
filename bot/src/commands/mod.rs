@@ -1,17 +1,21 @@
 use anyhow::Result;
 use sea_orm::EntityTrait;
-use teloxide::{macros::BotCommands, prelude::*, utils::command};
-use teloxide::dispatching::{UpdateHandler, dialogue};
-use teloxide::types::{Message, ParseMode};
+use teloxide::utils::command::BotCommands;
+use teloxide::{ prelude::*};
+use teloxide::types::Message;
 use shared::entity::{users, strategies};
 use chrono::{Utc, Duration};
 use tracing::info;
 use std::sync::Arc;
+use std::time::Instant;
 use crate::state::{AppState, MyDialogue};
 pub mod admin;
-pub use admin::handle_version;
+pub mod me;
 
-/// 🤖 Bạn có thể chọn một trong các lệnh sau
+pub use admin::handle_version;
+pub use me::handle_me;
+
+/// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
 pub enum Command {
@@ -43,46 +47,8 @@ pub enum Command {
    Strategies
 }
 
-pub async fn handle_command(
-    bot: Bot,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    if let Some(text) = msg.text() {
-        let cmd = match text {
-            "/start" => Command::Start,
-            "/help" => Command::Help,
-            "/subscription" => Command::Subscription,
-            "/strategies" => Command::Strategies,
-            _ => return Ok(()),
-        };
-        
-        match cmd {
-            Command::Start => handle_start(bot, msg, state).await?,
-            Command::Help => handle_help(bot, msg).await?,
-            Command::Subscription => todo!(),
-            Command::Strategies => handle_strategies(bot, msg, state).await?,
-            Command::Cancel => todo!(),
-            Command::Me => todo!(),
-            Command::Info(_) => todo!(),
-            Command::Deposit => todo!(),
-            Command::Broadcast(_) => todo!(),
-            Command::Ip(_) => todo!(),
-            Command::Version => todo!(),
-            Command::Unlock(_) => todo!(),
-        };
-    }
-    Ok(())
-}
 
-pub async fn handle_callback(_bot: Bot, q: CallbackQuery) -> Result<(), anyhow::Error> {
-    if let Some(data) = q.data {
-        info!("Received callback: {}", data);
-    }
-    Ok(())
-}
-
-async fn handle_start(bot: Bot, msg: Message, state: Arc<AppState>) -> Result<(), anyhow::Error> {
+async fn handle_start(bot: Bot, msg: Message, state: Arc<AppState>) -> anyhow::Result<()> {
         let user_id = msg.from.as_ref().unwrap().id.0 as i64;
         let username = msg.from.as_ref().unwrap().username.clone();
 
@@ -139,15 +105,26 @@ async fn handle_start(bot: Bot, msg: Message, state: Arc<AppState>) -> Result<()
     Ok(())
 }
 
-async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
-    let help_text = "Available commands:\n\n\
-        /start - Start the bot and register\n\
-        /help - Show this help message\n\
-        /subscription - Show your subscription status\n\
-        /strategies - List available strategies\n\
-        /mystrategies - Show your active strategies";
+pub async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
+    let start_time = Instant::now();
     
-    bot.send_message(msg.chat.id, help_text).await?;
+    let from = msg.from.unwrap();
+    let fullname = from.full_name();
+    let telegram_id = from.id.0 as i64;
+    let username = from.username.unwrap_or("Không có".to_string());
+    tracing::info!(
+        "Handling /help command for user: {} (id: {}, username: {})",
+        fullname,
+        telegram_id,
+        username
+    );
+    // Filter out some commands from the help message
+    let  descriptions = Command::descriptions().to_string();
+    bot.send_message(msg.chat.id, descriptions)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await?;
+    let duration = start_time.elapsed();
+    tracing::info!("Time taken to handle /help command: {:?}", duration);
     Ok(())
 }
 
@@ -204,7 +181,7 @@ async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
 //     Ok(())
 // }
 
-async fn handle_strategies(bot: Bot, msg: Message, state: Arc<AppState>) -> Result<(), anyhow::Error> {
+async fn handle_strategies(bot: Bot, msg: Message, state: Arc<AppState>) -> anyhow::Result<()> {
     let db = state.db.clone();
     let strategies = strategies::Entity::find()
         .all(db.as_ref())
@@ -279,8 +256,11 @@ pub async fn handle_invalid(
     bot: Bot,
     msg: Message,
     state: Arc<AppState>,
-) -> Result<(), anyhow::Error>  {
-    bot.send_message(msg.chat.id, "Invalid command. Please use /help to see available commands.").await?;
+) -> anyhow::Result<()>  {
+    bot.send_message(
+        msg.chat.id, 
+        "❌ Invalid command. Please use /help to see available commands."
+    ).await?;
     Ok(())
 }
 
@@ -288,7 +268,7 @@ pub async fn handle_invalid_callback(
     bot: Bot,
     dialogue: MyDialogue,
     q: CallbackQuery,
-) -> Result<(), anyhow::Error>  {
+) -> anyhow::Result<()>  {
     bot.send_message(dialogue.chat_id(), format!(" Select network"))
         .await?;
     Ok(())

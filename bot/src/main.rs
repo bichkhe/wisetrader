@@ -7,7 +7,8 @@ mod state;
 mod services;
 mod repositories;
 
-use crate::{commands::{handle_invalid, handle_invalid_callback, handle_version, Command},  state::AppState};
+use crate::{commands::{handle_invalid, handle_invalid_callback, handle_version,
+    handle_me,handle_help, Command},  state::AppState};
 use state::BotState;
 
 fn schema() -> UpdateHandler<anyhow::Error> {
@@ -15,6 +16,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
     let command_handler = teloxide::filter_command::<Command, _>().branch(
         case![BotState::Normal]
             .branch(case![Command::Version].endpoint(handle_version))
+            .branch(case![Command::Me].endpoint(handle_me))
+            .branch(case![Command::Help].endpoint(handle_help))
     );
 
     let message_handler = Update::filter_message()
