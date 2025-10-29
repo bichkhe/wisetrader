@@ -44,9 +44,49 @@ impl AppState {
 pub enum BotState {
     #[default]
     Normal,
+    CreateStrategy(CreateStrategyState),
+    Trading(TradingState),
+}
+
+
+#[derive(Clone, Debug, Default)]
+pub enum CreateStrategyState {
+    #[default]
     Start,
-    Help,
-    Subscription,
-    Strategies,
-    MyStrategies,
+    WaitingForName,
+    WaitingForAlgorithm,
+    WaitingForBuyCondition {
+        algorithm: String,
+    },
+    WaitingForSellCondition {
+        algorithm: String,
+        buy_condition: String,
+    },
+    WaitingForTimeframe {
+        algorithm: String,
+        buy_condition: String,
+        sell_condition: String,
+    },
+    WaitingForPair {
+        algorithm: String,
+        buy_condition: String,
+        sell_condition: String,
+        timeframe: String,
+    },
+    WaitingForConfirmation {
+        algorithm: String,
+        buy_condition: String,
+        sell_condition: String,
+        timeframe: String,
+        pair: String,
+    },
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum TradingState {
+    #[default]
+    Idle,
+    WaitingForPair,
+    WaitingForAmount,
+    WaitingForConfirmation,
 }

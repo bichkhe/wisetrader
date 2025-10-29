@@ -57,7 +57,7 @@ impl FreqtradeApiClient {
         Ok(text)
     }
 
-    pub async fn backtest(&self, strategy_name: &str, timeframe: &str, timerange: &str) -> Result<BacktestResult> {
+    pub async fn backtest(&self, strategy_name: &str, symbol: &str, timeframe: &str, timerange: &str) -> Result<BacktestResult> {
         // This is a simplified version - real implementation would need proper auth
         let client = reqwest::Client::new();
         

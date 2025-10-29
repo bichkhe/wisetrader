@@ -7,9 +7,11 @@ mod state;
 mod services;
 mod repositories;
 
-use crate::{commands::{handle_invalid, handle_invalid_callback, handle_version,
-    handle_me,handle_help, Command},  state::AppState};
-use state::BotState;
+
+use crate::{commands::{handle_invalid, handle_version,
+    handle_me,handle_help,handle_backtest,handle_create_strategy, handle_strategy_callback, 
+    handle_strategy_input_callback, Command},  state::AppState};
+use state::{BotState};
 
 fn schema() -> UpdateHandler<anyhow::Error> {
     use dptree::case;
@@ -18,15 +20,24 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             .branch(case![Command::Version].endpoint(handle_version))
             .branch(case![Command::Me].endpoint(handle_me))
             .branch(case![Command::Help].endpoint(handle_help))
+            .branch(case![Command::Backtest(pk)].endpoint(handle_backtest))
+            .branch(case![Command::CreateStrategy].endpoint(handle_create_strategy))
     );
 
     let message_handler = Update::filter_message()
         .branch(command_handler)
-        .branch(case![BotState::Subscription].endpoint(handle_invalid))
+        .branch(case![BotState::Normal].endpoint(handle_invalid))
+        .branch(
+            case![BotState::CreateStrategy(pk)]
+                .endpoint(handle_strategy_input_callback)
+        )
         .branch(dptree::endpoint(handle_invalid));
 
     let callback_query_handler = Update::filter_callback_query()
-        .branch(case![BotState::Subscription].endpoint(handle_invalid_callback));
+        .branch(
+            case![BotState::CreateStrategy(pk)]
+                .endpoint(handle_strategy_callback)
+        );
         
 
     dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()

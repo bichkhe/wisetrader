@@ -11,10 +11,13 @@ use std::time::Instant;
 use crate::state::{AppState, MyDialogue};
 pub mod admin;
 pub mod me;
+pub mod trading;
+pub mod create_strategy;
 
 pub use admin::handle_version;
 pub use me::handle_me;
-
+pub use trading::handle_backtest;
+pub use create_strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback};
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -43,8 +46,14 @@ pub enum Command {
 
     /// Xem thông tin subscription của bạn
     Subscription,
+    /// Các indicators
    ///  Xem các chiến thuật hiện có
-   Strategies
+   Strategies,
+   /// Tạo chiến thuật mới
+   CreateStrategy,
+
+   /// Xem kết quả backtest
+   Backtest(String),
 }
 
 
@@ -254,9 +263,15 @@ async fn handle_strategies(bot: Bot, msg: Message, state: Arc<AppState>) -> anyh
 
 pub async fn handle_invalid(
     bot: Bot,
+    dialogue: MyDialogue,
     msg: Message,
     state: Arc<AppState>,
 ) -> anyhow::Result<()>  {
+    if let Ok(state) = dialogue.get().await {
+        let state_text = format!("Current dialogue state: {:?}", state);
+        bot.send_message(msg.chat.id, state_text).await?;
+    }
+
     bot.send_message(
         msg.chat.id, 
         "❌ Invalid command. Please use /help to see available commands."
