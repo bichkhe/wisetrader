@@ -19,6 +19,155 @@ fn escape_html(text: &str) -> String {
         .replace("'", "&#x27;")
 }
 
+/// Split text into chunks at character boundaries (safe for UTF-8)
+fn split_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut current_pos = 0;
+    let chars: Vec<char> = text.chars().collect();
+    let total_chars = chars.len();
+    
+    while current_pos < total_chars {
+        let end_pos = std::cmp::min(current_pos + max_chars, total_chars);
+        let chunk: String = chars[current_pos..end_pos].iter().collect();
+        chunks.push(chunk);
+        current_pos = end_pos;
+    }
+    
+    chunks
+}
+
+/// Extract all tables from freqtrade output, returns vector of (title, content)
+fn extract_all_tables(stdout: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = stdout.lines().collect();
+    let mut tables: Vec<(String, String)> = Vec::new();
+    let mut current_table_title = String::new();
+    let mut current_table_lines: Vec<String> = Vec::new();
+    let mut in_table = false;
+    
+    for (idx, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        
+        // Detect table titles (centered text with REPORT/STATS/METRICS/SUMMARY, no box-drawing chars)
+        let is_title = trimmed.len() > 10 && trimmed.len() < 100 && 
+                       (trimmed.contains("REPORT") || 
+                        trimmed.contains("STATS") || 
+                        trimmed.contains("METRICS") ||
+                        trimmed.contains("SUMMARY")) &&
+                       !trimmed.contains("┃") && !trimmed.contains("│") && 
+                       !trimmed.contains("┼") && !trimmed.contains("┡") &&
+                       !trimmed.contains("━") && !trimmed.contains("═");
+        
+        // Detect table lines (box-drawing characters)
+        let is_table_line = trimmed.contains("┃") || trimmed.contains("│") || 
+                           trimmed.contains("┡") || trimmed.contains("┼") ||
+                           trimmed.contains("┏") || trimmed.contains("┗") ||
+                           (trimmed.contains("━━") && trimmed.len() > 20) ||
+                           (trimmed.contains("══") && trimmed.len() > 20);
+        
+        if is_title {
+            // Save previous table if exists
+            if in_table && !current_table_lines.is_empty() {
+                tables.push((current_table_title.clone(), current_table_lines.join("\n")));
+                current_table_lines.clear();
+            }
+            // Start new table
+            current_table_title = trimmed.to_string();
+            in_table = true;
+        } else if in_table {
+            if is_table_line {
+                current_table_lines.push(line.to_string());
+            } else if trimmed.is_empty() {
+                // Empty line within table (separator)
+                if current_table_lines.len() > 0 {
+                    current_table_lines.push(line.to_string());
+                }
+            } else {
+                // Check if next line is still part of table
+                let next_is_table = lines.get(idx + 1)
+                    .map(|l| {
+                        let t = l.trim();
+                        t.contains("┃") || t.contains("│") || t.contains("┡") || 
+                        t.contains("┼") || t.contains("┏") || t.contains("┗") ||
+                        t.is_empty() || t.contains("━━") || t.contains("══")
+                    })
+                    .unwrap_or(false);
+                
+                if !next_is_table && current_table_lines.len() > 5 {
+                    // End of table, save it
+                    tables.push((current_table_title.clone(), current_table_lines.join("\n")));
+                    current_table_lines.clear();
+                    current_table_title.clear();
+                    in_table = false;
+                }
+            }
+        }
+    }
+    
+    // Save last table if exists
+    if !current_table_lines.is_empty() {
+        tables.push((current_table_title, current_table_lines.join("\n")));
+    }
+    
+    tables
+}
+
+/// Extract summary table section from freqtrade output (legacy, kept for compatibility)
+fn extract_summary_table(stdout: &str) -> String {
+    let lines: Vec<&str> = stdout.lines().collect();
+    let mut summary_lines: Vec<String> = Vec::new();
+    let mut in_summary = false;
+    let mut table_lines = 0;
+    
+    for line in lines.iter() {
+        let trimmed = line.trim();
+        
+        // Detect summary section
+        if trimmed.contains("SUMMARY") || trimmed.contains("BACKTEST RESULT") || trimmed.contains("===================") {
+            in_summary = true;
+            if !trimmed.contains("========") {
+                summary_lines.push(line.to_string());
+            }
+            continue;
+        }
+        
+        if in_summary {
+            // Collect table lines (usually contain | or multiple spaces)
+            if trimmed.contains("|") || (trimmed.len() > 20 && trimmed.chars().filter(|c| c.is_whitespace()).count() > 5) {
+                summary_lines.push(line.to_string());
+                table_lines += 1;
+                // Limit table size to avoid message too long
+                if table_lines > 30 {
+                    summary_lines.push("... (table truncated)".to_string());
+                    break;
+                }
+            } else if trimmed.is_empty() {
+                if summary_lines.len() > 5 {
+                    summary_lines.push(line.to_string());
+                }
+            } else if table_lines > 5 && !trimmed.contains("=") && !trimmed.contains("-") {
+                // End of summary section
+                break;
+            }
+        }
+    }
+    
+    // If no summary found, return key metrics lines
+    if summary_lines.is_empty() || summary_lines.len() < 3 {
+        for line in lines.iter() {
+            let trimmed = line.trim();
+            if trimmed.contains("Total") || trimmed.contains("Profit") || trimmed.contains("Win") || 
+               trimmed.contains("Drawdown") || trimmed.contains("Trades") {
+                summary_lines.push(line.to_string());
+            }
+            if summary_lines.len() > 15 {
+                break;
+            }
+        }
+    }
+    
+    summary_lines.join("\n")
+}
+
 /// Calculate timerange string for Freqtrade CLI (format: YYYYMMDD-)
 fn calculate_timerange(range: &str) -> String {
     let now = Utc::now();
@@ -494,45 +643,158 @@ pub async fn handle_backtest_callback(
                                             result.profit_pct
                                         );
                                         
-                                        // Build result message with timing info
+                                        // Build result message with detailed report table
                                         let mut result_msg = format!(
                                             "✅ <b>Backtest Complete!</b>\n\n\
                                             <b>Strategy:</b> {}\n\
                                             <b>Exchange:</b> {}\n\
                                             <b>Pair:</b> {}\n\
                                             <b>Time Range:</b> {}\n\
-                                            <b>Timeframe:</b> {}\n\n\
-                                            <b>📊 Results:</b>\n\
-                                            📈 Total Trades: <b>{}</b>\n\
-                                            💰 Profit: <b>{:.2}%</b>\n\n\
-                                            <b>⏱️ Timing:</b>\n",
+                                            <b>Timeframe:</b> {}\n\n",
                                             escape_html(&strategy_name),
                                             escape_html(&exchange),
                                             freqtrade_pair,
                                             timerange,
-                                            timeframe,
-                                            result.trades,
-                                            result.profit_pct
+                                            timeframe
                                         );
                                         
+                                        // Add detailed results table
+                                        result_msg.push_str("<b>📊 Backtest Report:</b>\n");
+                                        result_msg.push_str("━━━━━━━━━━━━━━━━━━━━\n");
+                                        
+                                        result_msg.push_str(&format!("📈 Total Trades: <b>{}</b>\n", result.trades));
+                                        
+                                        // Profit with color indication
+                                        let profit_symbol = if result.profit_pct >= 0.0 { "💰" } else { "📉" };
+                                        result_msg.push_str(&format!("{} Profit: <b>{:.2}%</b>\n", profit_symbol, result.profit_pct));
+                                        
+                                        // Additional metrics if available
+                                        if let Some(win_rate) = result.win_rate {
+                                            result_msg.push_str(&format!("✅ Win Rate: <b>{:.2}%</b>\n", win_rate));
+                                        }
+                                        if let Some(drawdown) = result.max_drawdown {
+                                            result_msg.push_str(&format!("📉 Max Drawdown: <b>{:.2}%</b>\n", drawdown));
+                                        }
+                                        if let (Some(start), Some(final_bal)) = (result.starting_balance, result.final_balance) {
+                                            result_msg.push_str(&format!("💵 Starting: <b>${:.2}</b> → Final: <b>${:.2}</b>\n", start, final_bal));
+                                        }
+                                        
+                                        result_msg.push_str("━━━━━━━━━━━━━━━━━━━━\n\n");
+                                        
+                                        // Add timing info
+                                        result_msg.push_str("<b>⏱️ Performance:</b>\n");
                                         if let Some(dl_time) = result.download_time_secs {
                                             result_msg.push_str(&format!("📥 Data Download: <b>{}s</b>\n", dl_time));
                                         } else {
-                                            result_msg.push_str("📥 Data Download: <b>Skipped (already exists)</b>\n");
+                                            result_msg.push_str("📥 Data Download: <b>Skipped</b>\n");
                                         }
                                         result_msg.push_str(&format!("🔄 Backtest Execution: <b>{}s</b>\n", result.backtest_time_secs));
                                         
                                         let total_time = result.download_time_secs.unwrap_or(0) + result.backtest_time_secs;
                                         result_msg.push_str(&format!("⏱️ Total Time: <b>{}s</b>\n\n", total_time));
+                                        
                                         result_msg.push_str(&format!("💾 Strategy file: <code>{}</code>", filepath.display()));
                                         
+                                        // Send main summary message
                                         bot.edit_message_text(
                                             chat_id,
                                             message_id,
-                                            result_msg
+                                            result_msg.clone()
                                         )
                                             .parse_mode(teloxide::types::ParseMode::Html)
                                             .await?;
+                                        
+                                        // Log full output to console for debugging
+                                        tracing::info!("=== Backtest Full Output ===");
+                                        if let Some(ref stdout) = result.stdout {
+                                            tracing::info!("STDOUT:\n{}", stdout);
+                                        }
+                                        if let Some(ref stderr) = result.stderr {
+                                            if !stderr.is_empty() {
+                                                tracing::info!("STDERR:\n{}", stderr);
+                                            }
+                                        }
+                                        tracing::info!("=== End Backtest Output ===");
+                                        
+                                        // Extract and send all tables from backtest output
+                                        if let Some(ref stdout) = result.stdout {
+                                            let tables = extract_all_tables(stdout);
+                                            
+                                            if !tables.is_empty() {
+                                                // Send each table as a separate message for better readability
+                                                for (idx, (title, table_content)) in tables.iter().enumerate() {
+                                                    let table_num = idx + 1;
+                                                    let total_tables = tables.len();
+                                                    
+                                                    // Format title nicely with emoji based on content
+                                                    let emoji = if title.contains("SUMMARY") {
+                                                        "📊"
+                                                    } else if title.contains("REPORT") {
+                                                        "📈"
+                                                    } else if title.contains("STATS") {
+                                                        "📉"
+                                                    } else {
+                                                        "📋"
+                                                    };
+                                                    
+                                                    let formatted_title = format!(
+                                                        "{} <b>{}</b> ({}/{})\n",
+                                                        emoji,
+                                                        escape_html(title),
+                                                        table_num,
+                                                        total_tables
+                                                    );
+                                                    
+                                                    // Split table content into chunks if needed
+                                                    let chunks = split_into_chunks(table_content, 3200); // Smaller chunk for table formatting
+                                                    
+                                                    for (chunk_idx, chunk) in chunks.iter().enumerate() {
+                                                        let mut table_msg = if chunk_idx == 0 {
+                                                            formatted_title.clone()
+                                                        } else {
+                                                            format!("{} <b>{} (cont.)</b>\n", emoji, escape_html(title))
+                                                        };
+                                                        
+                                                        table_msg.push_str("<pre>");
+                                                        table_msg.push_str(&escape_html(chunk));
+                                                        table_msg.push_str("</pre>");
+                                                        
+                                                        bot.send_message(chat_id, table_msg)
+                                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                                            .await?;
+                                                        
+                                                        // Small delay between messages to avoid rate limiting
+                                                        if chunk_idx < chunks.len() - 1 || idx < total_tables - 1 {
+                                                            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                // Fallback: if no tables found, send full output in chunks
+                                                let chunks = split_into_chunks(stdout, 3500);
+                                                let total_chunks = chunks.len();
+                                                
+                                                for (idx, chunk) in chunks.iter().enumerate() {
+                                                    let chunk_num = idx + 1;
+                                                    let mut chunk_msg = format!(
+                                                        "📋 <b>Backtest Output ({}/{})</b>\n\n",
+                                                        chunk_num,
+                                                        total_chunks
+                                                    );
+                                                    chunk_msg.push_str("<pre>");
+                                                    chunk_msg.push_str(&escape_html(chunk));
+                                                    chunk_msg.push_str("</pre>");
+                                                    
+                                                    bot.send_message(chat_id, chunk_msg)
+                                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                                        .await?;
+                                                    
+                                                    if idx < chunks.len() - 1 {
+                                                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     Err(_) => {
                                         // Error already handled above

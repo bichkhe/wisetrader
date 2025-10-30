@@ -19,13 +19,19 @@ pub struct FreqtradeVersion {
     pub version: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BacktestResult {
     pub strategy: String,
     pub trades: i32,
     pub profit_pct: f64,
     pub download_time_secs: Option<u64>,
     pub backtest_time_secs: u64,
+    pub stdout: Option<String>, // Full stdout output for detailed information
+    pub stderr: Option<String>, // Full stderr output for debugging
+    pub win_rate: Option<f64>, // Win rate percentage
+    pub max_drawdown: Option<f64>, // Max drawdown percentage
+    pub starting_balance: Option<f64>, // Starting capital
+    pub final_balance: Option<f64>, // Final balance
 }
 
 impl FreqtradeApiClient {
@@ -208,7 +214,14 @@ impl FreqtradeApiClient {
 
         let elapsed = start_time.elapsed().as_secs();
         let stdout = String::from_utf8_lossy(&output.stdout);
-        tracing::info!("Data downloaded successfully in {}s: {}", elapsed, stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        // Log full output for debugging
+        tracing::info!("Download data stdout:\n{}", stdout);
+        if !stderr.is_empty() {
+            tracing::info!("Download data stderr:\n{}", stderr);
+        }
+        tracing::info!("Data downloaded successfully in {}s", elapsed);
 
         Ok(elapsed)
     }
@@ -342,39 +355,69 @@ impl FreqtradeApiClient {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        tracing::debug!("Backtest stdout: {}", stdout);
-        tracing::debug!("Backtest stderr: {}", stderr);
+        // Log full output for debugging
+        tracing::info!("Backtest stdout:\n{}", stdout);
+        tracing::info!("Backtest stderr:\n{}", stderr);
 
         // Parse freqtrade backtest output
-        // Freqtrade outputs results in text format, we need to extract:
-        // - Total trades
-        // - Profit percentage
-        
+        // Freqtrade outputs results in text format with tables, extract all metrics
         let mut trades = 0;
         let mut profit_pct = 0.0;
-
-        // Try to extract trades count from output
-        // Freqtrade typically shows: "Total trades: 123" or "Trades: 123"
+        let mut win_rate = 0.0;
+        let mut max_drawdown = 0.0;
+        let mut starting_balance = 0.0;
+        let mut final_balance = 0.0;
+        
         for line in stdout.lines() {
-            if line.contains("Total") && line.contains("trade") {
-                if let Some(num) = extract_number(line) {
+            let line_trimmed = line.trim();
+            
+            // Extract total trades
+            if line_trimmed.contains("Total") && (line_trimmed.contains("trade") || line_trimmed.contains("Trade")) && trades == 0 {
+                if let Some(num) = extract_number(line_trimmed) {
                     trades = num;
                 }
-            } else if line.contains("Trades:") || line.contains("trades:") {
-                if let Some(num) = extract_number(line) {
+            } else if (line_trimmed.contains("Trades:") || line_trimmed.contains("trades:")) && trades == 0 {
+                if let Some(num) = extract_number(line_trimmed) {
                     trades = num;
                 }
             }
             
-            // Try to extract profit percentage
-            // Freqtrade shows: "Total profit: 12.34%" or "Profit: 12.34%"
-            if line.contains("Total profit") || line.contains("Total Profit") {
-                if let Some(pct) = extract_percentage(line) {
+            // Extract profit percentage
+            if (line_trimmed.contains("Total profit") || line_trimmed.contains("Total Profit") || line_trimmed.contains("Profit %")) && profit_pct == 0.0 {
+                if let Some(pct) = extract_percentage(line_trimmed) {
                     profit_pct = pct;
                 }
-            } else if line.contains("Profit:") && line.contains("%") {
-                if let Some(pct) = extract_percentage(line) {
+            } else if line_trimmed.contains("Profit:") && line_trimmed.contains("%") && profit_pct == 0.0 {
+                if let Some(pct) = extract_percentage(line_trimmed) {
                     profit_pct = pct;
+                }
+            }
+            
+            // Extract win rate
+            if (line_trimmed.contains("Win") && line_trimmed.contains("Rate")) || line_trimmed.contains("Win %") || (line_trimmed.contains("Win%") && win_rate == 0.0) {
+                if let Some(pct) = extract_percentage(line_trimmed) {
+                    win_rate = pct;
+                }
+            }
+            
+            // Extract max drawdown
+            if line_trimmed.contains("Max Drawdown") || (line_trimmed.contains("drawdown") && max_drawdown == 0.0) {
+                if let Some(pct) = extract_percentage(line_trimmed) {
+                    max_drawdown = pct.abs();
+                }
+            }
+            
+            // Extract starting balance
+            if line_trimmed.contains("Starting capital") || line_trimmed.contains("Starting balance") || line_trimmed.contains("Starting amount") {
+                if let Some(num) = extract_decimal(line_trimmed) {
+                    starting_balance = num;
+                }
+            }
+            
+            // Extract final balance
+            if line_trimmed.contains("Final balance") || line_trimmed.contains("Final equity") || line_trimmed.contains("End balance") {
+                if let Some(num) = extract_decimal(line_trimmed) {
+                    final_balance = num;
                 }
             }
         }
@@ -401,12 +444,26 @@ impl FreqtradeApiClient {
 
         let backtest_elapsed = backtest_start.elapsed().as_secs();
         
+        // Store full output for detailed information
+        let stdout_full = if stdout.is_empty() { None } else { Some(stdout.to_string()) };
+        let stderr_full = if stderr.is_empty() { None } else { Some(stderr.to_string()) };
+        
+        // Log parsed metrics
+        tracing::info!("Parsed metrics: trades={}, profit={:.2}%, win_rate={:.2}%, drawdown={:.2}%, start={:.2}, final={:.2}", 
+            trades, profit_pct, win_rate, max_drawdown, starting_balance, final_balance);
+        
         Ok(BacktestResult {
             strategy: strategy_name.to_string(),
             trades,
             profit_pct,
             download_time_secs: download_time,
             backtest_time_secs: backtest_elapsed,
+            stdout: stdout_full,
+            stderr: stderr_full,
+            win_rate: if win_rate > 0.0 { Some(win_rate) } else { None },
+            max_drawdown: if max_drawdown > 0.0 { Some(max_drawdown) } else { None },
+            starting_balance: if starting_balance > 0.0 { Some(starting_balance) } else { None },
+            final_balance: if final_balance > 0.0 { Some(final_balance) } else { None },
         })
     }
 
@@ -477,6 +534,12 @@ impl FreqtradeApiClient {
                                 profit_pct,
                                 download_time_secs: None,
                                 backtest_time_secs: 0,
+                                stdout: None,
+                                stderr: None,
+                                win_rate: None,
+                                max_drawdown: None,
+                                starting_balance: None,
+                                final_balance: None,
                             })
                         }
                         Err(_) => Err(anyhow::anyhow!(
@@ -508,5 +571,12 @@ fn extract_percentage(text: &str) -> Option<f64> {
     let re = Regex::new(r"([+-]?\d+\.?\d*)%").ok()?;
     let matched = re.find(text)?;
     matched.as_str().trim_end_matches('%').parse().ok()
+}
+
+/// Helper function to extract decimal number from text
+fn extract_decimal(text: &str) -> Option<f64> {
+    let re = Regex::new(r"(\d+\.?\d*)").ok()?;
+    let matched = re.find(text)?;
+    matched.as_str().parse().ok()
 }
 
