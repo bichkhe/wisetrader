@@ -35,12 +35,13 @@ fn calculate_timerange(range: &str) -> String {
     format!("{}-", start_date.format("%Y%m%d"))
 }
 
-/// Parse strategy description to extract parameters
-fn parse_strategy_description(description: &str) -> (String, String, String, String) {
+/// Parse strategy description to extract parameters (returns algorithm, buy, sell, timeframe, pair)
+fn parse_strategy_description(description: &str) -> (String, String, String, String, String) {
     let mut algorithm = "RSI".to_string();
     let mut buy_condition = "RSI < 30".to_string();
     let mut sell_condition = "RSI > 70".to_string();
     let mut timeframe = "1h".to_string();
+    let mut pair = "BTC/USDT".to_string();
 
     for line in description.lines() {
         if line.starts_with("Algorithm: ") {
@@ -51,10 +52,12 @@ fn parse_strategy_description(description: &str) -> (String, String, String, Str
             sell_condition = line[6..].to_string();
         } else if line.starts_with("Timeframe: ") {
             timeframe = line[11..].to_string();
+        } else if line.starts_with("Pair: ") {
+            pair = line[6..].to_string();
         }
     }
 
-    (algorithm, buy_condition, sell_condition, timeframe)
+    (algorithm, buy_condition, sell_condition, timeframe, pair)
 }
 
 /// Generate Python strategy file from strategy data
@@ -89,9 +92,22 @@ fn generate_strategy_file(
     let entry_condition_ema = buy_condition.contains("EMA");
     let entry_condition_bb = buy_condition.contains("Bollinger") || buy_condition.contains("LowerBand");
 
-    // Create template data
+    // Generate filename first to use for class name
+    let safe_name = strategy_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .collect::<String>();
+    let filename = format!("{}_{}.py", safe_name, strategy_id);
+    
+    // Class name must match filename (without .py) for Freqtrade
+    // Freqtrade expects: filename RSI_5m_BTCUSDT_3.py -> class RSI_5m_BTCUSDT_3
+    let class_name = filename
+        .trim_end_matches(".py")
+        .to_string();
+    
+    // Create template data with class name matching filename (Freqtrade requires exact match)
     let template = StrategyTemplate {
-        strategy_name: format!("Strategy{}", strategy_id),
+        strategy_name: class_name,
         minimal_roi_60: "0.05".to_string(),
         minimal_roi_30: "0.03".to_string(),
         minimal_roi_0: "0.01".to_string(),
@@ -124,18 +140,11 @@ fn generate_strategy_file(
         rsi_overbought: 70,
     };
 
-    // Render template
+    // Render template (class name already matches filename)
     let code = template.render()?;
 
-    // Generate filename (sanitize strategy name)
-    let safe_name = strategy_name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
-        .collect::<String>();
-    let filename = format!("{}_{}.py", safe_name, strategy_id);
-    let filepath = strategies_path.join(filename);
-
     // Write file
+    let filepath = strategies_path.join(&filename);
     fs::write(&filepath, code)?;
 
     Ok(filepath)
@@ -333,8 +342,22 @@ pub async fn handle_backtest_callback(
                             .map(|s| s.as_str())
                             .unwrap_or("");
 
-                        let (algorithm, buy_condition, sell_condition, timeframe) = 
+                        let (algorithm, buy_condition, sell_condition, timeframe, pair) = 
                             parse_strategy_description(strategy_desc);
+                        
+                        // Convert pair format if needed (BTCUSDT -> BTC/USDT)
+                        let freqtrade_pair = if pair.contains('/') {
+                            pair.clone()
+                        } else {
+                            // Convert BTCUSDT to BTC/USDT
+                            if pair.len() > 4 && pair.ends_with("USDT") {
+                                format!("{}/{}", &pair[..pair.len()-4], &pair[pair.len()-4..])
+                            } else if pair.len() > 3 && pair.ends_with("BTC") {
+                                format!("{}/{}", &pair[..pair.len()-3], &pair[pair.len()-3..])
+                            } else {
+                                format!("{}/USDT", pair) // Default to USDT pair
+                            }
+                        };
 
                         // Show processing message
                         bot.edit_message_text(
@@ -401,13 +424,67 @@ pub async fn handle_backtest_callback(
                                 //     }
                                 // }
 
-                                // Run backtest via CLI
-                                match freq_client.backtest_via_cli(
+                                // Update message - checking/downloading data
+                                bot.edit_message_text(
+                                    chat_id,
+                                    message_id,
+                                    format!(
+                                        "⏳ <b>Step 1: Checking Data...</b>\n\n\
+                                        <b>Strategy:</b> {}\n\
+                                        <b>Exchange:</b> {}\n\
+                                        <b>Pair:</b> {}\n\
+                                        <b>Timeframe:</b> {}\n\
+                                        <b>Time Range:</b> {}\n\n\
+                                        🔍 Checking if historical data exists...",
+                                        escape_html(&strategy_name),
+                                        escape_html(&exchange),
+                                        freqtrade_pair,
+                                        timeframe,
+                                        timerange
+                                    )
+                                )
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .await?;
+
+                                // Run backtest via CLI (with data download check)
+                                let result = match freq_client.backtest_via_cli(
                                     "wisetrader_freqtrade",
                                     freq_strategy_name,
+                                    &exchange,
+                                    &freqtrade_pair,
                                     &timeframe,
                                     &timerange_str,
                                 ).await {
+                                    Ok(result) => Ok(result),
+                                    Err(e) => {
+                                        // Truncate error message to avoid Telegram MESSAGE_TOO_LONG error
+                                        let error_str = e.to_string();
+                                        let truncated_error = if error_str.len() > 1500 {
+                                            format!("{}...\n\n(Error message truncated)", &error_str[..1500])
+                                        } else {
+                                            error_str.clone()
+                                        };
+                                        
+                                        bot.edit_message_text(
+                                            chat_id,
+                                            message_id,
+                                            format!(
+                                                "❌ <b>Backtest Failed</b>\n\n\
+                                                <b>Error:</b>\n\
+                                                <code>{}</code>\n\n\
+                                                💾 Strategy file: <code>{}</code>\n\n\
+                                                💡 <i>Tip: Make sure data is downloaded for all required pairs.</i>",
+                                                escape_html(&truncated_error),
+                                                filepath.display()
+                                            )
+                                        )
+                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                            .await?;
+                                        Err(e)
+                                    }
+                                };
+
+                                match result {
                                     Ok(result) => {
                                         tracing::info!(
                                             "Backtest succeeded: strategy={} exchange={} trades={} profit_pct={:.2}",
@@ -416,47 +493,49 @@ pub async fn handle_backtest_callback(
                                             result.trades,
                                             result.profit_pct
                                         );
+                                        
+                                        // Build result message with timing info
+                                        let mut result_msg = format!(
+                                            "✅ <b>Backtest Complete!</b>\n\n\
+                                            <b>Strategy:</b> {}\n\
+                                            <b>Exchange:</b> {}\n\
+                                            <b>Pair:</b> {}\n\
+                                            <b>Time Range:</b> {}\n\
+                                            <b>Timeframe:</b> {}\n\n\
+                                            <b>📊 Results:</b>\n\
+                                            📈 Total Trades: <b>{}</b>\n\
+                                            💰 Profit: <b>{:.2}%</b>\n\n\
+                                            <b>⏱️ Timing:</b>\n",
+                                            escape_html(&strategy_name),
+                                            escape_html(&exchange),
+                                            freqtrade_pair,
+                                            timerange,
+                                            timeframe,
+                                            result.trades,
+                                            result.profit_pct
+                                        );
+                                        
+                                        if let Some(dl_time) = result.download_time_secs {
+                                            result_msg.push_str(&format!("📥 Data Download: <b>{}s</b>\n", dl_time));
+                                        } else {
+                                            result_msg.push_str("📥 Data Download: <b>Skipped (already exists)</b>\n");
+                                        }
+                                        result_msg.push_str(&format!("🔄 Backtest Execution: <b>{}s</b>\n", result.backtest_time_secs));
+                                        
+                                        let total_time = result.download_time_secs.unwrap_or(0) + result.backtest_time_secs;
+                                        result_msg.push_str(&format!("⏱️ Total Time: <b>{}s</b>\n\n", total_time));
+                                        result_msg.push_str(&format!("💾 Strategy file: <code>{}</code>", filepath.display()));
+                                        
                                         bot.edit_message_text(
                                             chat_id,
                                             message_id,
-                                            format!(
-                                                "✅ <b>Backtest Complete!</b>\n\n\
-                                                <b>Strategy:</b> {}\n\
-                                                <b>Exchange:</b> {}\n\
-                                                <b>Time Range:</b> {}\n\
-                                                <b>Timeframe:</b> {}\n\n\
-                                                <b>Results:</b>\n\
-                                                📊 Total Trades: <b>{}</b>\n\
-                                                💰 Profit: <b>{:.2}%</b>\n\n\
-                                                Strategy file saved at: <code>{}</code>",
-                                                escape_html(&strategy_name),
-                                                escape_html(&exchange),
-                                                timerange,
-                                                timeframe,
-                                                result.trades,
-                                                result.profit_pct,
-                                                filepath.display()
-                                            )
+                                            result_msg
                                         )
                                             .parse_mode(teloxide::types::ParseMode::Html)
                                             .await?;
                                     }
-                                    Err(e) => {
-                                        tracing::error!("Backtest failed: {}", e);
-                                        bot.edit_message_text(
-                                            chat_id,
-                                            message_id,
-                                            format!(
-                                                "❌ <b>Backtest Failed</b>\n\n\
-                                                Error: {}\n\n\
-                                                Strategy file was saved at: <code>{}</code>\n\n\
-                                                You can check Freqtrade logs for more details.",
-                                                e,
-                                                filepath.display()
-                                            )
-                                        )
-                                            .parse_mode(teloxide::types::ParseMode::Html)
-                                            .await?;
+                                    Err(_) => {
+                                        // Error already handled above
                                     }
                                 }
 

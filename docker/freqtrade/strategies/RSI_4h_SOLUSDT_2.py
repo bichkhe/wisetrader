@@ -4,7 +4,7 @@ from functools import reduce
 from pandas import DataFrame
 from freqtrade.strategy import IStrategy
 
-class RSI_5m_BTCUSDT_3(IStrategy):
+class RSI_4h_SOLUSDT_2(IStrategy):
     INTERFACE_VERSION: int = 3
 
     minimal_roi = {
@@ -20,7 +20,7 @@ class RSI_5m_BTCUSDT_3(IStrategy):
     trailing_stop_positive_offset = 0.01
     trailing_only_offset_is_reached = True
 
-    timeframe = '5m'
+    timeframe = '4h'
 
     startup_candle_count: int = 200
 
@@ -62,10 +62,5 @@ class RSI_5m_BTCUSDT_3(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-
-        dataframe.loc[
-            (dataframe['rsi'] > 70),
-            'exit_long'
-        ] = 1
 
         return dataframe

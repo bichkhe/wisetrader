@@ -4,7 +4,7 @@ from functools import reduce
 from pandas import DataFrame
 from freqtrade.strategy import IStrategy
 
-class RSI_5m_BTCUSDT_3(IStrategy):
+class RSI_5m_ETHUSDT_1(IStrategy):
     INTERFACE_VERSION: int = 3
 
     minimal_roi = {

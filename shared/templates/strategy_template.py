@@ -4,7 +4,7 @@ from functools import reduce
 from pandas import DataFrame
 from freqtrade.strategy import IStrategy
 
-class {{ strategy_name }}Strategy(IStrategy):
+class {{ strategy_name }}(IStrategy):
     INTERFACE_VERSION: int = 3
 
     minimal_roi = {
