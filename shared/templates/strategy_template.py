@@ -2,6 +2,7 @@ import talib.abstract as ta
 import pandas as pd
 from functools import reduce
 from pandas import DataFrame
+from freqtrade.strategy import IStrategy
 
 class {{ strategy_name }}Strategy(IStrategy):
     INTERFACE_VERSION: int = 3
@@ -14,7 +15,7 @@ class {{ strategy_name }}Strategy(IStrategy):
 
     stoploss = {{ stoploss }}
 
-    trailing_stop = {{ trailing_stop }}
+    trailing_stop = {% if trailing_stop %}True{% else %}False{% endif %}
     trailing_stop_positive = {{ trailing_stop_positive }}
     trailing_stop_positive_offset = {{ trailing_stop_offset }}
     trailing_only_offset_is_reached = True

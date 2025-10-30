@@ -67,6 +67,7 @@
         "CORS_origins": [],
         "username": "freqtrader",
         "password": "freqtraderpass"
-    }
+    },
+    "initial_state": "stopped"
 }
 

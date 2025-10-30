@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sea_orm::EntityTrait;
+use sea_orm::{EntityTrait, QueryFilter, QueryOrder};
 use teloxide::utils::command::BotCommands;
 use teloxide::{ prelude::*};
 use teloxide::types::Message;
@@ -13,11 +13,13 @@ pub mod admin;
 pub mod me;
 pub mod trading;
 pub mod create_strategy;
+pub mod backtest;
 
 pub use admin::handle_version;
 pub use me::handle_me;
 pub use trading::handle_backtest;
-pub use create_strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback};
+pub use create_strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies};
+pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_callback};
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -49,6 +51,8 @@ pub enum Command {
     /// Các indicators
    ///  Xem các chiến thuật hiện có
    Strategies,
+   /// Xem các chiến thuật đã tạo của bạn
+   MyStrategies,
    /// Tạo chiến thuật mới
    CreateStrategy,
 
@@ -221,44 +225,7 @@ async fn handle_strategies(bot: Bot, msg: Message, state: Arc<AppState>) -> anyh
     Ok(())
 }
 
-// async fn handle_my_strategies(bot: Bot, msg: Message, db: Arc<DatabaseConnection>) -> Result<()> {
-//     let user_id = msg.from().unwrap().id.0 as i64;
 
-//     let user_strategies = user_strategy::Entity::find()
-//         .filter(user_strategy::Column::UserId.eq(user_id))
-//         .filter(user_strategy::Column::Active.eq(true))
-//         .all(db.as_ref())
-//         .await?;
-
-//     if user_strategies.is_empty() {
-//         bot.send_message(msg.chat.id, "You have no active strategies.\nUse /strategies to see available strategies.")
-//             .await?;
-//         return Ok(());
-//     }
-
-//     let mut msg_text = "📋 **Your Active Strategies**\n\n".to_string();
-    
-//     for us in user_strategies {
-//         let strategy = strategy::Entity::find_by_id(us.strategy_id)
-//             .one(db.as_ref())
-//             .await?;
-
-//         if let Some(s) = strategy {
-//             msg_text.push_str(&format!(
-//                 "**{}. {}**\n{}\n\n",
-//                 s.id,
-//                 s.name,
-//                 s.description.unwrap_or_else(|| "No description".to_string())
-//             ));
-//         }
-//     }
-
-//     bot.send_message(msg.chat.id, msg_text)
-//         .parse_mode(teloxide::types::ParseMode::Markdown)
-//         .await?;
-
-//     Ok(())
-// }
 
 
 pub async fn handle_invalid(

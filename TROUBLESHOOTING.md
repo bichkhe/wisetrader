@@ -130,3 +130,10 @@ docker exec -it wisetrader_redis redis-cli ping
 - Check teloxide examples: https://github.com/teloxide/teloxide/tree/master/examples
 - Cargo version issues: Run `cargo update`
 
+
+# Kitto
+
+## Check backtesting
+```bash
+docker exec wisetrader_freqtrade freqtrade backtesting --strategy Strategy3 --timeframe 5m --timerange 20250101-
+```

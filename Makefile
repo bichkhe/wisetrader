@@ -37,6 +37,8 @@ setup:
 build:
 	cargo build
 	
+build-bot:
+	cargo build --bin bot
 
 run-bot:
 	cargo build --bin bot

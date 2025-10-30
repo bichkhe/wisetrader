@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use regex::Regex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FreqtradeApiClient {
@@ -10,7 +11,7 @@ pub struct FreqtradeApiClient {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FreqtradeStatus {
-    pub state: String,
+    pub status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,15 +35,15 @@ impl FreqtradeApiClient {
         }
     }
 
-    pub async fn ping(&self) -> Result<FreqtradeVersion> {
+    pub async fn ping(&self) -> Result<FreqtradeStatus> {
         let client = reqwest::Client::new();
         let response = client
             .get(&format!("{}/api/v1/ping", self.base_url))
             .send()
             .await?;
         
-        let version: FreqtradeVersion = response.json().await?;
-        Ok(version)
+        let status: FreqtradeStatus = response.json().await?;
+        Ok(status)
     }
 
     pub async fn status(&self) -> Result<String> {
@@ -55,6 +56,42 @@ impl FreqtradeApiClient {
         
         let text = response.text().await?;
         Ok(text)
+    }
+
+    /// Stop the trading bot if it's running
+    pub async fn stop(&self) -> Result<serde_json::Value> {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&format!("{}/api/v1/stop", self.base_url))
+            .basic_auth(&self.username, Some(&self.password))
+            .send()
+            .await?;
+        
+        if response.status().is_success() {
+            let result: serde_json::Value = response.json().await?;
+            Ok(result)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Err(anyhow::anyhow!("Failed to stop bot: {}", error_text))
+        }
+    }
+
+    /// Start the trading bot
+    pub async fn start(&self) -> Result<serde_json::Value> {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&format!("{}/api/v1/start", self.base_url))
+            .basic_auth(&self.username, Some(&self.password))
+            .send()
+            .await?;
+        
+        if response.status().is_success() {
+            let result: serde_json::Value = response.json().await?;
+            Ok(result)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Err(anyhow::anyhow!("Failed to start bot: {}", error_text))
+        }
     }
 
     pub async fn backtest(&self, strategy_name: &str, symbol: &str, timeframe: &str, timerange: &str) -> Result<BacktestResult> {
@@ -74,5 +111,224 @@ impl FreqtradeApiClient {
         let result: BacktestResult = response.json().await?;
         Ok(result)
     }
+
+    /// Run backtest via CLI command in Docker container
+    pub async fn backtest_via_cli(
+        &self,
+        container_name: &str,
+        strategy_name: &str,
+        timeframe: &str,
+        timerange: &str,
+    ) -> Result<BacktestResult> {
+        use tokio::process::Command;
+        use std::process::Stdio;
+
+        tracing::info!(
+            "Running backtest via CLI: container={}, strategy={}, timeframe={}, timerange={}",
+            container_name,
+            strategy_name,
+            timeframe,
+            timerange
+        );
+
+        // Execute docker exec command to run freqtrade backtesting
+        let output = Command::new("docker")
+            .arg("exec")
+            .arg(container_name)
+            .arg("freqtrade")
+            .arg("backtesting")
+            .arg("--strategy")
+            .arg(strategy_name)
+            .arg("--timeframe")
+            .arg(timeframe)
+            .arg("--timerange")
+            .arg(timerange)
+            .arg("--config")
+            .arg("/freqtrade/user_data/config.json")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
+
+        // Check if command succeeded
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            
+            tracing::error!("Backtest CLI failed. Exit code: {:?}", output.status.code());
+            tracing::error!("stderr: {}", stderr);
+            tracing::error!("stdout: {}", stdout);
+            
+            return Err(anyhow::anyhow!(
+                "Backtest failed: {}. stderr: {}",
+                output.status,
+                stderr
+            ));
+        }
+
+        // Parse output
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        tracing::debug!("Backtest stdout: {}", stdout);
+        tracing::debug!("Backtest stderr: {}", stderr);
+
+        // Parse freqtrade backtest output
+        // Freqtrade outputs results in text format, we need to extract:
+        // - Total trades
+        // - Profit percentage
+        
+        let mut trades = 0;
+        let mut profit_pct = 0.0;
+
+        // Try to extract trades count from output
+        // Freqtrade typically shows: "Total trades: 123" or "Trades: 123"
+        for line in stdout.lines() {
+            if line.contains("Total") && line.contains("trade") {
+                if let Some(num) = extract_number(line) {
+                    trades = num;
+                }
+            } else if line.contains("Trades:") || line.contains("trades:") {
+                if let Some(num) = extract_number(line) {
+                    trades = num;
+                }
+            }
+            
+            // Try to extract profit percentage
+            // Freqtrade shows: "Total profit: 12.34%" or "Profit: 12.34%"
+            if line.contains("Total profit") || line.contains("Total Profit") {
+                if let Some(pct) = extract_percentage(line) {
+                    profit_pct = pct;
+                }
+            } else if line.contains("Profit:") && line.contains("%") {
+                if let Some(pct) = extract_percentage(line) {
+                    profit_pct = pct;
+                }
+            }
+        }
+
+        // If we couldn't parse, try searching in stderr as well
+        if trades == 0 || profit_pct == 0.0 {
+            for line in stderr.lines() {
+                if trades == 0 {
+                    if (line.contains("Total") && line.contains("trade")) || line.contains("Trades:") {
+                        if let Some(num) = extract_number(line) {
+                            trades = num;
+                        }
+                    }
+                }
+                if profit_pct == 0.0 {
+                    if line.contains("Profit:") && line.contains("%") {
+                        if let Some(pct) = extract_percentage(line) {
+                            profit_pct = pct;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(BacktestResult {
+            strategy: strategy_name.to_string(),
+            trades,
+            profit_pct,
+        })
+    }
+
+    pub async fn backtest_with_exchange(&self, strategy_name: &str, exchange: &str, timeframe: &str, timerange: &str) -> Result<BacktestResult> {
+        // Stop bot first if it's running (required for backtest)
+        match self.stop().await {
+            Ok(_) => {
+                tracing::info!("Bot stopped successfully before backtest");
+                // Wait a bit for bot to fully stop
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+            Err(e) => {
+                // If stop fails, it might be already stopped, continue anyway
+                tracing::warn!("Could not stop bot (might already be stopped): {}", e);
+            }
+        }
+        
+        // Create client with longer timeout for backtest (can take minutes)
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(600)) // 10 minutes timeout
+            .build()?;
+        
+        // Freqtrade API expects timerange in format: timestamp_start-timestamp_end
+        // For now, use timerange as start, and current time as end
+        let timerange_param = format!("{}-", timerange);
+        
+        tracing::info!("Starting backtest: strategy={}, exchange={}, timeframe={}, timerange={}", 
+            strategy_name, exchange, timeframe, timerange_param);
+        
+        let response = client
+            .post(&format!("{}/api/v1/backtest", self.base_url))
+            .basic_auth(&self.username, Some(&self.password))
+            .json(&serde_json::json!({
+                "strategy": strategy_name,
+                "timeframe": timeframe,
+                "timerange": timerange_param,
+                "exchange": exchange,
+            }))
+            .send()
+            .await?;
+        
+        let status = response.status();
+        let response_text = response.text().await?;
+        
+        if status.is_success() {
+            // Try to parse as JSON first
+            match serde_json::from_str::<BacktestResult>(&response_text) {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    // If parsing fails, try to extract data from response
+                    tracing::warn!("Failed to parse backtest response as BacktestResult: {}", e);
+                    tracing::debug!("Response body: {}", response_text);
+                    
+                    // Try to parse as generic JSON to see structure
+                    match serde_json::from_str::<serde_json::Value>(&response_text) {
+                        Ok(json) => {
+                            // Try to extract fields manually
+                            let trades = json.get("trades")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(0) as i32;
+                            let profit_pct = json.get("profit_pct")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            
+                            Ok(BacktestResult {
+                                strategy: strategy_name.to_string(),
+                                trades,
+                                profit_pct,
+                            })
+                        }
+                        Err(_) => Err(anyhow::anyhow!(
+                            "Failed to parse Freqtrade response. Status: {}. Body: {}", 
+                            status, 
+                            response_text
+                        ))
+                    }
+                }
+            }
+        } else {
+            Err(anyhow::anyhow!(
+                "Freqtrade API error. Status: {}. Response: {}", 
+                status, 
+                response_text
+            ))
+        }
+    }
+}
+
+/// Helper function to extract number from text
+fn extract_number(text: &str) -> Option<i32> {
+    let re = Regex::new(r"(\d+)").ok()?;
+    re.find(text)?.as_str().parse().ok()
+}
+
+/// Helper function to extract percentage from text
+fn extract_percentage(text: &str) -> Option<f64> {
+    let re = Regex::new(r"([+-]?\d+\.?\d*)%").ok()?;
+    let matched = re.find(text)?;
+    matched.as_str().trim_end_matches('%').parse().ok()
 }
 

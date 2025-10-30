@@ -34,14 +34,14 @@ services:
   freqtrade:
     image: freqtradeorg/freqtrade:stable
     container_name: wisetrader_freqtrade
+    # No --strategy flag = bot starts but doesn't auto-start trading
+    # Trading will only start when explicitly called via API /api/v1/start
     command:
       - "trade"
       - "--config"
       - "/freqtrade/user_data/config.json"
       - "--strategy-path"
       - "/freqtrade/user_data/strategies"
-      - "--strategy"
-      - "SampleStrategy"
     ports:
       - "9080:8080"  # Web UI (optional)
       - "9081:8081"  # API

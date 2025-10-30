@@ -19,8 +19,9 @@ chrono-tz = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 dotenv = { workspace = true }
-askama = "0.12"
+        askama = "0.12"
 reqwest = { workspace = true }
+regex = "1.10"
 
 [build-dependencies]
 askama = "0.12"

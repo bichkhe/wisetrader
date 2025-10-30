@@ -46,6 +46,7 @@ pub enum BotState {
     Normal,
     CreateStrategy(CreateStrategyState),
     Trading(TradingState),
+    Backtest(BacktestState),
 }
 
 
@@ -89,4 +90,20 @@ pub enum TradingState {
     WaitingForPair,
     WaitingForAmount,
     WaitingForConfirmation,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum BacktestState {
+    #[default]
+    Start,
+    WaitingForStrategy,
+    WaitingForExchange {
+        strategy_id: u64,
+        strategy_name: String,
+    },
+    WaitingForTimeRange {
+        strategy_id: u64,
+        strategy_name: String,
+        exchange: String,
+    },
 }

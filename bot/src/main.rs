@@ -9,9 +9,10 @@ mod repositories;
 
 
 use crate::{commands::{handle_invalid, handle_version,
-    handle_me,handle_help,handle_backtest,handle_create_strategy, handle_strategy_callback, 
-    handle_strategy_input_callback, Command},  state::AppState};
-use state::{BotState};
+    handle_me,handle_help,handle_backtest_wizard, handle_backtest_callback,
+    handle_create_strategy, handle_strategy_callback, 
+    handle_strategy_input_callback, handle_my_strategies, Command},  state::AppState};
+use state::{BotState, BacktestState};
 
 fn schema() -> UpdateHandler<anyhow::Error> {
     use dptree::case;
@@ -20,8 +21,9 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             .branch(case![Command::Version].endpoint(handle_version))
             .branch(case![Command::Me].endpoint(handle_me))
             .branch(case![Command::Help].endpoint(handle_help))
-            .branch(case![Command::Backtest(pk)].endpoint(handle_backtest))
+            .branch(case![Command::Backtest(pk)].endpoint(handle_backtest_wizard))
             .branch(case![Command::CreateStrategy].endpoint(handle_create_strategy))
+            .branch(case![Command::MyStrategies].endpoint(handle_my_strategies))
     );
 
     let message_handler = Update::filter_message()
@@ -37,6 +39,10 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(
             case![BotState::CreateStrategy(pk)]
                 .endpoint(handle_strategy_callback)
+        )
+        .branch(
+            case![BotState::Backtest(pk)]
+                .endpoint(handle_backtest_callback)
         );
         
 

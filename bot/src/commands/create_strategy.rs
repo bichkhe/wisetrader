@@ -4,7 +4,7 @@ use teloxide::{prelude::*, types::InlineKeyboardButton};
 use sea_orm::{EntityTrait, ActiveValue};
 use shared::entity::{users, strategies};
 use tracing;
-
+use sea_orm::{QueryFilter, QueryOrder};
 use crate::state::{AppState, BotState, CreateStrategyState, MyDialogue};
 
 /// Handler for inline keyboard callbacks in strategy creation
@@ -181,8 +181,11 @@ pub async fn handle_strategy_callback(
                         let pair = data.replace("pair_", "");
                         // Get current state to extract all data and save strategy
                         if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe }))) = dialogue.get().await {
+                            // Get telegram_id from callback query
+                            let telegram_id = q.from.id.0.to_string();
                             let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
                             let new_strategy = strategies::ActiveModel {
+                                telegram_id: ActiveValue::Set(telegram_id.clone()),
                                 name: ActiveValue::Set(Some(strategy_name.clone())),
                                 description: ActiveValue::Set(Some(format!(
                                     "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
@@ -310,106 +313,6 @@ pub async fn handle_create_strategy(
     Ok(())
 }
 
-/// Handler to process strategy name
-pub async fn receive_strategy_name(
-    bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    if let Some(text) = msg.text() {
-        if text.to_lowercase() == "cancel" {
-            dialogue.exit().await?;
-            bot.send_message(msg.chat.id, "Strategy creation cancelled.").await?;
-            return Ok(());
-        }
-
-        let algorithms_menu = format!(
-            "✅ Strategy name: <b>{}</b>\n\n\
-            <b>Step 2:</b> Choose algorithm indicator:\n\n\
-            /rsi - Relative Strength Index\n\
-            /bollinger - Bollinger Bands\n\
-            /ema - Exponential Moving Average\n\
-            /macd - MACD\n\
-            /ma - Simple Moving Average\n",
-            text
-        );
-
-        bot.send_message(msg.chat.id, algorithms_menu)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await?;
-    }
-    Ok(())
-}
-
-/// Handler for RSI algorithm
-pub async fn select_rsi(
-    bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    let instruction = format!(
-        "📊 <b>RSI Strategy Configuration</b>\n\n\
-        RSI ranges from 0-100:\n\
-        • <b>Oversold:</b> RSI &lt; 30 (buy signal)\n\
-        • <b>Overbought:</b> RSI &gt; 70 (sell signal)\n\n\
-        <b>Step 3:</b> Enter buy condition:\n\
-        Example: <code>RSI &lt; 30</code>\n\
-        (Enter the exact condition)",
-    );
-
-    bot.send_message(msg.chat.id, instruction)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
-
-    Ok(())
-}
-
-/// Handler for Bollinger Bands
-pub async fn select_bollinger(
-    bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    let instruction = format!(
-        "📊 <b>Bollinger Bands Strategy</b>\n\n\
-        • <b>Lower Band:</b> Buy signal (price touches lower band)\n\
-        • <b>Upper Band:</b> Sell signal (price touches upper band)\n\n\
-        <b>Step 3:</b> Enter buy condition:\n\
-        Example: <code>Price &lt; LowerBand</code>",
-    );
-
-    bot.send_message(msg.chat.id, instruction)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
-
-    Ok(())
-}
-
-/// Handler for EMA
-pub async fn select_ema(
-    bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    let instruction = format!(
-        "📊 <b>EMA Crossover Strategy</b>\n\n\
-        • <b>Buy:</b> Fast EMA crosses above Slow EMA\n\
-        • <b>Sell:</b> Fast EMA crosses below Slow EMA\n\n\
-        <b>Step 3:</b> Enter buy condition:\n\
-        Example: <code>EMA(12) &gt; EMA(26)</code>",
-    );
-
-    bot.send_message(msg.chat.id, instruction)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
-
-    Ok(())
-}
-
 pub async fn handle_strategy_input_callback(
     bot: Bot,
     dialogue: MyDialogue,
@@ -490,8 +393,10 @@ pub async fn handle_strategy_input_callback(
                 if let Some(text) = msg.text() {
                     let pair = text.trim().to_uppercase();
                     // Save strategy to database
+                    let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
                     let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
                     let new_strategy = strategies::ActiveModel {
+                        telegram_id: ActiveValue::Set(telegram_id.clone()),
                         name: ActiveValue::Set(Some(strategy_name.clone())),
                         description: ActiveValue::Set(Some(format!(
                             "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
@@ -536,120 +441,130 @@ pub async fn handle_strategy_input_callback(
     Ok(())
 }
 
-/// Handler to receive sell condition and ask for timeframe
-pub async fn receive_sell_condition(
+
+/// Handler to list all strategies created by the current user
+pub async fn handle_my_strategies(
     bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    _state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    if let Some(text) = msg.text() {
-        if text.to_lowercase() == "cancel" {
-            dialogue.exit().await?;
-            return Ok(());
-        }
-
-        let timeframe_prompt = format!(
-            "✅ Sell condition: <b>{}</b>\n\n\
-            <b>Step 5:</b> Enter timeframe:\n\
-            Options: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w\n\n\
-            Example: <code>1h</code>",
-            text
-        );
-
-        bot.send_message(msg.chat.id, timeframe_prompt)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await?;
-    }
-    Ok(())
-}
-
-/// Handler to receive timeframe and ask for trading pair
-pub async fn receive_timeframe(
-    bot: Bot,
-    dialogue: MyDialogue,
     msg: Message,
     state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    if let Some(text) = msg.text() {
-        let pair_prompt = format!(
-            "✅ Timeframe: <b>{}</b>\n\n\
-            <b>Step 6:</b> Enter trading pair:\n\
-            Example: <code>BTCUSDT</code> or <code>ETHUSDT</code>",
-            text
-        );
+) -> anyhow::Result<()> {
+    let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
+    let db = state.db.clone();
 
-        bot.send_message(msg.chat.id, pair_prompt)
+    // Query strategies filtered by telegram_id column
+    use sea_orm::ColumnTrait;
+    use shared::entity::strategies;
+    
+    let user_strategies = strategies::Entity::find()
+        .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
+        .order_by_desc(strategies::Column::CreatedAt)
+        .all(db.as_ref())
+        .await?;
+
+    if user_strategies.is_empty() {
+        bot.send_message(
+            msg.chat.id,
+            "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
+        )
             .parse_mode(teloxide::types::ParseMode::Html)
             .await?;
+        return Ok(());
     }
-    Ok(())
-}
 
-/// Handler to receive pair and show confirmation
-pub async fn receive_pair(
-    bot: Bot,
-    dialogue: MyDialogue,
-    msg: Message,
-    state: Arc<AppState>,
-) -> Result<(), anyhow::Error> {
-    if let Some(text) = msg.text() {
-        if text.to_lowercase() == "cancel" {
-            dialogue.exit().await?;
-            bot.send_message(msg.chat.id, "❌ Strategy creation cancelled.").await?;
-            return Ok(());
-        }
-
-        // Validate trading pair format
-        let pair = text.trim().to_uppercase();
+    // Helper function to HTML escape (must escape & first!)
+    fn escape_html(text: &str) -> String {
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#x27;")
+    }
+    
+    let mut msg_text = format!("📋 <b>My Strategies</b> ({})\n\n", user_strategies.len());
+    
+    let unnamed_str = "Unnamed".to_string();
+    let no_desc_str = "No description".to_string();
+    
+    for (idx, strategy) in user_strategies.iter().enumerate() {
+        let name = strategy.name.as_ref().unwrap_or(&unnamed_str);
+        let desc_str = strategy.description.as_ref().unwrap_or(&no_desc_str);
         
-        // Save strategy to database
-        let strategy_name = format!("CustomStrategy_{}", chrono::Utc::now().timestamp());
+        // Parse description to extract fields
+        let mut algorithm = "N/A".to_string();
+        let mut buy_condition = "N/A".to_string();
+        let mut sell_condition = "N/A".to_string();
+        let mut timeframe = "N/A".to_string();
+        let mut pair = "N/A".to_string();
         
-        let new_strategy = strategies::ActiveModel {
-            name: ActiveValue::Set(Some(strategy_name.clone())),
-            description: ActiveValue::Set(Some(format!("Trading Pair: {}", pair))),
-            repo_ref: ActiveValue::Set(Some(format!("custom_{}_{}", pair, chrono::Utc::now().timestamp()))),
-            created_at: ActiveValue::Set(Some(chrono::Utc::now())),
-            ..Default::default()
-        };
-
-        let confirm_buttons = vec![
-            vec![
-                InlineKeyboardButton::callback("✅ Confirm & Save", format!("confirm_strategy_{}", strategy_name.clone())),
-                InlineKeyboardButton::callback("❌ Cancel", "cancel_strategy"),
-            ],
-        ];
-
-        match strategies::Entity::insert(new_strategy).exec(state.db.as_ref()).await {
-            Ok(_) => {
-                let summary = format!(
-                    "✅ <b>Strategy Created!</b>\n\n\
-                    <b>Name:</b> {}\n\
-                    <b>Pair:</b> {}\n\n\
-                    Your strategy has been saved successfully!\n\n\
-                    Use <code>/backtest {} {} 1h 7days</code> to test it.",
-                    strategy_name,
-                    pair,
-                    strategy_name,
-                    pair
-                );
-
-                bot.send_message(msg.chat.id, summary)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(confirm_buttons))
-                    .await?;
-                
-                dialogue.exit().await?;
-            }
-            Err(e) => {
-                bot.send_message(
-                    msg.chat.id,
-                    format!("❌ Failed to save strategy: {}", e)
-                ).await?;
+        for line in desc_str.lines() {
+            if line.starts_with("Algorithm: ") {
+                algorithm = line[11..].to_string();
+            } else if line.starts_with("Buy: ") {
+                buy_condition = line[5..].to_string();
+            } else if line.starts_with("Sell: ") {
+                sell_condition = line[6..].to_string();
+            } else if line.starts_with("Timeframe: ") {
+                timeframe = line[11..].to_string();
+            } else if line.starts_with("Pair: ") {
+                pair = line[6..].to_string();
             }
         }
+        
+        // HTML escape all user data
+        let escaped_name = escape_html(name);
+        let escaped_algorithm = escape_html(&algorithm);
+        let escaped_buy = escape_html(&buy_condition);
+        let escaped_sell = escape_html(&sell_condition);
+        let escaped_timeframe = escape_html(&timeframe);
+        let escaped_pair = escape_html(&pair);
+        
+        let created = strategy.created_at
+            .as_ref()
+            .map(|dt| escape_html(&dt.format("%Y-%m-%d %H:%M").to_string()))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Build message with beautiful icons
+        msg_text.push_str(if idx == 0 { "⭐ " } else { "📌 " });
+        msg_text.push_str("<b>");
+        msg_text.push_str(&(idx + 1).to_string());
+        msg_text.push_str(". ");
+        msg_text.push_str(&escaped_name);
+        msg_text.push_str("</b>\n\n");
+        
+        msg_text.push_str("📊 <b>Algorithm:</b> ");
+        msg_text.push_str(&escaped_algorithm);
+        msg_text.push_str("\n");
+        
+        msg_text.push_str("📈 <b>Buy:</b> <code>");
+        msg_text.push_str(&escaped_buy);
+        msg_text.push_str("</code>\n");
+        
+        msg_text.push_str("📉 <b>Sell:</b> <code>");
+        msg_text.push_str(&escaped_sell);
+        msg_text.push_str("</code>\n");
+        
+        msg_text.push_str("⏰ <b>Timeframe:</b> ");
+        msg_text.push_str(&escaped_timeframe);
+        msg_text.push_str("\n");
+        
+        msg_text.push_str("💱 <b>Pair:</b> ");
+        msg_text.push_str(&escaped_pair);
+        msg_text.push_str("\n");
+        
+        msg_text.push_str("📅 <b>Created:</b> ");
+        msg_text.push_str(&created);
+        msg_text.push_str("\n");
+        
+        msg_text.push_str("🆔 <b>ID:</b> <code>");
+        msg_text.push_str(&strategy.id.to_string());
+        msg_text.push_str("</code>\n\n");
     }
+
+    msg_text.push_str("\n💡 <b>Tip:</b> Use <code>/backtest &lt;strategy_name&gt;</code> to test your strategies!");
+
+    bot.send_message(msg.chat.id, msg_text)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await?;
+
     Ok(())
 }
-
