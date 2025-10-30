@@ -44,25 +44,97 @@ pub fn translate(locale: &str, key: &str, args: Option<&[(&str, &str)]>) -> Stri
                     let yaml_file = base.join(lang).join("messages.yml");
                     if let Ok(content) = fs::read_to_string(&yaml_file) {
                         let mut lang_map = HashMap::new();
-                        // Simple parser for key: "value" format
-                        for line in content.lines() {
+                        let lines: Vec<&str> = content.lines().collect();
+                        let mut i = 0;
+                        
+                        while i < lines.len() {
+                            let line = lines[i];
                             let trimmed = line.trim();
+                            
+                            // Skip comments and empty lines
                             if trimmed.starts_with('#') || trimmed.is_empty() {
+                                i += 1;
                                 continue;
                             }
+                            
+                            // Check if this line has a key (contains ':')
                             if let Some(idx) = trimmed.find(':') {
                                 let k = trimmed[..idx].trim();
-                                let mut v = trimmed[idx+1..].trim().trim_matches('"').trim_matches('\'').to_string();
-                                if !k.is_empty() && !v.is_empty() {
-                                    // Unescape common escape sequences
-                                    // Replace \n with actual newline, \t with tab, etc.
-                                    v = v.replace("\\n", "\n")
-                                        .replace("\\t", "\t")
-                                        .replace("\\r", "\r")
-                                        .replace("\\\\", "\\");
-                                    lang_map.insert(k.to_string(), v);
+                                let after_colon = trimmed[idx+1..].trim();
+                                
+                                if !k.is_empty() {
+                                    // Check if it's a multi-line string (| or >)
+                                    if after_colon == "|" || after_colon == ">" || after_colon == "|-" || after_colon == ">-" {
+                                        // Multi-line string: read following indented lines
+                                        let mut value_lines = Vec::new();
+                                        i += 1;
+                                        
+                                        // Determine the base indentation level from the next non-empty line
+                                        let mut base_indent = 0;
+                                        if i < lines.len() {
+                                            // Skip empty lines to find the first content line
+                                            let mut first_content_line_idx = i;
+                                            while first_content_line_idx < lines.len() && lines[first_content_line_idx].trim().is_empty() {
+                                                first_content_line_idx += 1;
+                                            }
+                                            if first_content_line_idx < lines.len() {
+                                                base_indent = lines[first_content_line_idx].len() - lines[first_content_line_idx].trim_start().len();
+                                            }
+                                        }
+                                        
+                                        // Read all lines that are indented (continuation of multi-line)
+                                        while i < lines.len() {
+                                            let next_line = lines[i];
+                                            let indent = next_line.len() - next_line.trim_start().len();
+                                            
+                                            // Stop if we hit a root-level key (indent == 0 and has ':')
+                                            if !next_line.trim().is_empty() {
+                                                if indent == 0 && next_line.contains(':') && !next_line.trim_start().starts_with('#') {
+                                                    break;
+                                                }
+                                                if indent < base_indent && next_line.contains(':') && !next_line.trim_start().starts_with('#') {
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // If this line is part of the multi-line value
+                                            if indent >= base_indent || next_line.trim().is_empty() {
+                                                // Remove the base indentation
+                                                if next_line.len() >= base_indent {
+                                                    value_lines.push(&next_line[base_indent..]);
+                                                } else {
+                                                    value_lines.push(next_line);
+                                                }
+                                            } else if next_line.contains(':') && !next_line.trim_start().starts_with('#') {
+                                                break;
+                                            }
+                                            i += 1;
+                                        }
+                                        
+                                        // Join lines
+                                        let mut value = value_lines.join("\n");
+                                        if after_colon.ends_with('-') {
+                                            value = value.trim_end().to_string();
+                                        }
+                                        
+                                        if !value.is_empty() {
+                                            lang_map.insert(k.to_string(), value);
+                                        }
+                                        continue;
+                                    } else {
+                                        // Single-line value
+                                        let mut v = after_colon.trim_matches('"').trim_matches('\'').to_string();
+                                        if !v.is_empty() {
+                                            v = v.replace("\\n", "\n")
+                                                .replace("\\t", "\t")
+                                                .replace("\\r", "\r")
+                                                .replace("\\\\", "\\");
+                                            lang_map.insert(k.to_string(), v);
+                                        }
+                                    }
                                 }
                             }
+                            i += 1;
                         }
                         map.insert(lang.to_string(), lang_map);
                     }

@@ -8,14 +8,15 @@ mod services;
 mod repositories;
 mod i18n;
 
-// Initialize Marcoi18n at crate root (required by rust-i18n)
+// Initialize i18n at crate root (required by rust-i18n)
 rust_i18n::i18n!("locales", fallback = "en");
 
 
 use crate::{commands::{handle_invalid, handle_version,
     handle_me,handle_help,handle_backtest_wizard, handle_backtest_callback,
     handle_create_strategy, handle_strategy_callback, 
-    handle_strategy_input_callback, handle_my_strategies, 
+    handle_strategy_input_callback, handle_my_strategies,
+    handle_delete_strategy_callback,
     handle_start, handle_language_selection, handle_language_callback, handle_profile_callback, Command},  state::AppState};
 use state::{BotState, BacktestState};
 
@@ -44,6 +45,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(dptree::endpoint(handle_invalid));
 
     let callback_query_handler = Update::filter_callback_query()
+        // Handle delete strategy callbacks from any state FIRST (before other handlers)
+        .branch(
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| d.starts_with("delete_strategy_") || d.starts_with("delete_confirm_") || d == "delete_cancel").unwrap_or(false)
+            })
+            .endpoint(handle_delete_strategy_callback)
+        )
         .branch(
             // Language selection can happen in WaitingForLanguage state
             case![BotState::WaitingForLanguage]

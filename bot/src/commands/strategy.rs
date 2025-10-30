@@ -573,9 +573,231 @@ pub async fn handle_my_strategies(
 
     msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
 
-    bot.send_message(msg.chat.id, msg_text)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
+    // Build inline keyboard buttons for each strategy
+    let mut buttons = Vec::new();
+    for strategy in &user_strategies {
+        let strategy_name = strategy.name.as_ref().unwrap_or(&unnamed_str);
+        // Truncate name if too long (Telegram button text limit is ~64 chars)
+        let display_name = if strategy_name.len() > 30 {
+            format!("{}...", &strategy_name[..27])
+        } else {
+            strategy_name.clone()
+        };
+        
+        // Create button text with strategy name
+        let delete_text = match locale {
+            "vi" => format!("🗑️ Xóa: {}", display_name),
+            _ => format!("🗑️ Delete: {}", display_name),
+        };
+        
+        buttons.push(vec![
+            InlineKeyboardButton::callback(
+                delete_text,
+                format!("delete_strategy_{}", strategy.id)
+            )
+        ]);
+    }
 
+    let mut send_msg = bot.send_message(msg.chat.id, msg_text)
+        .parse_mode(teloxide::types::ParseMode::Html);
+    
+    // Add inline keyboard if there are strategies
+    if !buttons.is_empty() {
+        send_msg = send_msg.reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons));
+    }
+    
+    send_msg.await?;
+
+    Ok(())
+}
+
+/// Handler for delete strategy callback
+pub async fn handle_delete_strategy_callback(
+    bot: Bot,
+    q: CallbackQuery,
+    state: Arc<AppState>,
+) -> Result<(), anyhow::Error> {
+    tracing::info!("handle_delete_strategy_callback called with data: {:?}", q.data);
+    
+    if let Some(data) = &q.data {
+        // Handle confirmation callbacks (delete_confirm_<strategy_id>)
+        if data.as_str().starts_with("delete_confirm_") {
+            let strategy_id_str = data.as_str().replace("delete_confirm_", "");
+            let strategy_id: u64 = match strategy_id_str.parse() {
+                Ok(id) => id,
+                Err(_) => {
+                    bot.answer_callback_query(q.id)
+                        .text("Invalid strategy ID")
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            // Get user ID and locale
+            let user_id = q.from.id.0.to_string();
+            let db = state.db.clone();
+            
+            // Get user locale
+            let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                .one(db.as_ref())
+                .await?;
+            let locale = user
+                .as_ref()
+                .and_then(|u| u.language.as_ref())
+                .map(|l| i18n::get_user_language(Some(l)))
+                .unwrap_or("en");
+
+            // Check if strategy exists and belongs to user before deleting
+            use sea_orm::ColumnTrait;
+            let strategy = strategies::Entity::find_by_id(strategy_id)
+                .filter(strategies::Column::TelegramId.eq(user_id.clone()))
+                .one(db.as_ref())
+                .await?;
+
+            if let Some(ref strategy_model) = strategy {
+                let strategy_name = strategy_model.name.as_ref()
+                    .map(|n| n.clone())
+                    .unwrap_or_else(|| format!("Strategy #{}", strategy_id));
+
+                // Proceed with delete
+                match strategies::Entity::delete_by_id(strategy_id)
+                    .exec(db.as_ref())
+                    .await
+                {
+                    Ok(_) => {
+                        // Success
+                        let success_msg = i18n::translate(locale, "strategy_delete_success", Some(&[
+                            ("strategy_name", &strategy_name),
+                        ]));
+                        
+                        bot.answer_callback_query(q.id)
+                            .text(&success_msg)
+                            .show_alert(true)
+                            .await?;
+
+                        if let Some(msg) = q.message {
+                            bot.edit_message_text(msg.chat().id, msg.id(), success_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await?;
+                        }
+                    }
+                    Err(e) => {
+                        // Error deleting
+                        let error_msg = i18n::translate(locale, "strategy_delete_error", None);
+                        bot.answer_callback_query(q.id)
+                            .text(&format!("{}: {}", error_msg, e))
+                            .show_alert(true)
+                            .await?;
+                    }
+                }
+            } else {
+                // Strategy not found or doesn't belong to user
+                let error_msg = i18n::translate(locale, "strategy_delete_not_found", None);
+                bot.answer_callback_query(q.id)
+                    .text(&error_msg)
+                    .show_alert(true)
+                    .await?;
+            }
+        }
+        // Handle initial delete button click (delete_strategy_<strategy_id>)
+        else if data.starts_with("delete_strategy_") {
+            let strategy_id_str = data.replace("delete_strategy_", "");
+            let strategy_id: u64 = match strategy_id_str.parse() {
+                Ok(id) => id,
+                Err(_) => {
+                    bot.answer_callback_query(q.id)
+                        .text("Invalid strategy ID")
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            // Get user ID and locale
+            let user_id = q.from.id.0.to_string();
+            let db = state.db.clone();
+            
+            // Get user locale
+            let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                .one(db.as_ref())
+                .await?;
+            let locale = user
+                .as_ref()
+                .and_then(|u| u.language.as_ref())
+                .map(|l| i18n::get_user_language(Some(l)))
+                .unwrap_or("en");
+
+            // Check if strategy exists and belongs to user
+            use sea_orm::ColumnTrait;
+            let strategy = strategies::Entity::find_by_id(strategy_id)
+                .filter(strategies::Column::TelegramId.eq(user_id.clone()))
+                .one(db.as_ref())
+                .await?;
+
+            if let Some(ref strategy_model) = strategy {
+                let strategy_name = strategy_model.name.as_ref()
+                    .map(|n| n.clone())
+                    .unwrap_or_else(|| format!("Strategy #{}", strategy_id));
+
+                // Show confirmation dialog
+                bot.answer_callback_query(q.id).await?;
+
+                if let Some(msg) = q.message {
+                    let confirm_msg = i18n::translate(locale, "strategy_delete_confirm", Some(&[
+                        ("strategy_name", &strategy_name),
+                    ]));
+                    
+                    let confirm_buttons = vec![
+                        vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(locale, "strategy_delete_confirm_yes"),
+                                format!("delete_confirm_{}", strategy_id)
+                            ),
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(locale, "strategy_delete_confirm_no"),
+                                "delete_cancel"
+                            ),
+                        ],
+                    ];
+
+                    bot.edit_message_text(msg.chat().id, msg.id(), confirm_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(confirm_buttons))
+                        .await?;
+                }
+            } else {
+                // Strategy not found or doesn't belong to user
+                let error_msg = i18n::translate(locale, "strategy_delete_not_found", None);
+                bot.answer_callback_query(q.id)
+                    .text(&error_msg)
+                    .show_alert(true)
+                    .await?;
+            }
+        }
+        // Handle cancel deletion (delete_cancel)
+        else if data == "delete_cancel" {
+            bot.answer_callback_query(q.id).await?;
+            
+            if let Some(msg) = q.message {
+                let user_id = q.from.id.0.to_string();
+                let db = state.db.clone();
+                
+                // Get user locale
+                let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                    .one(db.as_ref())
+                    .await?;
+                let locale = user
+                    .as_ref()
+                    .and_then(|u| u.language.as_ref())
+                    .map(|l| i18n::get_user_language(Some(l)))
+                    .unwrap_or("en");
+                
+                // Send cancellation message
+                let refresh_msg = i18n::translate(locale, "strategy_delete_cancelled", None);
+                bot.edit_message_text(msg.chat().id, msg.id(), refresh_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+            }
+        }
+    }
     Ok(())
 }

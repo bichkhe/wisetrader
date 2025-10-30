@@ -16,7 +16,7 @@ pub mod start;
 
 pub use admin::handle_version;
 pub use me::handle_me;
-pub use strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies};
+pub use strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies, handle_delete_strategy_callback};
 pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_callback};
 pub use start::{handle_start, handle_language_selection, handle_language_callback};
 pub use me::handle_profile_callback;

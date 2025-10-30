@@ -88,6 +88,12 @@ strategy_created_success: "✅ <b>Strategy Created Successfully!</b>\n\n📋 <b>
 strategy_my_strategies_title: "📋 <b>My Strategies</b> ({count})"
 strategy_my_strategies_empty: "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
 strategy_my_strategies_tip: "\n💡 <b>Tip:</b> Use <code>/backtest &lt;strategy_name&gt;</code> to test your strategies!"
+strategy_delete_confirm: "⚠️ <b>Are you sure you want to delete this strategy?</b>\n\n<b>Strategy:</b> {strategy_name}\n\nThis action cannot be undone!"
+strategy_delete_success: "✅ <b>Strategy deleted successfully!</b>\n\nThe strategy <b>{strategy_name}</b> has been removed from your list."
+strategy_delete_error: "❌ <b>Error deleting strategy!</b>\n\nFailed to delete the strategy. Please try again."
+strategy_delete_not_found: "❌ <b>Strategy not found!</b>\n\nThe strategy you're trying to delete doesn't exist or doesn't belong to you."
+strategy_delete_cancelled: "❌ <b>Delete cancelled.</b>\n\nUse <code>/mystrategies</code> to view your strategies again."
+strategy_delete_button: "🗑️ Delete Strategy"
 
 # Backtest
 backtest_welcome: "📊 <b>Backtest Wizard</b>\n\n<b>Step 1:</b> Choose a strategy to backtest:\n\nYou have <b>{count}</b> strategy(ies) available."

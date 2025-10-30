@@ -86,6 +86,12 @@ strategy_created_success: "✅ <b>Chiến Lược Đã Được Tạo Thành Cô
 strategy_my_strategies_title: "📋 <b>Chiến Lược Của Tôi</b> ({count})"
 strategy_my_strategies_empty: "📋 <b>Chiến Lược Của Tôi</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/create_strategy</code> để tạo chiến lược đầu tiên của bạn!"
 strategy_my_strategies_tip: "\n💡 <b>Mẹo:</b> Sử dụng <code>/backtest &lt;strategy_name&gt;</code> để test chiến lược của bạn!"
+strategy_delete_confirm: "⚠️ <b>Bạn có chắc chắn muốn xóa chiến lược này không?</b>\n\n<b>Chiến Lược:</b> {strategy_name}\n\nHành động này không thể hoàn tác!"
+strategy_delete_success: "✅ <b>Chiến lược đã được xóa thành công!</b>\n\nChiến lược <b>{strategy_name}</b> đã được xóa khỏi danh sách của bạn."
+strategy_delete_error: "❌ <b>Lỗi khi xóa chiến lược!</b>\n\nKhông thể xóa chiến lược. Vui lòng thử lại."
+strategy_delete_not_found: "❌ <b>Không tìm thấy chiến lược!</b>\n\nChiến lược bạn đang cố xóa không tồn tại hoặc không thuộc về bạn."
+strategy_delete_cancelled: "❌ <b>Đã hủy xóa.</b>\n\nSử dụng <code>/mystrategies</code> để xem lại chiến lược của bạn."
+strategy_delete_button: "🗑️ Xóa Chiến Lược"
 strategy_cancel: "❌ Hủy"
 strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
 
