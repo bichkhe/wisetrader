@@ -1,26 +1,22 @@
 use anyhow::Result;
-use sea_orm::{EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait};
 use teloxide::utils::command::BotCommands;
 use teloxide::{ prelude::*};
 use teloxide::types::Message;
 use shared::entity::{users, strategies};
-use chrono::{Utc, Duration};
-use tracing::info;
 use std::sync::Arc;
 use std::time::Instant;
 use crate::state::{AppState, MyDialogue};
-use crate::i18n;
 pub mod admin;
 pub mod me;
 pub mod trading;
-pub mod create_strategy;
+pub mod strategy;
 pub mod backtest;
 pub mod start;
 
 pub use admin::handle_version;
 pub use me::handle_me;
-pub use trading::handle_backtest;
-pub use create_strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies};
+pub use strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies};
 pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_callback};
 pub use start::{handle_start, handle_language_selection, handle_language_callback};
 pub use me::handle_profile_callback;
@@ -106,7 +102,7 @@ pub async fn handle_help(
     help_text.push_str(&format!("/help - {}\n", i18n::translate(locale, "cmd_help_help", None)));
     help_text.push_str(&format!("/version - {}\n", i18n::translate(locale, "cmd_help_version", None)));
     help_text.push_str(&format!("/me - {}\n", i18n::translate(locale, "cmd_help_me", None)));
-    help_text.push_str(&format!("/create_strategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
+    help_text.push_str(&format!("/createstrategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
     help_text.push_str(&format!("/mystrategies - {}\n", i18n::translate(locale, "cmd_help_mystrategies", None)));
     help_text.push_str(&format!("/backtest - {}\n", i18n::translate(locale, "cmd_help_backtest", None)));
     

@@ -420,7 +420,7 @@ pub async fn handle_backtest(
     }
     buttons.push(vec![
         InlineKeyboardButton::callback(
-            i18n::translate(locale, "backtest_button_cancel", None),
+            i18n::get_button_text(locale, "backtest_button_cancel"),
             "backtest_cancel"
         )
     ]);
@@ -487,17 +487,17 @@ pub async fn handle_backtest_callback(
                         let exchange_buttons = vec![
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "backtest_exchange_binance", None),
+                                    i18n::get_button_text(locale, "backtest_exchange_binance"),
                                     "backtest_exchange_binance"
                                 ),
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "backtest_exchange_okx", None),
+                                    i18n::get_button_text(locale, "backtest_exchange_okx"),
                                     "backtest_exchange_okx"
                                 ),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "backtest_button_cancel", None),
+                                    i18n::get_button_text(locale, "backtest_button_cancel"),
                                     "backtest_cancel"
                                 ),
                             ],
@@ -525,33 +525,33 @@ pub async fn handle_backtest_callback(
                         let timerange_buttons = vec![
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "period_1day", None),
+                                    i18n::get_button_text(locale, "period_1day"),
                                     "backtest_timerange_1day"
                                 ),
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "period_1week", None),
+                                    i18n::get_button_text(locale, "period_1week"),
                                     "backtest_timerange_1week"
                                 ),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "period_1month", None),
+                                    i18n::get_button_text(locale, "period_1month"),
                                     "backtest_timerange_1month"
                                 ),
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "period_3months", None),
+                                    i18n::get_button_text(locale, "period_3months"),
                                     "backtest_timerange_3months"
                                 ),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "period_6months", None),
+                                    i18n::get_button_text(locale, "period_6months"),
                                     "backtest_timerange_6months"
                                 ),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(
-                                    i18n::translate(locale, "backtest_button_cancel", None),
+                                    i18n::get_button_text(locale, "backtest_button_cancel"),
                                     "backtest_cancel"
                                 ),
                             ],

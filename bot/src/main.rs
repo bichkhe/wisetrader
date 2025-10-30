@@ -8,7 +8,7 @@ mod services;
 mod repositories;
 mod i18n;
 
-// Initialize i18n at crate root (required by rust-i18n)
+// Initialize Marcoi18n at crate root (required by rust-i18n)
 rust_i18n::i18n!("locales", fallback = "en");
 
 

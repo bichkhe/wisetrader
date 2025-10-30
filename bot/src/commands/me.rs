@@ -152,11 +152,11 @@ pub async fn handle_profile_callback(
                 let lang_buttons = vec![
                     vec![
                         InlineKeyboardButton::callback(
-                            i18n::translate(locale, "lang_selection_button_vi", None),
+                            i18n::get_button_text(locale, "lang_selection_button_vi"),
                             "lang_select_vi"
                         ),
                         InlineKeyboardButton::callback(
-                            i18n::translate(locale, "lang_selection_button_en", None),
+                            i18n::get_button_text(locale, "lang_selection_button_en"),
                             "lang_select_en"
                         ),
                     ],

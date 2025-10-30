@@ -8,6 +8,15 @@ use sea_orm::{QueryFilter, QueryOrder};
 use crate::state::{AppState, BotState, CreateStrategyState, MyDialogue};
 use crate::i18n;
 
+// Helper function to HTML escape (must escape & first!)
+fn escape_html(text: &str) -> String {
+    text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#x27;")
+}
+
 // Helper function to get user locale from callback
 async fn get_locale_from_callback(state: &Arc<AppState>, user_id: i64) -> String {
     use shared::entity::users;
@@ -119,13 +128,15 @@ pub async fn handle_strategy_callback(
                     bot.answer_callback_query(q.id).await?;
                     let cancel_msg = i18n::translate(&locale, "strategy_creation_cancelled", None);
                     bot.edit_message_text(chat_id, message_id, cancel_msg).await?;
+                    dialogue.exit().await?;
+                    return Ok(());
                 }
                 _ if data.starts_with("timeframe_") => {
                     bot.answer_callback_query(q.id).await?;
                     let timeframe = data.replace("timeframe_", "");
                     // Get current state to extract data
                     if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForTimeframe { algorithm, buy_condition, sell_condition }))) = dialogue.get().await {
-                        let pair_buttons = vec![
+                        let mut pair_buttons = vec![
                             vec![
                                 InlineKeyboardButton::callback("BTC/USDT", "pair_BTCUSDT"),
                                 InlineKeyboardButton::callback("ETH/USDT", "pair_ETHUSDT"),
@@ -139,16 +150,18 @@ pub async fn handle_strategy_callback(
                                 InlineKeyboardButton::callback("DOT/USDT", "pair_DOTUSDT"),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("Manual", "pair_manual"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_manual"), "pair_manual"),
                             ],
                         ];
+                        pair_buttons.push(vec![
+                            InlineKeyboardButton::callback(i18n::get_button_text(&locale, "strategy_cancel_button"), "cancel_strategy"),
+                        ]);
                         
-                        let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
-                        let escaped_sell = sell_condition.replace("<", "&lt;").replace(">", "&gt;");
+                        // Don't escape here - translate() will handle HTML escaping
                         let step3_complete = i18n::translate(&locale, "strategy_step3_complete", Some(&[
                             ("algorithm", &algorithm),
-                            ("buy_condition", &escaped_buy),
-                            ("sell_condition", &escaped_sell),
+                            ("buy_condition", &buy_condition),
+                            ("sell_condition", &sell_condition),
                             ("timeframe", &timeframe),
                         ]));
                         let step5_msg = i18n::translate(&locale, "strategy_step5_choose_pair", None);
@@ -192,22 +205,19 @@ pub async fn handle_strategy_callback(
 
                             match strategies::Entity::insert(new_strategy).exec(state.db.as_ref()).await {
                                 Ok(_) => {
-                                    bot.send_message(
-                                        chat_id,
-                                        format!("✅ <b>Strategy Created Successfully!</b>\n\n\
-                                        📋 <b>Complete Summary:</b>\n\n\
-                                        🎯 <b>Strategy Name:</b> {}\n\
-                                        📊 <b>Algorithm:</b> {}\n\
-                                        📈 <b>Buy Condition:</b> {}\n\
-                                        📉 <b>Sell Condition:</b> {}\n\
-                                        ⏰ <b>Timeframe:</b> {}\n\
-                                        💱 <b>Trading Pair:</b> {}\n\n\
-                                        Your strategy has been saved and is ready to use!",
-                                        strategy_name, algorithm, 
-                                        buy_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                                        sell_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                                        timeframe, pair)
-                                    )
+                                    // Use i18n translation with escaped values
+                                    // translate() will handle HTML escaping automatically
+                                    // locale is already available from callback handler scope
+                                    let success_msg = i18n::translate(&locale, "strategy_created_success", Some(&[
+                                        ("strategy_name", &strategy_name),
+                                        ("algorithm", &algorithm),
+                                        ("buy_condition", &buy_condition),
+                                        ("sell_condition", &sell_condition),
+                                        ("timeframe", &timeframe),
+                                        ("pair", &pair),
+                                    ]));
+                                    
+                                    bot.send_message(chat_id, success_msg)
                                         .parse_mode(teloxide::types::ParseMode::Html)
                                         .await?;
                                     dialogue.exit().await?;
@@ -275,31 +285,31 @@ pub async fn handle_create_strategy(
     let algorithm_buttons = vec![
         vec![
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "algorithm_rsi", None),
+                i18n::get_button_text(locale, "algorithm_rsi"),
                 "algorithm_rsi"
             ),
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "algorithm_bollinger", None),
+                i18n::get_button_text(locale, "algorithm_bollinger"),
                 "algorithm_bollinger"
             ),
         ],
         vec![
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "algorithm_ema", None),
+                i18n::get_button_text(locale, "algorithm_ema"),
                 "algorithm_ema"
             ),
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "algorithm_macd", None),
+                i18n::get_button_text(locale, "algorithm_macd"),
                 "algorithm_macd"
             ),
         ],
         vec![
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "algorithm_ma", None),
+                i18n::get_button_text(locale, "algorithm_ma"),
                 "algorithm_ma"
             ),
             InlineKeyboardButton::callback(
-                i18n::translate(locale, "strategy_cancel_button", None),
+                i18n::get_button_text(locale, "strategy_cancel_button"),
                 "cancel_strategy"
             ),
         ],
@@ -341,11 +351,11 @@ pub async fn handle_strategy_input_callback(
             BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition { algorithm }) => {
                 if let Some(text) = msg.text() {
                     let buy_condition = text.trim().to_string();
-                    let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
-                    let step1_complete = format!(
-                        "✅ <b>Step 1 Complete!</b>\n\n<b>Algorithm:</b> {}\n<b>Buy Condition:</b> {}\n\n",
-                        algorithm, escaped_buy
-                    );
+                    // Don't escape here - translate() will handle HTML escaping
+                    let step1_complete = i18n::translate(locale, "strategy_step1_complete", Some(&[
+                        ("algorithm", &algorithm),
+                        ("buy_condition", &buy_condition),
+                    ]));
                     let step2_msg = i18n::translate(locale, "strategy_step3_enter_sell", Some(&[("example", "RSI >= 70")]));
                     let instruction = step1_complete + &step2_msg;
                     bot.send_message(msg.chat.id, instruction)
@@ -360,31 +370,34 @@ pub async fn handle_strategy_input_callback(
             BotState::CreateStrategy(CreateStrategyState::WaitingForSellCondition { algorithm, buy_condition }) => {
                 if let Some(text) = msg.text() {
                     let sell_condition = text.trim().to_string();
-                    let timeframe_buttons = vec![
+                    let mut timeframe_buttons = vec![
                         vec![
-                            InlineKeyboardButton::callback("1m", "timeframe_1m"),
-                            InlineKeyboardButton::callback("5m", "timeframe_5m"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_1m"), "timeframe_1m"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_5m"), "timeframe_5m"),
                         ],
                         vec![
-                            InlineKeyboardButton::callback("15m", "timeframe_15m"),
-                            InlineKeyboardButton::callback("30m", "timeframe_30m"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_15m"), "timeframe_15m"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_30m"), "timeframe_30m"),
                         ],
                         vec![
-                            InlineKeyboardButton::callback("1h", "timeframe_1h"),
-                            InlineKeyboardButton::callback("4h", "timeframe_4h"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_1h"), "timeframe_1h"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_4h"), "timeframe_4h"),
                         ],
                         vec![
-                            InlineKeyboardButton::callback("1d", "timeframe_1d"),
-                            InlineKeyboardButton::callback("1w", "timeframe_1w"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_1d"), "timeframe_1d"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "timeframe_1w"), "timeframe_1w"),
                         ],
                     ];
+                    timeframe_buttons.push(vec![
+                        InlineKeyboardButton::callback(i18n::get_button_text(locale, "strategy_cancel_button"), "cancel_strategy"),
+                    ]);
                     
-                    let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
-                    let escaped_sell = sell_condition.replace("<", "&lt;").replace(">", "&gt;");
-                    let step2_complete = format!(
-                        "✅ <b>Step 2 Complete!</b>\n\n📋 <b>Summary:</b>\n• <b>Algorithm:</b> {}\n• <b>Buy Condition:</b> {}\n• <b>Sell Condition:</b> {}\n\n",
-                        algorithm, escaped_buy, escaped_sell
-                    );
+                    // Don't escape here - translate() will handle HTML escaping
+                    let step2_complete = i18n::translate(locale, "strategy_step2_complete", Some(&[
+                        ("algorithm", &algorithm),
+                        ("buy_condition", &buy_condition),
+                        ("sell_condition", &sell_condition),
+                    ]));
                     let step4_msg = i18n::translate(locale, "strategy_step4_choose_timeframe", None);
                     let instruction = step2_complete + &step4_msg;
                     
@@ -476,14 +489,6 @@ pub async fn handle_my_strategies(
         return Ok(());
     }
 
-    // Helper function to HTML escape (must escape & first!)
-    fn escape_html(text: &str) -> String {
-        text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#x27;")
-    }
     
     let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &user_strategies.len().to_string())]));
     let mut msg_text = title + "\n\n";
