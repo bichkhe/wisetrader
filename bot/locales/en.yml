@@ -1,0 +1,95 @@
+# English translations
+
+# Language selection
+lang_selection_title: "🌐 Welcome to WiseTrader!\n\nPlease select your preferred language:"
+lang_selection_button_vi: "🇻🇳 Tiếng Việt"
+lang_selection_button_en: "🇬🇧 English"
+lang_selected: "✅ Language set to English. Welcome!"
+
+# Welcome messages
+welcome_new_user: |
+  <b>Welcome to WiseTrader! 🚀</b>
+  
+  You've been registered with a <b>7-day Free Trial</b>. 🆓🗓️
+  
+  <b>Features available:</b>
+  ⭐ Delayed trading signals
+  🧪 1 backtest job
+  📚 Access to strategy library
+  
+  <b>Use</b> <code>/help</code> <b>to see all commands.</b> ℹ️
+  <b>Use</b> <code>/upgrade</code> <b>to see subscription plans.</b> 💎
+  
+  <i>Note: ⚠️ This is a trading bot. Trading cryptocurrencies involves risk.</i>
+welcome_back: "Welcome back! Use /help to see available commands."
+
+# Commands
+cmd_help_title: "📚 <b>Available Commands:</b>\n\n"
+cmd_help_footer: "\n💡 <b>Tip:</b> Click on any command above to use it!"
+cmd_help_start: "Start the bot and register"
+cmd_help_help: "Show this help message"
+cmd_help_version: "Show bot version information"
+cmd_help_me: "Show your user profile"
+cmd_help_create_strategy: "Create a new trading strategy"
+cmd_help_mystrategies: "List all your strategies"
+cmd_help_backtest: "Run backtest on a strategy"
+
+# Errors
+error_user_not_found: "❌ User not found. Please run /start first."
+error_language_not_set: "❌ Please select your language first using /start"
+error_unknown_command: "❌ Unknown command. Use /help to see available commands."
+error_no_strategies: "❌ <b>No Strategies Found</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
+
+# User profile
+profile_title: "✅👤 <b>Account Information</b>"
+profile_name: "👤 Name"
+profile_username: "👤 Username"
+profile_userid: "🆔 User ID"
+profile_points: "🔢 Points"
+profile_subscription: "📋 Subscription Plan"
+profile_created: "📅 Registration Date"
+profile_expires: "⏰ Expires"
+profile_status_active: "Active"
+profile_status_inactive: "Not activated"
+profile_tip: "💡 Use <code>/help</code> to see available commands."
+profile_not_registered: "🆔 User ID <b>{user_id}</b> does not exist in the system.\n\nPlease use the <code>/start</code> command to register a new account."
+profile_userid_param: "user_id"
+
+# Strategy creation
+strategy_welcome: "📊 <b>Strategy Creation Wizard</b>\n\nPlease select an algorithm to start:"
+strategy_cancel: "❌ Cancel"
+strategy_saved: "✅ Strategy saved! Use /mystrategies to view all your strategies."
+strategy_already_saved: "✅ Strategy already saved! Use /strategies to view all your strategies."
+
+# Backtest
+backtest_welcome: "📊 <b>Backtest Wizard</b>\n\nSelect a strategy to backtest:"
+backtest_select_exchange: "✅ <b>Strategy:</b> {strategy_name}\n\n<b>Step 2:</b> Choose exchange:"
+backtest_select_timerange: "✅ <b>Exchange:</b> {exchange}\n\n<b>Step 3:</b> Choose time range for backtest:"
+backtest_button_cancel: "❌ Cancel"
+backtest_running: "⏳ Running backtest, please wait..."
+backtest_complete: "✅ <b>Backtest Complete!</b>"
+
+# General buttons
+button_cancel: "❌ Cancel"
+button_confirm: "✅ Confirm"
+button_next: "➡️ Next"
+button_back: "⬅️ Back"
+
+# Time periods
+period_1day: "📅 1 Day"
+period_1week: "📅 1 Week"
+period_1month: "📅 1 Month"
+period_3months: "📅 3 Months"
+period_6months: "📅 6 Months"
+
+# Exchanges
+xo: "🇬🇧 OKX"
+exchange_binance: "🇧🇳 Binance"
+
+# Algorithms
+algorithm_rsi: "📊 RSI"
+algorithm_bollinger: "📈 Bollinger"
+algorithm_ema: "📉 EMA"
+algorithm_macd: "📊 MACD"
+algorithm_ma: "📊 MA"
+

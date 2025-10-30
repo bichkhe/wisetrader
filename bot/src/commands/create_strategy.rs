@@ -6,6 +6,18 @@ use shared::entity::{users, strategies};
 use tracing;
 use sea_orm::{QueryFilter, QueryOrder};
 use crate::state::{AppState, BotState, CreateStrategyState, MyDialogue};
+use crate::i18n;
+
+// Helper function to get user locale from callback
+async fn get_locale_from_callback(state: &Arc<AppState>, user_id: i64) -> String {
+    use shared::entity::users;
+    if let Ok(Some(user)) = users::Entity::find_by_id(user_id).one(state.db.as_ref()).await {
+        if let Some(ref lang) = user.language {
+            return i18n::get_user_language(Some(lang)).to_string();
+        }
+    }
+    "en".to_string()
+}
 
 /// Handler for inline keyboard callbacks in strategy creation
 pub async fn handle_strategy_callback(
@@ -15,6 +27,9 @@ pub async fn handle_strategy_callback(
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
     tracing::info!("handle_strategy_callback called with data: {:?}", q.data);
+    
+    let user_id = q.from.id.0 as i64;
+    let locale = get_locale_from_callback(&state, user_id).await;
     
     if let Some(data) = q.data {
         if let Some(msg) = q.message {
@@ -26,14 +41,10 @@ pub async fn handle_strategy_callback(
             match data.as_str() {
                 "algorithm_rsi" => {
                     bot.answer_callback_query(q.id).await?;
-                    let instruction = format!(
-                        "📊 <b>RSI Strategy Selected</b>\n\n\
-                        RSI ranges from 0-100:\n\
-                        • <b>Oversold:</b> RSI &lt; 30 (buy signal)\n\
-                        • <b>Overbought:</b> RSI &gt; 70 (sell signal)\n\n\
-                        <b>Step 2:</b> Enter buy condition:\n\
-                        Example: <code>RSI &lt; 30</code>"
-                    );
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "RSI")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_rsi_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "RSI < 30")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
                     
                     bot.edit_message_text(chat_id, message_id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -46,13 +57,10 @@ pub async fn handle_strategy_callback(
                 }
                 "algorithm_bollinger" => {
                     bot.answer_callback_query(q.id).await?;
-                    let instruction = format!(
-                        "📊 <b>Bollinger Bands Strategy Selected</b>\n\n\
-                        • <b>Lower Band:</b> Buy signal (price touches lower band)\n\
-                        • <b>Upper Band:</b> Sell signal (price touches upper band)\n\n\
-                        <b>Step 2:</b> Enter buy condition:\n\
-                        Example: <code>Price &lt; LowerBand</code>"
-                    );
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "Bollinger Bands")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_bb_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "Price < LowerBand")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
                     
                     bot.edit_message_text(chat_id, message_id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -64,13 +72,10 @@ pub async fn handle_strategy_callback(
                 }
                 "algorithm_ema" => {
                     bot.answer_callback_query(q.id).await?;
-                    let instruction = format!(
-                        "📊 <b>EMA Crossover Strategy Selected</b>\n\n\
-                        • <b>Buy:</b> Fast EMA crosses above Slow EMA\n\
-                        • <b>Sell:</b> Fast EMA crosses below Slow EMA\n\n\
-                        <b>Step 2:</b> Enter buy condition:\n\
-                        Example: <code>EMA(12) &gt; EMA(26)</code>"
-                    );
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "EMA")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_ema_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "EMA(12) > EMA(26)")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
                     
                     bot.edit_message_text(chat_id, message_id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -82,13 +87,10 @@ pub async fn handle_strategy_callback(
                 }
                 "algorithm_macd" => {
                     bot.answer_callback_query(q.id).await?;
-                    let instruction = format!(
-                        "📊 <b>MACD Strategy Selected</b>\n\n\
-                        • <b>Buy:</b> MACD line crosses above signal line\n\
-                        • <b>Sell:</b> MACD line crosses below signal line\n\n\
-                        <b>Step 2:</b> Enter buy condition:\n\
-                        Example: <code>MACD &gt; Signal</code>"
-                    );
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "MACD")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_macd_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "MACD > Signal")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
                     
                     bot.edit_message_text(chat_id, message_id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -100,13 +102,10 @@ pub async fn handle_strategy_callback(
                 }
                 "algorithm_ma" => {
                     bot.answer_callback_query(q.id).await?;
-                    let instruction = format!(
-                        "📊 <b>MA Crossover Strategy Selected</b>\n\n\
-                        • <b>Buy:</b> Fast MA crosses above Slow MA\n\
-                        • <b>Sell:</b> Fast MA crosses below Slow MA\n\n\
-                        <b>Step 2:</b> Enter buy condition:\n\
-                        Example: <code>MA(9) &gt; MA(21)</code>"
-                    );
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "MA")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_ma_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "MA(9) > MA(21)")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
                     
                     bot.edit_message_text(chat_id, message_id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -118,11 +117,8 @@ pub async fn handle_strategy_callback(
                 }
                 "cancel_strategy" => {
                     bot.answer_callback_query(q.id).await?;
-                    bot.edit_message_text(
-                        chat_id,
-                        message_id,
-                        "❌ Strategy creation cancelled."
-                    ).await?;
+                    let cancel_msg = i18n::translate(&locale, "strategy_creation_cancelled", None);
+                    bot.edit_message_text(chat_id, message_id, cancel_msg).await?;
                 }
                 _ if data.starts_with("timeframe_") => {
                     bot.answer_callback_query(q.id).await?;
@@ -147,19 +143,16 @@ pub async fn handle_strategy_callback(
                             ],
                         ];
                         
-                        let instruction = format!(
-                            "✅ <b>Step 3 Complete!</b>\n\n\
-                            📋 <b>Summary:</b>\n\
-                            • <b>Algorithm:</b> {}\n\
-                            • <b>Buy Condition:</b> {}\n\
-                            • <b>Sell Condition:</b> {}\n\
-                            • <b>Timeframe:</b> {}\n\n\
-                            <b>Step 4:</b> Choose trading pair:",
-                            algorithm,
-                            buy_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                            sell_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                            timeframe
-                        );
+                        let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
+                        let escaped_sell = sell_condition.replace("<", "&lt;").replace(">", "&gt;");
+                        let step3_complete = i18n::translate(&locale, "strategy_step3_complete", Some(&[
+                            ("algorithm", &algorithm),
+                            ("buy_condition", &escaped_buy),
+                            ("sell_condition", &escaped_sell),
+                            ("timeframe", &timeframe),
+                        ]));
+                        let step5_msg = i18n::translate(&locale, "strategy_step5_choose_pair", None);
+                        let instruction = format!("{}\n\n{}", step3_complete, step5_msg);
                         
                         bot.send_message(chat_id, instruction)
                             .parse_mode(teloxide::types::ParseMode::Html)
@@ -176,7 +169,8 @@ pub async fn handle_strategy_callback(
                 _ if data.starts_with("pair_") => {
                     bot.answer_callback_query(q.id).await?;
                     if data == "pair_manual" {
-                        bot.send_message(chat_id, "Please enter the trading pair manually (e.g., BTCUSDT):").await?;
+                        let manual_msg = i18n::translate(&locale, "strategy_enter_pair_manual", None);
+                        bot.send_message(chat_id, manual_msg).await?;
                     } else {
                         let pair = data.replace("pair_", "");
                         // Get current state to extract all data and save strategy
@@ -227,10 +221,8 @@ pub async fn handle_strategy_callback(
                 }
                 _ if data.starts_with("confirm_strategy_") => {
                     bot.answer_callback_query(q.id).await?;
-                    bot.send_message(
-                        chat_id,
-                        "✅ Strategy already saved! Use /strategies to view all your strategies."
-                    ).await?;
+                    let already_saved = i18n::translate(&locale, "strategy_already_saved", None);
+                    bot.send_message(chat_id, already_saved).await?;
                 }
                 _ => {
                     bot.answer_callback_query(q.id).await?;
@@ -263,44 +255,57 @@ pub async fn handle_create_strategy(
         telegram_id
     );
 
-    // Check if user exists
+    // Check if user exists and get language
     let user = users::Entity::find_by_id(telegram_id)
         .one(state.db.as_ref())
         .await?;
 
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+
     if user.is_none() {
-        bot.send_message(
-            msg.chat.id,
-            "❌ User not found. Please run /start first."
-        ).await?;
+        let error_msg = i18n::translate(locale, "error_user_not_found", None);
+        bot.send_message(msg.chat.id, error_msg).await?;
         return Ok(());
     }
 
     let algorithm_buttons = vec![
         vec![
-            InlineKeyboardButton::callback("📊 RSI", "algorithm_rsi"),
-            InlineKeyboardButton::callback("📈 Bollinger", "algorithm_bollinger"),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "algorithm_rsi", None),
+                "algorithm_rsi"
+            ),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "algorithm_bollinger", None),
+                "algorithm_bollinger"
+            ),
         ],
         vec![
-            InlineKeyboardButton::callback("📉 EMA", "algorithm_ema"),
-            InlineKeyboardButton::callback("📊 MACD", "algorithm_macd"),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "algorithm_ema", None),
+                "algorithm_ema"
+            ),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "algorithm_macd", None),
+                "algorithm_macd"
+            ),
         ],
         vec![
-            InlineKeyboardButton::callback("📊 MA", "algorithm_ma"),
-            InlineKeyboardButton::callback("❌ Cancel", "cancel_strategy"),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "algorithm_ma", None),
+                "algorithm_ma"
+            ),
+            InlineKeyboardButton::callback(
+                i18n::translate(locale, "strategy_cancel_button", None),
+                "cancel_strategy"
+            ),
         ],
     ];
 
-    let welcome_msg = format!(
-        "🤖 <b>Create Custom Trading Strategy</b>\n\n\
-        <b>Step 1:</b> Choose an algorithm indicator:\n\n\
-        • <b>RSI</b> - Relative Strength Index (0-100)\n\
-        • <b>Bollinger Bands</b> - Price volatility bands\n\
-        • <b>EMA</b> - Exponential Moving Average\n\
-        • <b>MACD</b> - Moving Average Convergence Divergence\n\
-        • <b>MA</b> - Simple Moving Average\n\n\
-        Click a button below to start:",
-    );
+    let welcome_msg = i18n::translate(locale, "strategy_welcome", None);
 
     bot.send_message(msg.chat.id, welcome_msg)
         .parse_mode(teloxide::types::ParseMode::Html)
@@ -317,23 +322,32 @@ pub async fn handle_strategy_input_callback(
     bot: Bot,
     dialogue: MyDialogue,
     msg: Message,
-    _state: Arc<AppState>,
+    state: Arc<AppState>,
 ) ->  Result<(), anyhow::Error>{
-    if let Ok(state) = dialogue.get().await {
-        tracing::info!("handle_strategy_input_callback called. Dialogue state: {:?}", state);
-        match state.unwrap() {
+    // Get user locale
+    let telegram_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    if let Ok(dialogue_state) = dialogue.get().await {
+        tracing::info!("handle_strategy_input_callback called. Dialogue state: {:?}", dialogue_state);
+        match dialogue_state.unwrap() {
             BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition { algorithm }) => {
                 if let Some(text) = msg.text() {
                     let buy_condition = text.trim().to_string();
-                    let instruction = format!(
-                        "✅ <b>Step 1 Complete!</b>\n\n\
-                        <b>Algorithm:</b> {}\n\
-                        <b>Buy Condition:</b> {}\n\n\
-                        <b>Step 2:</b> Enter sell condition:\n\
-                        Example: <code>RSI &gt;= 70</code>",
-                        algorithm,
-                        buy_condition.replace("<", "&lt;").replace(">", "&gt;")
+                    let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
+                    let step1_complete = format!(
+                        "✅ <b>Step 1 Complete!</b>\n\n<b>Algorithm:</b> {}\n<b>Buy Condition:</b> {}\n\n",
+                        algorithm, escaped_buy
                     );
+                    let step2_msg = i18n::translate(locale, "strategy_step3_enter_sell", Some(&[("example", "RSI >= 70")]));
+                    let instruction = step1_complete + &step2_msg;
                     bot.send_message(msg.chat.id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
                         .await?;
@@ -365,18 +379,14 @@ pub async fn handle_strategy_input_callback(
                         ],
                     ];
                     
-                    let instruction = format!(
-                        "✅ <b>Step 2 Complete!</b>\n\n\
-                        📋 <b>Summary:</b>\n\
-                        • <b>Algorithm:</b> {}\n\
-                        • <b>Buy Condition:</b> {}\n\
-                        • <b>Sell Condition:</b> {}\n\n\
-                        <b>Step 3:</b> Choose timeframe:\n\
-                        Click a button below:",
-                        algorithm,
-                        buy_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                        sell_condition.replace("<", "&lt;").replace(">", "&gt;")
+                    let escaped_buy = buy_condition.replace("<", "&lt;").replace(">", "&gt;");
+                    let escaped_sell = sell_condition.replace("<", "&lt;").replace(">", "&gt;");
+                    let step2_complete = format!(
+                        "✅ <b>Step 2 Complete!</b>\n\n📋 <b>Summary:</b>\n• <b>Algorithm:</b> {}\n• <b>Buy Condition:</b> {}\n• <b>Sell Condition:</b> {}\n\n",
+                        algorithm, escaped_buy, escaped_sell
                     );
+                    let step4_msg = i18n::translate(locale, "strategy_step4_choose_timeframe", None);
+                    let instruction = step2_complete + &step4_msg;
                     
                     bot.send_message(msg.chat.id, instruction)
                         .parse_mode(teloxide::types::ParseMode::Html)
@@ -407,30 +417,17 @@ pub async fn handle_strategy_input_callback(
                         ..Default::default()
                     };
 
-                    match strategies::Entity::insert(new_strategy).exec(_state.db.as_ref()).await {
+                    match strategies::Entity::insert(new_strategy).exec(state.db.as_ref()).await {
                         Ok(_) => {
-                            bot.send_message(
-                                msg.chat.id,
-                                format!("✅ <b>Strategy Created Successfully!</b>\n\n\
-                                📋 <b>Complete Summary:</b>\n\n\
-                                🎯 <b>Strategy Name:</b> {}\n\
-                                📊 <b>Algorithm:</b> {}\n\
-                                📈 <b>Buy Condition:</b> {}\n\
-                                📉 <b>Sell Condition:</b> {}\n\
-                                ⏰ <b>Timeframe:</b> {}\n\
-                                💱 <b>Trading Pair:</b> {}\n\n\
-                                Your strategy has been saved and is ready to use!",
-                                strategy_name, algorithm, 
-                                buy_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                                sell_condition.replace("<", "&lt;").replace(">", "&gt;"),
-                                timeframe, pair)
-                            )
+                            let success_msg = i18n::translate(locale, "strategy_saved_success", None);
+                            bot.send_message(msg.chat.id, success_msg)
                                 .parse_mode(teloxide::types::ParseMode::Html)
                                 .await?;
                             dialogue.exit().await?;
                         }
                         Err(e) => {
-                            bot.send_message(msg.chat.id, format!("❌ Failed to save: {}", e)).await?;
+                            let error_msg = i18n::translate(locale, "strategy_saved_error", None);
+                            bot.send_message(msg.chat.id, format!("{}: {}", error_msg, e)).await?;
                         }
                     }
                 }
@@ -461,11 +458,19 @@ pub async fn handle_my_strategies(
         .all(db.as_ref())
         .await?;
 
+    // Get user language
+    let user = users::Entity::find_by_id(telegram_id.parse::<i64>().unwrap_or(0))
+        .one(db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
     if user_strategies.is_empty() {
-        bot.send_message(
-            msg.chat.id,
-            "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
-        )
+        let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
+        bot.send_message(msg.chat.id, empty_msg)
             .parse_mode(teloxide::types::ParseMode::Html)
             .await?;
         return Ok(());
@@ -480,7 +485,8 @@ pub async fn handle_my_strategies(
             .replace("'", "&#x27;")
     }
     
-    let mut msg_text = format!("📋 <b>My Strategies</b> ({})\n\n", user_strategies.len());
+    let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &user_strategies.len().to_string())]));
+    let mut msg_text = title + "\n\n";
     
     let unnamed_str = "Unnamed".to_string();
     let no_desc_str = "No description".to_string();
@@ -560,7 +566,7 @@ pub async fn handle_my_strategies(
         msg_text.push_str("</code>\n\n");
     }
 
-    msg_text.push_str("\n💡 <b>Tip:</b> Use <code>/backtest &lt;strategy_name&gt;</code> to test your strategies!");
+    msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
 
     bot.send_message(msg.chat.id, msg_text)
         .parse_mode(teloxide::types::ParseMode::Html)

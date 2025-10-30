@@ -46,6 +46,7 @@ impl AppState {
 pub enum BotState {
     #[default]
     Normal,
+    WaitingForLanguage,
     CreateStrategy(CreateStrategyState),
     Trading(TradingState),
     Backtest(BacktestState),

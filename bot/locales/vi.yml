@@ -1,0 +1,97 @@
+# Vietnamese translations
+
+# Language selection
+lang_selection_title: "🌐 Chào mừng đến với WiseTrader!\n\nVui lòng chọn ngôn ngữ của bạn:"
+lang_selection_button_vi: "🇻🇳 Tiếng Việt"
+lang_selection_button_en: "🇬🇧 English"
+lang_selected: "✅ Đã chọn ngôn ngữ Tiếng Việt. Chào mừng!"
+
+# Welcome messages
+welcome_new_user: |
+  <b>Chào mừng đến với WiseTrader! 🚀</b>
+  
+  Bạn đã được đăng ký <b>Dùng thử miễn phí 7 ngày</b>. 🆓🗓️
+  
+  <b>Các tính năng có sẵn:</b>
+  ⭐ Tín hiệu giao dịch trễ
+  🧪 1 công việc backtest
+  📚 Truy cập thư viện chiến lược
+  
+  <b>Sử dụng</b> <code>/help</code> <b>để xem tất cả lệnh.</b> ℹ️
+  <b>Sử dụng</b> <code>/upgrade</code> <b>để xem các gói đăng ký.</b> 💎
+  
+  <i>Lưu ý: ⚠️ Đây là bot giao dịch. Giao dịch tiền điện tử có rủi ro.</i>
+welcome_back: "Chào mừng trở lại! Sử dụng /help để xem các lệnh có sẵn."
+
+# Commands
+cmd_help_title: "📚 <b>Các Lệnh Có Sẵn:</b>\n\n"
+cmd_help_footer: "\n💡 <b>Mẹo:</b> Nhấp vào bất kỳ lệnh nào ở trên để sử dụng!"
+cmd_help_start: "Khởi động bot và đăng ký"
+cmd_help_help: "Hiển thị thông báo trợ giúp này"
+cmd_help_version: "Hiển thị thông tin phiên bản bot"
+cmd_help_me: "Hiển thị hồ sơ người dùng của bạn"
+cmd_help_create_strategy: "Tạo chiến lược giao dịch mới"
+cmd_help_mystrategies: "Liệt kê tất cả chiến lược của bạn"
+cmd_help_backtest: "Chạy backtest trên một chiến lược"
+
+# Errors
+error_user_not_found: "❌ Không tìm thấy người dùng. Vui lòng chạy /start trước."
+error_language_not_set: "❌ Vui lòng chọn ngôn ngữ của bạn trước bằng /start"
+error_unknown_command: "❌ Lệnh không xác định. Sử dụng /help để xem các lệnh có sẵn."
+error_no_strategies: "❌ <b>Không Tìm Thấy Chiến Lược</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/create_strategy</code> để tạo chiến lược đầu tiên của bạn!"
+
+# User profile
+profile_title: "✅👤 <b>Thông tin tài khoản</b>"
+profile_name: "👤 Tên"
+profile_username: "👤 Username"
+profile_userid: "🆔 UserID"
+profile_points: "🔢 Số điểm"
+profile_subscription: "📋 Gói dịch vụ"
+profile_created: "📅 Ngày đăng ký"
+profile_expires: "⏰ Hết hạn"
+profile_status_active: "Đang Hoạt động"
+profile_status_inactive: "Chưa được kích hoạt"
+profile_tip: "💡 Sử dụng lệnh /help để xem các lệnh khả dụng."
+profile_not_registered: "🆔 User ID <b>{user_id}</b> chưa tồn tại trong hệ thống.\n\nVui lòng sử dụng lệnh <code>/start</code> để đăng ký tài khoản mới."
+profile_userid_param: "user_id"
+
+# Strategy creation
+strategy_welcome: "📊 <b>Trình Tạo Chiến Lược</b>\n\nVui lòng chọn thuật toán để bắt đầu:"
+strategy_cancel: "❌ Hủy"
+strategy_saved: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
+strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
+
+# Backtest
+backtest_welcome: "📊 <b>Trình Backtest</b>\n\nChọn chiến lược để backtest:"
+backtest_select_exchange: "✅ <b>Chiến lược:</b> {strategy_name}\n\n<b>Bước 2:</b> Chọn sàn giao dịch:"
+backtest_select_timerange: "✅ <b>Sàn giao dịch:</b> {exchange}\n\n<b>Bước 3:</b> Chọn khoảng thời gian cho backtest:"
+backtest_button_cancel: "❌ Hủy"
+backtest_running: "⏳ Đang chạy backtest, vui lòng đợi..."
+backtest_complete: "✅ <b>Backtest Hoàn Tất!</b>"
+
+# General buttons
+button_cancel: "❌ Hủy"
+button_confirm: "✅ Xác nhận"
+button_next: "➡️ Tiếp theo"
+button_back: "⬅️ Quay lại"
+
+# Time periods
+period_1day: "📅 1 Ngày"
+period_1week: "📅 1 Tuần"
+period_1month: "📅 1 Tháng"
+period_3months: "📅 3 Tháng"
+period_6months: "📅 6 Tháng"
+
+# Exchanges
+exchange_okx: "🇬🇧 OKX"
+exchange_binance: "🇧🇳 Binance"
+
+# Algorithms
+algorithm_rsi: "📊 RSI"
+algorithm_bollinger: "📈 Bollinger"
+algorithm_ema: "📉 EMA"
+algorithm_macd: "📊 MACD"
+algorithm_ma: "📊 MA"
+
+baselineLanguage: en
+

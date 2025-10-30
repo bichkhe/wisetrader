@@ -10,6 +10,7 @@ use std::fs;
 use askama::Template;
 use chrono::{Utc, Duration};
 use crate::state::{AppState, BotState, BacktestState, MyDialogue};
+use crate::i18n;
 
 /// Helper function to HTML escape
 fn escape_html(text: &str) -> String {
@@ -369,22 +370,30 @@ pub async fn handle_backtest(
 ) -> Result<(), anyhow::Error> {
     dialogue.update(BotState::Backtest(BacktestState::Start)).await?;
 
-    let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
+    let telegram_id = msg.from.as_ref().unwrap().id.0 as i64;
     let db = state.db.clone();
+
+    // Get user language
+    let user = shared::entity::users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
 
     // Get user's strategies
     use sea_orm::QueryOrder;
     let user_strategies = strategies::Entity::find()
-        .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
+        .filter(strategies::Column::TelegramId.eq(telegram_id.to_string()))
         .order_by_desc(strategies::Column::CreatedAt)
         .all(db.as_ref())
         .await?;
 
     if user_strategies.is_empty() {
-        bot.send_message(
-            msg.chat.id,
-            "❌ <b>No Strategies Found</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
-        )
+        let empty_msg = i18n::translate(locale, "error_no_strategies", None);
+        bot.send_message(msg.chat.id, empty_msg)
             .parse_mode(teloxide::types::ParseMode::Html)
             .await?;
         dialogue.exit().await?;
@@ -410,15 +419,13 @@ pub async fn handle_backtest(
         ]);
     }
     buttons.push(vec![
-        InlineKeyboardButton::callback("❌ Cancel", "backtest_cancel")
+        InlineKeyboardButton::callback(
+            i18n::translate(locale, "backtest_button_cancel", None),
+            "backtest_cancel"
+        )
     ]);
 
-    let welcome_msg = format!(
-        "🤖 <b>Backtest Wizard</b>\n\n\
-        <b>Step 1:</b> Choose a strategy to backtest:\n\n\
-        You have <b>{}</b> strategy(ies) available.",
-        user_strategies.len()
-    );
+    let welcome_msg = i18n::translate(locale, "backtest_welcome", Some(&[("count", &user_strategies.len().to_string())]));
 
     bot.send_message(msg.chat.id, welcome_msg)
         .parse_mode(teloxide::types::ParseMode::Html)
@@ -437,6 +444,17 @@ pub async fn handle_backtest_callback(
     q: CallbackQuery,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
+    // Get user locale
+    let user_id = q.from.id.0 as i64;
+    let user = shared::entity::users::Entity::find_by_id(user_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
     if let Some(data) = q.data {
         if let Some(msg) = q.message {
             let chat_id = msg.chat().id;
@@ -445,7 +463,8 @@ pub async fn handle_backtest_callback(
             match data.as_str() {
                 "backtest_cancel" => {
                     bot.answer_callback_query(q.id).await?;
-                    bot.edit_message_text(chat_id, message_id, "❌ Backtest cancelled.")
+                    let cancel_msg = i18n::translate(locale, "backtest_cancelled", None);
+                    bot.edit_message_text(chat_id, message_id, cancel_msg)
                         .await?;
                     dialogue.exit().await?;
                     return Ok(());
@@ -467,23 +486,26 @@ pub async fn handle_backtest_callback(
                         // Show exchange selection
                         let exchange_buttons = vec![
                             vec![
-                                InlineKeyboardButton::callback("🔵 Binance", "backtest_exchange_binance"),
-                                InlineKeyboardButton::callback("🟢 OKX", "backtest_exchange_okx"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "backtest_exchange_binance", None),
+                                    "backtest_exchange_binance"
+                                ),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "backtest_exchange_okx", None),
+                                    "backtest_exchange_okx"
+                                ),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("❌ Cancel", "backtest_cancel"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "backtest_button_cancel", None),
+                                    "backtest_cancel"
+                                ),
                             ],
                         ];
 
-                        bot.edit_message_text(
-                            chat_id,
-                            message_id,
-                            format!(
-                                "✅ <b>Strategy Selected:</b> {}\n\n\
-                                <b>Step 2:</b> Choose exchange:",
-                                escape_html(&strategy_name)
-                            )
-                        )
+                        let escaped_name = escape_html(&strategy_name);
+                        let strategy_selected = i18n::translate(locale, "backtest_strategy_selected", Some(&[("strategy_name", &escaped_name)]));
+                        bot.edit_message_text(chat_id, message_id, strategy_selected)
                             .parse_mode(teloxide::types::ParseMode::Html)
                             .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons))
                             .await?;
@@ -502,30 +524,42 @@ pub async fn handle_backtest_callback(
                         // Show time range selection
                         let timerange_buttons = vec![
                             vec![
-                                InlineKeyboardButton::callback("📅 1 Day", "backtest_timerange_1day"),
-                                InlineKeyboardButton::callback("📅 1 Week", "backtest_timerange_1week"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "period_1day", None),
+                                    "backtest_timerange_1day"
+                                ),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "period_1week", None),
+                                    "backtest_timerange_1week"
+                                ),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("📅 1 Month", "backtest_timerange_1month"),
-                                InlineKeyboardButton::callback("📅 3 Months", "backtest_timerange_3months"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "period_1month", None),
+                                    "backtest_timerange_1month"
+                                ),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "period_3months", None),
+                                    "backtest_timerange_3months"
+                                ),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("📅 6 Months", "backtest_timerange_6months"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "period_6months", None),
+                                    "backtest_timerange_6months"
+                                ),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("❌ Cancel", "backtest_cancel"),
+                                InlineKeyboardButton::callback(
+                                    i18n::translate(locale, "backtest_button_cancel", None),
+                                    "backtest_cancel"
+                                ),
                             ],
                         ];
 
-                        bot.edit_message_text(
-                            chat_id,
-                            message_id,
-                            format!(
-                                "✅ <b>Exchange:</b> {}\n\n\
-                                <b>Step 3:</b> Choose time range for backtest:",
-                                escape_html(&exchange)
-                            )
-                        )
+                        let escaped_exchange = escape_html(&exchange);
+                        let exchange_selected = i18n::translate(locale, "backtest_exchange_selected", Some(&[("exchange", &escaped_exchange)]));
+                        bot.edit_message_text(chat_id, message_id, exchange_selected)
                             .parse_mode(teloxide::types::ParseMode::Html)
                             .reply_markup(teloxide::types::InlineKeyboardMarkup::new(timerange_buttons))
                             .await?;
@@ -570,20 +604,8 @@ pub async fn handle_backtest_callback(
                         };
 
                         // Show processing message
-                        bot.edit_message_text(
-                            chat_id,
-                            message_id,
-                            format!(
-                                "⏳ <b>Starting Backtest...</b>\n\n\
-                                <b>Strategy:</b> {}\n\
-                                <b>Exchange:</b> {}\n\
-                                <b>Time Range:</b> {}\n\n\
-                                Generating strategy file and running backtest...",
-                                escape_html(&strategy_name),
-                                escape_html(&exchange),
-                                timerange
-                            )
-                        )
+                        let running_msg = i18n::translate(locale, "backtest_running", None);
+                        bot.edit_message_text(chat_id, message_id, running_msg)
                             .parse_mode(teloxide::types::ParseMode::Html)
                             .await?;
 

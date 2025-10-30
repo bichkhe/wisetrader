@@ -1,0 +1,125 @@
+# Vietnamese translations
+
+# Language selection
+lang_selection_title: "🌐 Chào mừng đến với WiseTrader!\n\nVui lòng chọn ngôn ngữ của bạn:"
+lang_selection_button_vi: "🇻🇳 Tiếng Việt"
+lang_selection_button_en: "🇬🇧 English"
+lang_selected: "✅ Đã chọn ngôn ngữ Tiếng Việt. Chào mừng!"
+lang_updated_success: "Đã cập nhật ngôn ngữ thành công!"
+lang_updated_notice: "Tất cả tin nhắn sẽ được hiển thị bằng ngôn ngữ đã chọn. Sử dụng /me để xem hồ sơ của bạn với ngôn ngữ mới."
+
+# Welcome messages
+welcome_new_user: |
+  <b>Chào mừng đến với WiseTrader! 🚀</b>
+  
+  Bạn đã được đăng ký <b>Dùng thử miễn phí 7 ngày</b>. 🆓🗓️
+  
+  <b>Các tính năng có sẵn:</b>
+  ⭐ Tín hiệu giao dịch trễ
+  🧪 1 công việc backtest
+  📚 Truy cập thư viện chiến lược
+  
+  <b>Sử dụng</b> <code>/help</code> <b>để xem tất cả lệnh.</b> ℹ️
+  <b>Sử dụng</b> <code>/upgrade</code> <b>để xem các gói đăng ký.</b> 💎
+  
+  <i>Lưu ý: ⚠️ Đây là bot giao dịch. Giao dịch tiền điện tử có rủi ro.</i>
+welcome_back: "Chào mừng trở lại! Sử dụng /help để xem các lệnh có sẵn."
+
+# Commands
+cmd_help_title: "📚 <b>Các Lệnh Có Sẵn:</b>\n\n"
+cmd_help_footer: "\n💡 <b>Mẹo:</b> Nhấp vào bất kỳ lệnh nào ở trên để sử dụng!"
+cmd_help_start: "Khởi động bot và đăng ký"
+cmd_help_help: "Hiển thị thông báo trợ giúp này"
+cmd_help_version: "Hiển thị thông tin phiên bản bot"
+cmd_help_me: "Hiển thị hồ sơ người dùng của bạn"
+cmd_help_create_strategy: "Tạo chiến lược giao dịch mới"
+cmd_help_mystrategies: "Liệt kê tất cả chiến lược của bạn"
+cmd_help_backtest: "Chạy backtest trên một chiến lược"
+
+# Errors
+error_user_not_found: "❌ Không tìm thấy người dùng. Vui lòng chạy /start trước."
+error_language_not_set: "❌ Vui lòng chọn ngôn ngữ của bạn trước bằng /start"
+error_unknown_command: "❌ Lệnh không xác định. Sử dụng /help để xem các lệnh có sẵn."
+error_no_strategies: "❌ <b>Không Tìm Thấy Chiến Lược</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/create_strategy</code> để tạo chiến lược đầu tiên của bạn!"
+
+# User profile
+profile_title: "✅👤 <b>Thông tin tài khoản</b>"
+profile_name: "👤 Tên"
+profile_username: "👤 Username"
+profile_userid: "🆔 UserID"
+profile_points: "🔢 Số điểm"
+profile_points_unit: "điểm"
+profile_subscription: "📋 Gói dịch vụ"
+profile_created: "📅 Ngày đăng ký"
+profile_expires: "⏰ Hết hạn"
+profile_status_label: "Trạng thái"
+profile_status_active: "Đang Hoạt động"
+profile_status_inactive: "Chưa được kích hoạt"
+profile_tip: "💡 Sử dụng lệnh /help để xem các lệnh khả dụng."
+profile_not_registered: "🆔 User ID <b>{user_id}</b> chưa tồn tại trong hệ thống.\n\nVui lòng sử dụng lệnh <code>/start</code> để đăng ký tài khoản mới."
+profile_userid_param: "user_id"
+profile_change_language: "🌐 Đổi Ngôn Ngữ"
+profile_language_current: "🌐 Ngôn ngữ"
+
+# Strategy creation
+strategy_welcome: "📊 <b>Trình Tạo Chiến Lược</b>\n\nVui lòng chọn thuật toán để bắt đầu:"
+strategy_cancel_button: "❌ Hủy"
+strategy_algorithm_selected: "📊 <b>{algorithm} Strategy Selected</b>"
+strategy_algorithm_rsi_info: "RSI từ 0-100:\n• <b>Quá bán:</b> RSI &lt; 30 (tín hiệu mua)\n• <b>Quá mua:</b> RSI &gt; 70 (tín hiệu bán)"
+strategy_algorithm_bb_info: "• <b>Dải dưới:</b> Tín hiệu mua (giá chạm dải dưới)\n• <b>Dải trên:</b> Tín hiệu bán (giá chạm dải trên)"
+strategy_algorithm_ema_info: "• <b>Mua:</b> EMA nhanh vượt trên EMA chậm\n• <b>Bán:</b> EMA nhanh vượt dưới EMA chậm"
+strategy_algorithm_macd_info: "• <b>Mua:</b> Đường MACD vượt trên đường tín hiệu\n• <b>Bán:</b> Đường MACD vượt dưới đường tín hiệu"
+strategy_algorithm_ma_info: "• <b>Mua:</b> MA nhanh vượt trên MA chậm\n• <b>Bán:</b> MA nhanh vượt dưới MA chậm"
+strategy_step2_enter_buy: "<b>Bước 2:</b> Nhập điều kiện mua:\nVí dụ: <code>{example}</code>"
+strategy_step3_enter_sell: "<b>Bước 3:</b> Nhập điều kiện bán:\nVí dụ: <code>{example}</code>"
+strategy_step4_choose_timeframe: "<b>Bước 4:</b> Chọn khung thời gian:"
+strategy_step5_choose_pair: "<b>Bước 5:</b> Chọn cặp giao dịch:"
+strategy_step3_complete: "✅ <b>Bước 3 Hoàn Tất!</b>\n\n📋 <b>Tóm tắt:</b>\n• <b>Thuật toán:</b> {algorithm}\n• <b>Điều kiện Mua:</b> {buy_condition}\n• <b>Điều kiện Bán:</b> {sell_condition}\n• <b>Khung thời gian:</b> {timeframe}"
+strategy_enter_pair_manual: "Vui lòng nhập cặp giao dịch thủ công (ví dụ: BTCUSDT):"
+strategy_creation_cancelled: "❌ Đã hủy tạo chiến lược."
+strategy_saved: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
+strategy_saved_success: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
+strategy_saved_error: "❌ Lỗi khi lưu chiến lược. Vui lòng thử lại."
+strategy_my_strategies_title: "📋 <b>Chiến Lược Của Tôi</b> ({count})"
+strategy_my_strategies_empty: "📋 <b>Chiến Lược Của Tôi</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/create_strategy</code> để tạo chiến lược đầu tiên của bạn!"
+strategy_my_strategies_tip: "\n💡 <b>Mẹo:</b> Sử dụng <code>/backtest &lt;strategy_name&gt;</code> để test chiến lược của bạn!"
+strategy_cancel: "❌ Hủy"
+strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
+
+# Backtest
+backtest_welcome: "📊 <b>Trình Backtest</b>\n\n<b>Bước 1:</b> Chọn chiến lược để backtest:\n\nBạn có <b>{count}</b> chiến lược có sẵn."
+backtest_strategy_selected: "✅ <b>Chiến lược đã chọn:</b> {strategy_name}\n\n<b>Bước 2:</b> Chọn sàn giao dịch:"
+backtest_select_exchange: "✅ <b>Chiến lược:</b> {strategy_name}\n\n<b>Bước 2:</b> Chọn sàn giao dịch:"
+backtest_exchange_selected: "✅ <b>Sàn giao dịch:</b> {exchange}\n\n<b>Bước 3:</b> Chọn khoảng thời gian cho backtest:"
+backtest_select_timerange: "✅ <b>Sàn giao dịch:</b> {exchange}\n\n<b>Bước 3:</b> Chọn khoảng thời gian cho backtest:"
+backtest_button_cancel: "❌ Hủy"
+backtest_cancelled: "❌ Đã hủy backtest."
+backtest_running: "⏳ Đang chạy backtest, vui lòng đợi..."
+backtest_complete: "✅ <b>Backtest Hoàn Tất!</b>"
+backtest_exchange_binance: "🔵 Binance"
+backtest_exchange_okx: "🟢 OKX"
+
+# General buttons
+button_cancel: "❌ Hủy"
+button_confirm: "✅ Xác nhận"
+button_next: "➡️ Tiếp theo"
+button_back: "⬅️ Quay lại"
+
+# Time periods
+period_1day: "📅 1 Ngày"
+period_1week: "📅 1 Tuần"
+period_1month: "📅 1 Tháng"
+period_3months: "📅 3 Tháng"
+period_6months: "📅 6 Tháng"
+
+# Exchanges
+exchange_okx: "🇬🇧 OKX"
+exchange_binance: "🇧🇳 Binance"
+
+# Algorithms
+algorithm_rsi: "📊 RSI"
+algorithm_bollinger: "📈 Bollinger"
+algorithm_ema: "📉 EMA"
+algorithm_macd: "📊 MACD"
+algorithm_ma: "📊 MA"
+

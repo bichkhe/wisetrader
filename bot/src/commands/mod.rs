@@ -9,17 +9,21 @@ use tracing::info;
 use std::sync::Arc;
 use std::time::Instant;
 use crate::state::{AppState, MyDialogue};
+use crate::i18n;
 pub mod admin;
 pub mod me;
 pub mod trading;
 pub mod create_strategy;
 pub mod backtest;
+pub mod start;
 
 pub use admin::handle_version;
 pub use me::handle_me;
 pub use trading::handle_backtest;
 pub use create_strategy::{handle_create_strategy, handle_strategy_callback, handle_strategy_input_callback, handle_my_strategies};
 pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_callback};
+pub use start::{handle_start, handle_language_selection, handle_language_callback};
+pub use me::handle_profile_callback;
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -61,79 +65,54 @@ pub enum Command {
 }
 
 
-async fn handle_start(bot: Bot, msg: Message, state: Arc<AppState>) -> anyhow::Result<()> {
-        let user_id = msg.from.as_ref().unwrap().id.0 as i64;
-        let username = msg.from.as_ref().unwrap().username.clone();
+// handle_start moved to start.rs module
 
-    let db = state.db.clone();
-    info!("Processing /start command from user {}", user_id);
-
-    // Check if user already exists using Sea-ORM
-    let existing_user = users::Entity::find_by_id(user_id)
-        .one(db.as_ref())
-        .await?;
-
-    if existing_user.is_some() {
-        bot.send_message(msg.chat.id, "Welcome back! Use /help to see available commands.")
-            .await?;
-        return Ok(());
-    }
-
-    // Register new user with free trial
-    let expires_at = Utc::now() + Duration::days(7);
-    
-    use sea_orm::ActiveValue::Set;
-
-    let new_user = users::ActiveModel {
-        id: Set(user_id),
-        username: Set(username.clone()),
-        language: Set(Some("en".to_string())),
-        subscription_tier: Set(Some("free_trial".to_string())),
-        subscription_expires: Set(Some(expires_at)),
-        live_trading_enabled: Set(Some(0)),
-        created_at: Set(Some(Utc::now())),
-        telegram_id: Set(Some(user_id.to_string())),
-        fullname: Set(username.unwrap_or_else(|| "".to_string()).into()),
-        points: Set(0u64),
-    };
-
-    state.user_service.create_user(new_user).await.unwrap();
-
-    let welcome_msg = format!(
-        "<b>Welcome to WiseTrader! 🚀</b>\n\n\
-        You've been registered with a <b>7-day Free Trial</b>. 🆓🗓️<br><br>\
-        <b>Features available:</b><br>\
-        ⭐ Delayed trading signals<br>\
-        🧪 1 backtest job<br>\
-        📚 Access to strategy library<br><br>\
-        <b>Use</b> <code>/help</code> <b>to see all commands.</b> ℹ️<br>\
-        <b>Use</b> <code>/upgrade</code> <b>to see subscription plans.</b> 💎<br><br>\
-        <i>Note: ⚠️ This is a trading bot. Trading cryptocurrencies involves risk.</i>"
-    );
-
-    bot.send_message(msg.chat.id, welcome_msg)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
-
-    Ok(())
-}
-
-pub async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
+pub async fn handle_help(
+    bot: Bot,
+    msg: Message,
+    state: Arc<AppState>,
+) -> Result<()> {
+    use crate::i18n;
     let start_time = Instant::now();
     
     let from = msg.from.unwrap();
     let fullname = from.full_name();
     let telegram_id = from.id.0 as i64;
     let username = from.username.unwrap_or("Không có".to_string());
+    
+    // Get user language
+    let user = shared::entity::users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
     tracing::info!(
-        "Handling /help command for user: {} (id: {}, username: {})",
+        "Handling /help command for user: {} (id: {}, username: {}, locale: {})",
         fullname,
         telegram_id,
-        username
+        username,
+        locale
     );
-    // Filter out some commands from the help message
-    let  descriptions = Command::descriptions().to_string();
-    bot.send_message(msg.chat.id, descriptions)
+    
+    // Build help message with translations
+    let mut help_text = i18n::translate(locale, "cmd_help_title", None);
+    
+    // Add command descriptions using translations
+    help_text.push_str(&format!("/start - {}\n", i18n::translate(locale, "cmd_help_start", None)));
+    help_text.push_str(&format!("/help - {}\n", i18n::translate(locale, "cmd_help_help", None)));
+    help_text.push_str(&format!("/version - {}\n", i18n::translate(locale, "cmd_help_version", None)));
+    help_text.push_str(&format!("/me - {}\n", i18n::translate(locale, "cmd_help_me", None)));
+    help_text.push_str(&format!("/create_strategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
+    help_text.push_str(&format!("/mystrategies - {}\n", i18n::translate(locale, "cmd_help_mystrategies", None)));
+    help_text.push_str(&format!("/backtest - {}\n", i18n::translate(locale, "cmd_help_backtest", None)));
+    
+    help_text.push_str(&i18n::translate(locale, "cmd_help_footer", None));
+    
+    bot.send_message(msg.chat.id, help_text)
         .parse_mode(teloxide::types::ParseMode::Html)
         .await?;
     let duration = start_time.elapsed();

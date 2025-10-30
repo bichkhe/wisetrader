@@ -1,0 +1,125 @@
+# English translations
+
+# Language selection
+lang_selection_title: "🌐 Welcome to WiseTrader!\n\nPlease select your preferred language:"
+lang_selection_button_vi: "🇻🇳 Tiếng Việt"
+lang_selection_button_en: "🇬🇧 English"
+lang_selected: "✅ Language set to English. Welcome!"
+lang_updated_success: "Language updated successfully!"
+lang_updated_notice: "All messages will now be displayed in the selected language. Use /me to see your profile with the new language."
+
+# Welcome messages
+welcome_new_user: |
+  <b>Welcome to WiseTrader! 🚀</b>
+  
+  You've been registered with a <b>7-day Free Trial</b>. 🆓🗓️
+  
+  <b>Features available:</b>
+  ⭐ Delayed trading signals
+  🧪 1 backtest job
+  📚 Access to strategy library
+  
+  <b>Use</b> <code>/help</code> <b>to see all commands.</b> ℹ️
+  <b>Use</b> <code>/upgrade</code> <b>to see subscription plans.</b> 💎
+  
+  <i>Note: ⚠️ This is a trading bot. Trading cryptocurrencies involves risk.</i>
+welcome_back: "Welcome back! Use /help to see available commands."
+
+# Commands
+cmd_help_title: "📚 <b>Available Commands:</b>\n\n"
+cmd_help_footer: "\n💡 <b>Tip:</b> Click on any command above to use it!"
+cmd_help_start: "Start the bot and register"
+cmd_help_help: "Show this help message"
+cmd_help_version: "Show bot version information"
+cmd_help_me: "Show your user profile"
+cmd_help_create_strategy: "Create a new trading strategy"
+cmd_help_mystrategies: "List all your strategies"
+cmd_help_backtest: "Run backtest on a strategy"
+
+# Errors
+error_user_not_found: "❌ User not found. Please run /start first."
+error_language_not_set: "❌ Please select your language first using /start"
+error_unknown_command: "❌ Unknown command. Use /help to see available commands."
+error_no_strategies: "❌ <b>No Strategies Found</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
+
+# User profile
+profile_title: "✅👤 <b>Account Information</b>"
+profile_name: "👤 Name"
+profile_username: "👤 Username"
+profile_userid: "🆔 User ID"
+profile_points: "🔢 Points"
+profile_points_unit: "points"
+profile_subscription: "📋 Subscription Plan"
+profile_created: "📅 Registration Date"
+profile_expires: "⏰ Expires"
+profile_status_label: "Status"
+profile_status_active: "Active"
+profile_status_inactive: "Not activated"
+profile_tip: "💡 Use <code>/help</code> to see available commands."
+profile_not_registered: "🆔 User ID <b>{user_id}</b> does not exist in the system.\n\nPlease use the <code>/start</code> command to register a new account."
+profile_userid_param: "user_id"
+profile_change_language: "🌐 Change Language"
+profile_language_current: "🌐 Language"
+
+# Strategy creation
+strategy_welcome: "📊 <b>Strategy Creation Wizard</b>\n\nPlease select an algorithm to start:"
+strategy_cancel_button: "❌ Cancel"
+strategy_cancel: "❌ Cancel"
+strategy_algorithm_selected: "📊 <b>{algorithm} Strategy Selected</b>"
+strategy_algorithm_rsi_info: "RSI ranges from 0-100:\n• <b>Oversold:</b> RSI &lt; 30 (buy signal)\n• <b>Overbought:</b> RSI &gt; 70 (sell signal)"
+strategy_algorithm_bb_info: "• <b>Lower Band:</b> Buy signal (price touches lower band)\n• <b>Upper Band:</b> Sell signal (price touches upper band)"
+strategy_algorithm_ema_info: "• <b>Buy:</b> Fast EMA crosses above Slow EMA\n• <b>Sell:</b> Fast EMA crosses below Slow EMA"
+strategy_algorithm_macd_info: "• <b>Buy:</b> MACD line crosses above signal line\n• <b>Sell:</b> MACD line crosses below signal line"
+strategy_algorithm_ma_info: "• <b>Buy:</b> Fast MA crosses above Slow MA\n• <b>Sell:</b> Fast MA crosses below Slow MA"
+strategy_step2_enter_buy: "<b>Step 2:</b> Enter buy condition:\nExample: <code>{example}</code>"
+strategy_step3_enter_sell: "<b>Step 3:</b> Enter sell condition:\nExample: <code>{example}</code>"
+strategy_step4_choose_timeframe: "<b>Step 4:</b> Choose timeframe:"
+strategy_step5_choose_pair: "<b>Step 5:</b> Choose trading pair:"
+strategy_step3_complete: "✅ <b>Step 3 Complete!</b>\n\n📋 <b>Summary:</b>\n• <b>Algorithm:</b> {algorithm}\n• <b>Buy Condition:</b> {buy_condition}\n• <b>Sell Condition:</b> {sell_condition}\n• <b>Timeframe:</b> {timeframe}"
+strategy_enter_pair_manual: "Please enter the trading pair manually (e.g., BTCUSDT):"
+strategy_creation_cancelled: "❌ Strategy creation cancelled."
+strategy_saved: "✅ Strategy saved! Use /mystrategies to view all your strategies."
+strategy_saved_success: "✅ Strategy saved! Use /mystrategies to view all your strategies."
+strategy_saved_error: "❌ Error saving strategy. Please try again."
+strategy_already_saved: "✅ Strategy already saved! Use /strategies to view all your strategies."
+strategy_my_strategies_title: "📋 <b>My Strategies</b> ({count})"
+strategy_my_strategies_empty: "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/create_strategy</code> to create your first strategy!"
+strategy_my_strategies_tip: "\n💡 <b>Tip:</b> Use <code>/backtest &lt;strategy_name&gt;</code> to test your strategies!"
+
+# Backtest
+backtest_welcome: "📊 <b>Backtest Wizard</b>\n\n<b>Step 1:</b> Choose a strategy to backtest:\n\nYou have <b>{count}</b> strategy(ies) available."
+backtest_strategy_selected: "✅ <b>Strategy Selected:</b> {strategy_name}\n\n<b>Step 2:</b> Choose exchange:"
+backtest_select_exchange: "✅ <b>Strategy:</b> {strategy_name}\n\n<b>Step 2:</b> Choose exchange:"
+backtest_exchange_selected: "✅ <b>Exchange:</b> {exchange}\n\n<b>Step 3:</b> Choose time range for backtest:"
+backtest_select_timerange: "✅ <b>Exchange:</b> {exchange}\n\n<b>Step 3:</b> Choose time range for backtest:"
+backtest_button_cancel: "❌ Cancel"
+backtest_cancelled: "❌ Backtest cancelled."
+backtest_running: "⏳ Running backtest, please wait..."
+backtest_complete: "✅ <b>Backtest Complete!</b>"
+backtest_exchange_binance: "🔵 Binance"
+backtest_exchange_okx: "🟢 OKX"
+
+# General buttons
+button_cancel: "❌ Cancel"
+button_confirm: "✅ Confirm"
+button_next: "➡️ Next"
+button_back: "⬅️ Back"
+
+# Time periods
+period_1day: "📅 1 Day"
+period_1week: "📅 1 Week"
+period_1month: "📅 1 Month"
+period_3months: "📅 3 Months"
+period_6months: "📅 6 Months"
+
+# Exchanges
+exchange_okx: "🇬🇧 OKX"
+exchange_binance: "🇧🇳 Binance"
+
+# Algorithms
+algorithm_rsi: "📊 RSI"
+algorithm_bollinger: "📈 Bollinger"
+algorithm_ema: "📉 EMA"
+algorithm_macd: "📊 MACD"
+algorithm_ma: "📊 MA"
+
