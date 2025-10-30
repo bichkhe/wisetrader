@@ -5,7 +5,8 @@ use teloxide::types::InlineKeyboardButton;
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use shared::entity::strategies;
 use shared::FreqtradeApiClient;
-use shared::StrategyTemplate;
+use shared::{StrategyTemplate, BacktestReportTemplate, Config};
+use std::fs;
 use askama::Template;
 use chrono::{Utc, Duration};
 use crate::state::{AppState, BotState, BacktestState, MyDialogue};
@@ -166,6 +167,66 @@ fn extract_summary_table(stdout: &str) -> String {
     }
     
     summary_lines.join("\n")
+}
+
+/// Generate HTML report from backtest results
+async fn generate_html_report(
+    config: &Config,
+    strategy_name: &str,
+    exchange: &str,
+    pair: &str,
+    timeframe: &str,
+    timerange: &str,
+    result: &shared::BacktestResult,
+    tables: &[(String, String)],
+) -> Result<Option<String>, anyhow::Error> {
+    // Create reports directory if it doesn't exist
+    fs::create_dir_all(&config.html_reports_dir)?;
+    
+    // Generate unique filename
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("backtest_{}_{}.html", 
+        strategy_name.replace(" ", "_").replace("/", "_"),
+        timestamp
+    );
+    let filepath = Path::new(&config.html_reports_dir).join(&filename);
+    
+    // Create template
+    let template = BacktestReportTemplate::new(
+        strategy_name.to_string(),
+        exchange.to_string(),
+        pair.to_string(),
+        timeframe.to_string(),
+        timerange.to_string(),
+        result.trades,
+        result.profit_pct,
+        result.win_rate,
+        result.max_drawdown,
+        result.starting_balance,
+        result.final_balance,
+        result.download_time_secs,
+        result.backtest_time_secs,
+        tables.to_vec(),
+        result.stdout.clone(),
+    );
+    
+    // Render template
+    let html_content = template.render()?;
+    
+    // Write to file
+    fs::write(&filepath, html_content)?;
+    
+    tracing::info!("HTML report saved to: {}", filepath.display());
+    
+    // Return URL - use API server if available, otherwise use file:// or custom base URL
+    let url = if let Some(ref base_url) = config.html_reports_base_url {
+        format!("{}/{}", base_url.trim_end_matches('/'), filename)
+    } else {
+        // Use API server by default
+        format!("{}/reports/{}", config.api_base_url.trim_end_matches('/'), filename)
+    };
+    
+    Ok(Some(url))
 }
 
 /// Calculate timerange string for Freqtrade CLI (format: YYYYMMDD-)
@@ -695,11 +756,68 @@ pub async fn handle_backtest_callback(
                                         
                                         result_msg.push_str(&format!("💾 Strategy file: <code>{}</code>", filepath.display()));
                                         
-                                        // Send main summary message
+                                        // Extract tables for HTML report and Telegram messages
+                                        let tables = if let Some(ref stdout) = result.stdout {
+                                            extract_all_tables(stdout)
+                                        } else {
+                                            Vec::new()
+                                        };
+                                        
+                                        // Generate HTML report if enabled - use config from AppState
+                                        let config = state.config.as_ref();
+                                        
+                                        let html_report_url = if config.generate_html_reports {
+                                            match generate_html_report(
+                                                &config,
+                                                &strategy_name,
+                                                &exchange,
+                                                &freqtrade_pair,
+                                                &timeframe,
+                                                &timerange,
+                                                &result,
+                                                &tables,
+                                            ).await {
+                                                Ok(Some(url)) => {
+                                                    tracing::info!("HTML report generated: {}", url);
+                                                    Some(url)
+                                                }
+                                                Ok(None) => None,
+                                                Err(e) => {
+                                                    tracing::error!("Failed to generate HTML report: {}", e);
+                                                    None
+                                                }
+                                            }
+                                        } else {
+                                            None
+                                        };
+                                        
+                                        tracing::info!("html_report_url: {:?}", html_report_url);
+                                        // Add HTML report link to summary message if available
+                                        if let Some(ref html_url) = html_report_url {
+                                            // Telegram HTML link format: <a href="URL">text</a>
+                                            // Đảm bảo URL không có spaces và format đúng
+                                            let clean_url = html_url.trim();
+                                            
+                                            result_msg.push_str("\n\n✅🌐 <b>View Full Report:</b>\n");
+                                            result_msg.push_str(&format!("<code>{}</code>\n", clean_url));
+                                            
+                                            // Warning nếu URL là localhost
+                                            if clean_url.contains("localhost") || clean_url.contains("127.0.0.1") {
+                                                tracing::warn!("URL contains localhost, Telegram users won't be able to access it. URL: {}", clean_url);
+                                                result_msg.push_str("\n⚠️ <i>Note: This is a localhost URL. Use a public domain for remote access.</i>");
+                                            }
+                                            
+                                            // Debug: log full message để kiểm tra
+                                            tracing::info!("Added HTML link to message. Full message length: {}, URL: {}", result_msg.len(), clean_url);
+                                            tracing::debug!("Link HTML format: <a href=\"{}\">Open HTML Report</a>", clean_url);
+                                        } else {
+                                            tracing::warn!("html_report_url is None, not adding link to message");
+                                        }
+                                        
                                         bot.edit_message_text(
                                             chat_id,
                                             message_id,
-                                            result_msg.clone()
+                                            result_msg
                                         )
                                             .parse_mode(teloxide::types::ParseMode::Html)
                                             .await?;
@@ -717,81 +835,77 @@ pub async fn handle_backtest_callback(
                                         tracing::info!("=== End Backtest Output ===");
                                         
                                         // Extract and send all tables from backtest output
-                                        if let Some(ref stdout) = result.stdout {
-                                            let tables = extract_all_tables(stdout);
-                                            
-                                            if !tables.is_empty() {
-                                                // Send each table as a separate message for better readability
-                                                for (idx, (title, table_content)) in tables.iter().enumerate() {
-                                                    let table_num = idx + 1;
-                                                    let total_tables = tables.len();
-                                                    
-                                                    // Format title nicely with emoji based on content
-                                                    let emoji = if title.contains("SUMMARY") {
-                                                        "📊"
-                                                    } else if title.contains("REPORT") {
-                                                        "📈"
-                                                    } else if title.contains("STATS") {
-                                                        "📉"
+                                        if !tables.is_empty() {
+                                            // Send each table as a separate message for better readability
+                                            for (idx, (title, table_content)) in tables.iter().enumerate() {
+                                                let table_num = idx + 1;
+                                                let total_tables = tables.len();
+                                                
+                                                // Format title nicely with emoji based on content
+                                                let emoji = if title.contains("SUMMARY") {
+                                                    "📊"
+                                                } else if title.contains("REPORT") {
+                                                    "📈"
+                                                } else if title.contains("STATS") {
+                                                    "📉"
+                                                } else {
+                                                    "📋"
+                                                };
+                                                
+                                                let formatted_title = format!(
+                                                    "{} <b>{}</b> ({}/{})\n",
+                                                    emoji,
+                                                    escape_html(title),
+                                                    table_num,
+                                                    total_tables
+                                                );
+                                                
+                                                // Split table content into chunks if needed
+                                                let chunks = split_into_chunks(table_content, 3200); // Smaller chunk for table formatting
+                                                
+                                                for (chunk_idx, chunk) in chunks.iter().enumerate() {
+                                                    let mut table_msg = if chunk_idx == 0 {
+                                                        formatted_title.clone()
                                                     } else {
-                                                        "📋"
+                                                        format!("{} <b>{} (cont.)</b>\n", emoji, escape_html(title))
                                                     };
                                                     
-                                                    let formatted_title = format!(
-                                                        "{} <b>{}</b> ({}/{})\n",
-                                                        emoji,
-                                                        escape_html(title),
-                                                        table_num,
-                                                        total_tables
-                                                    );
+                                                    table_msg.push_str("<pre>");
+                                                    table_msg.push_str(&escape_html(chunk));
+                                                    table_msg.push_str("</pre>");
                                                     
-                                                    // Split table content into chunks if needed
-                                                    let chunks = split_into_chunks(table_content, 3200); // Smaller chunk for table formatting
-                                                    
-                                                    for (chunk_idx, chunk) in chunks.iter().enumerate() {
-                                                        let mut table_msg = if chunk_idx == 0 {
-                                                            formatted_title.clone()
-                                                        } else {
-                                                            format!("{} <b>{} (cont.)</b>\n", emoji, escape_html(title))
-                                                        };
-                                                        
-                                                        table_msg.push_str("<pre>");
-                                                        table_msg.push_str(&escape_html(chunk));
-                                                        table_msg.push_str("</pre>");
-                                                        
-                                                        bot.send_message(chat_id, table_msg)
-                                                            .parse_mode(teloxide::types::ParseMode::Html)
-                                                            .await?;
-                                                        
-                                                        // Small delay between messages to avoid rate limiting
-                                                        if chunk_idx < chunks.len() - 1 || idx < total_tables - 1 {
-                                                            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                // Fallback: if no tables found, send full output in chunks
-                                                let chunks = split_into_chunks(stdout, 3500);
-                                                let total_chunks = chunks.len();
-                                                
-                                                for (idx, chunk) in chunks.iter().enumerate() {
-                                                    let chunk_num = idx + 1;
-                                                    let mut chunk_msg = format!(
-                                                        "📋 <b>Backtest Output ({}/{})</b>\n\n",
-                                                        chunk_num,
-                                                        total_chunks
-                                                    );
-                                                    chunk_msg.push_str("<pre>");
-                                                    chunk_msg.push_str(&escape_html(chunk));
-                                                    chunk_msg.push_str("</pre>");
-                                                    
-                                                    bot.send_message(chat_id, chunk_msg)
+                                                    bot.send_message(chat_id, table_msg)
                                                         .parse_mode(teloxide::types::ParseMode::Html)
                                                         .await?;
                                                     
-                                                    if idx < chunks.len() - 1 {
+                                                    // Small delay between messages to avoid rate limiting
+                                                    if chunk_idx < chunks.len() - 1 || idx < total_tables - 1 {
                                                         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                                                     }
+                                                }
+                                            }
+                                        } else if let Some(ref stdout) = result.stdout {
+                                            // Fallback: if no tables found, send full output in chunks
+                                            let chunks = split_into_chunks(stdout, 3500);
+                                            let total_chunks = chunks.len();
+                                            
+                                            for (idx, chunk) in chunks.iter().enumerate() {
+                                                let chunk_num = idx + 1;
+                                                let mut chunk_msg = format!(
+                                                    "📋 <b>Backtest Output ({}/{})</b>\n\n",
+                                                    chunk_num,
+                                                    total_chunks
+                                                );
+                                                chunk_msg.push_str("<pre>");
+                                                chunk_msg.push_str(&escape_html(chunk));
+                                                chunk_msg.push_str("</pre>");
+                                                
+                                                bot.send_message(chat_id, chunk_msg)
+                                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                                    .await?;
+                                                
+                                                if idx < chunks.len() - 1 {
+                                                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                                                 }
                                             }
                                         }

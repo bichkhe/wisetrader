@@ -10,6 +10,6 @@ pub use database::{get_pool, get_db_connection, DbPool};
 pub use redis::{get_redis_client, Redis};
 pub use config::Config;
 pub use models::*;
-pub use templates::StrategyTemplate;
-pub use freqtrade::FreqtradeApiClient;
+pub use templates::{StrategyTemplate, BacktestReportTemplate};
+pub use freqtrade::{FreqtradeApiClient, BacktestResult};
 

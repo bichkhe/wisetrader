@@ -1,0 +1,38 @@
+FROM rust:1.75 as builder
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY shared ./shared
+COPY api ./api
+
+# Build dependencies first (for caching)
+RUN cargo build --package api --release || true
+
+# Copy source files
+COPY api/src ./api/src
+
+# Build the API
+RUN cargo build --package api --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/api /app/api
+
+# Create html_reports directory
+RUN mkdir -p /app/html_reports
+
+EXPOSE 3000
+
+CMD ["./api"]
+

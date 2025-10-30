@@ -146,7 +146,30 @@ User (Telegram) <-> Bot (teloxide) <-> Redis/Postgres <-> Task Queue (Redis Stre
 
 ---
 
-## 10. Project Setup & Quick Start
+## 10. HTML Reports Server
+
+API server cung cấp tính năng serve các file HTML reports từ kết quả backtest:
+
+- **Endpoint**: `http://localhost:3000/reports/<filename>.html`
+- **Static files**: Served từ thư mục `./html_reports/`
+- **Tự động**: Bot sẽ tạo file HTML và gửi link HTTP cho user khi `GENERATE_HTML_REPORTS=true`
+
+### Config Environment Variables:
+- `GENERATE_HTML_REPORTS=true` - Bật tính năng tạo HTML reports
+- `HTML_REPORTS_DIR=./html_reports` - Thư mục lưu reports
+- `API_BASE_URL=http://localhost:3000` - Base URL của API server (dùng để generate links)
+- `HTML_REPORTS_BASE_URL` (optional) - Custom base URL nếu muốn dùng CDN hoặc domain khác
+
+### Usage:
+```bash
+# Chạy API server
+make run-api
+
+# Hoặc qua Docker
+docker-compose up api
+```
+
+## 11. Project Setup & Quick Start
 
 ### Prerequisites
 

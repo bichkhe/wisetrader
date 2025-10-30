@@ -60,6 +60,31 @@ services:
       redis:
         condition: service_healthy
 
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: wisetrader_api
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./html_reports:/app/html_reports
+    environment:
+      - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
+      - REDIS_URL=redis://redis:6379
+      - HTML_REPORTS_DIR=/app/html_reports
+      - API_BASE_URL=http://localhost:9999
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   mysql_data:
   redis_data:

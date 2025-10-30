@@ -16,6 +16,7 @@ pub struct AppState {
     pub redis_url: String,
     pub db: Arc<DatabaseConnection>,
     pub user_service: Arc<UserService>,
+    pub config: Arc<Config>,
 }
 
 impl AppState {
@@ -36,6 +37,7 @@ impl AppState {
             redis_url: config.redis_url.clone(),
             db: Arc::new(db),
             user_service,
+            config: Arc::new(config),
         })
     }
 }

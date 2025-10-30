@@ -47,6 +47,9 @@ run-bot:
 run-api:
 	cargo run --bin api
 
+run-api-docker:
+	docker-compose up api
+
 run-signal-dispatcher:
 	cargo run --bin signal_dispatcher
 
