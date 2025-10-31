@@ -17,14 +17,17 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_create_strategy, handle_strategy_callback, 
     handle_strategy_input_callback, handle_my_strategies,
     handle_delete_strategy_callback,
-    handle_start, handle_language_selection, handle_language_callback, handle_profile_callback, Command},  state::AppState};
+    handle_start, handle_language_selection, handle_language_callback, handle_profile_callback,
+    handle_back, handle_deposit, handle_balance, handle_deposit_callback,
+    Command},  state::AppState};
 use state::{BotState, BacktestState};
 
 fn schema() -> UpdateHandler<anyhow::Error> {
     use dptree::case;
-    // Start command can be used in ANY state, so handle it separately first
+    // Start and Back commands can be used in ANY state, so handle them separately first
     let command_handler = teloxide::filter_command::<Command, _>()
         .branch(case![Command::Start].endpoint(handle_start))
+        .branch(case![Command::Back].endpoint(handle_back))
         .branch(
             case![BotState::Normal]
                 .branch(case![Command::Version].endpoint(handle_version))
@@ -33,6 +36,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::Backtest(pk)].endpoint(handle_backtest_wizard))
                 .branch(case![Command::CreateStrategy].endpoint(handle_create_strategy))
                 .branch(case![Command::MyStrategies].endpoint(handle_my_strategies))
+                .branch(case![Command::Deposit].endpoint(handle_deposit))
+                .branch(case![Command::Balance].endpoint(handle_balance))
         );
 
     let message_handler = Update::filter_message()
@@ -76,6 +81,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(
             case![BotState::Backtest(pk)]
                 .endpoint(handle_backtest_callback)
+        )
+        .branch(
+            // Handle payment/deposit callbacks from any state
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| d.starts_with("deposit_") || d == "deposit_cancel" || d == "deposit_start").unwrap_or(false)
+            })
+            .endpoint(handle_deposit_callback)
         );
         
 

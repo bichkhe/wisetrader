@@ -108,7 +108,7 @@ pub async fn handle_me(
         // Add button to change language
         // Get translated text for button label
         let change_lang_text = match locale {
-            "vi" => "🌐 Đổi Ngôn Ngữ",
+            "vi" => "🌐 Đổi Ngôn Ngữ / Change Language",
             "en" => "🌐 Change Language",
             _ => "🌐 Change Language",
         };
@@ -117,7 +117,14 @@ pub async fn handle_me(
             change_lang_text.to_string(),
             "profile_change_language"
         );
-        let buttons = vec![vec![change_lang_button]];
+        let deposit_button = InlineKeyboardButton::callback(
+            i18n::get_button_text(locale, "payment_deposit_button"),
+            "deposit_start"
+        );
+        let buttons = vec![
+            vec![change_lang_button],
+            vec![deposit_button],
+        ];
         
         bot.send_message(msg.chat.id, info)
             .parse_mode(teloxide::types::ParseMode::Html)

@@ -3,7 +3,6 @@ use sea_orm::{EntityTrait};
 use teloxide::utils::command::BotCommands;
 use teloxide::{ prelude::*};
 use teloxide::types::Message;
-use shared::entity::{users, strategies};
 use std::sync::Arc;
 use std::time::Instant;
 use crate::state::{AppState, MyDialogue};
@@ -13,6 +12,7 @@ pub mod trading;
 pub mod strategy;
 pub mod backtest;
 pub mod start;
+pub mod payment;
 
 pub use admin::handle_version;
 pub use me::handle_me;
@@ -20,22 +20,21 @@ pub use strategy::{handle_create_strategy, handle_strategy_callback, handle_stra
 pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_callback};
 pub use start::{handle_start, handle_language_selection, handle_language_callback};
 pub use me::handle_profile_callback;
+pub use payment::{handle_deposit, handle_balance, handle_deposit_callback};
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
 pub enum Command {
     /// ✨  Các lệnh trợ giúp
     Help,
-    /// Quay trở lại menu chính
-    Cancel,
+    /// Quay lại trạng thái bình thường (thoát dialogue)
+    Back,
     /// ❓ Bắt đầu sử dụng BOT.
     Start,
     /// Xem thông tin của bạn
     Me,
     /// ℹ️  Thông tin tài khoản của khách hàng
     Info(String),
-    /// Nạp điểm vào hệ thống
-    Deposit,
     /// Nhắn tin toàn hệ thống
     Broadcast(String),
     /// Get server ip
@@ -58,6 +57,10 @@ pub enum Command {
 
    /// Xem kết quả backtest
    Backtest(String),
+   /// Nạp tiền/điểm vào tài khoản
+   Deposit,
+   /// Xem số dư hiện tại
+   Balance,
 }
 
 
@@ -105,6 +108,9 @@ pub async fn handle_help(
     help_text.push_str(&format!("/createstrategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
     help_text.push_str(&format!("/mystrategies - {}\n", i18n::translate(locale, "cmd_help_mystrategies", None)));
     help_text.push_str(&format!("/backtest - {}\n", i18n::translate(locale, "cmd_help_backtest", None)));
+    help_text.push_str(&format!("/back - {}\n", i18n::translate(locale, "cmd_help_back", None)));
+    help_text.push_str(&format!("/deposit - {}\n", i18n::translate(locale, "cmd_help_deposit", None)));
+    help_text.push_str(&format!("/balance - {}\n", i18n::translate(locale, "cmd_help_balance", None)));
     
     help_text.push_str(&i18n::translate(locale, "cmd_help_footer", None));
     
@@ -116,108 +122,146 @@ pub async fn handle_help(
     Ok(())
 }
 
-// async fn handle_subscription(bot: Bot, msg: Message, state: AppState) -> Result<()> {
-//     let user_id = msg.from().unwrap().id.0 as i64;
-//     let db = state.db.clone();
-
-//     let user = users::Entity::find_by_id(user_id)
-//         .one(db.as_ref())
-//         .await?;
-
-//     let user = match user {
-//         Some(u) => u,
-//         None => {
-//             bot.send_message(msg.chat.id, "Please register first with /start").await?;
-//             return Ok(());
-//         }
-//     };
-
-//     let plan = billing_plan::Entity::find_by_id(user.subscription_tier.clone())
-//         .one(db.as_ref())
-//         .await?;
-
-//     let plan = match plan {
-//         Some(p) => p,
-//         None => {
-//             bot.send_message(msg.chat.id, "Plan not found").await?;
-//             return Ok(());
-//         }
-//     };
-
-//     // Parse features JSON
-//     let features_str = plan.features.clone();
-//     let features: Vec<String> = serde_json::from_str(&features_str)
-//         .unwrap_or_else(|_| vec![]);
-    
-//     let status_msg = format!(
-//         "📋 **Your Subscription**\n\n\
-//         **Plan:** {}\n\
-//         **Price:** ${}/month\n\
-//         **Expires:** {}\n\n\
-//         Use /upgrade to view available plans.",
-//         plan.name,
-//         plan.price_monthly_usd,
-//         user.subscription_expires
-//             .map(|d| d.format("%Y-%m-%d").to_string())
-//             .unwrap_or_else(|| "Never".to_string())
-//     );
-
-//     bot.send_message(msg.chat.id, status_msg)
-//         .parse_mode(teloxide::types::ParseMode::Markdown)
-//         .await?;
-
-//     Ok(())
-// }
-
-async fn handle_strategies(bot: Bot, msg: Message, state: Arc<AppState>) -> anyhow::Result<()> {
-    let db = state.db.clone();
-    let strategies = strategies::Entity::find()
-        .all(db.as_ref())
-        .await?;
-
-    if strategies.is_empty() {
-        bot.send_message(msg.chat.id, "No strategies available yet.").await?;
-        return Ok(());
-    }
-
-    let mut msg_text = "📊 **Available Strategies**\n\n".to_string();
-    
-    for strategy in strategies {
-        msg_text.push_str(&format!(
-            "**{}. {}**\n{}\n\n",
-            strategy.id,
-            strategy.name.unwrap_or_else(|| "No name".to_string()).to_string(),
-            strategy.description.unwrap_or_else(|| "No description".to_string())
-        ));
-    }
-
-    msg_text.push_str("Use /add_strategy <id> to subscribe to a strategy.");
-
-    bot.send_message(msg.chat.id, msg_text)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await?;
-
-    Ok(())
-}
-
-
-
 
 pub async fn handle_invalid(
     bot: Bot,
     dialogue: MyDialogue,
     msg: Message,
     state: Arc<AppState>,
-) -> anyhow::Result<()>  {
-    if let Ok(state) = dialogue.get().await {
-        let state_text = format!("Current dialogue state: {:?}", state);
-        bot.send_message(msg.chat.id, state_text).await?;
+) -> anyhow::Result<()> {
+    use crate::state::{BotState, CreateStrategyState, BacktestState, TradingState};
+    use crate::i18n;
+    use shared::entity::users;
+    
+    // Get user locale
+    let telegram_id = msg.from.as_ref().map(|f| f.id.0 as i64).unwrap_or(0);
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    // Get dialogue state and provide context-aware message
+    if let Ok(dialogue_state) = dialogue.get().await {
+        if let Some(bot_state) = dialogue_state {
+            let error_msg = match bot_state {
+                BotState::WaitingForLanguage => {
+                    i18n::translate(locale, "error_state_waiting_language", None)
+                }
+                BotState::CreateStrategy(CreateStrategyState::WaitingForAlgorithm) => {
+                    i18n::translate(locale, "error_state_strategy_waiting_algorithm", None)
+                }
+                BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition { algorithm }) => {
+                    i18n::translate(locale, "error_state_strategy_waiting_buy", Some(&[("algorithm", &algorithm)]))
+                }
+                BotState::CreateStrategy(CreateStrategyState::WaitingForSellCondition { algorithm, buy_condition }) => {
+                    i18n::translate(locale, "error_state_strategy_waiting_sell", Some(&[
+                        ("algorithm", &algorithm),
+                        ("buy_condition", &buy_condition),
+                    ]))
+                }
+                BotState::CreateStrategy(CreateStrategyState::WaitingForTimeframe { algorithm, buy_condition, sell_condition }) => {
+                    i18n::translate(locale, "error_state_strategy_waiting_timeframe", None)
+                }
+                BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe }) => {
+                    i18n::translate(locale, "error_state_strategy_waiting_pair", None)
+                }
+                BotState::Backtest(BacktestState::WaitingForStrategy) => {
+                    i18n::translate(locale, "error_state_backtest_waiting_strategy", None)
+                }
+                BotState::Backtest(BacktestState::WaitingForExchange { strategy_name, .. }) => {
+                    i18n::translate(locale, "error_state_backtest_waiting_exchange", Some(&[("strategy_name", &strategy_name)]))
+                }
+                BotState::Backtest(BacktestState::WaitingForTimeRange { strategy_name, exchange, .. }) => {
+                    i18n::translate(locale, "error_state_backtest_waiting_timerange", Some(&[
+                        ("strategy_name", &strategy_name),
+                        ("exchange", &exchange),
+                    ]))
+                }
+                BotState::Trading(TradingState::WaitingForPair) => {
+                    i18n::translate(locale, "error_state_trading_waiting_pair", None)
+                }
+                BotState::Trading(TradingState::WaitingForAmount) => {
+                    i18n::translate(locale, "error_state_trading_waiting_amount", None)
+                }
+                BotState::Trading(TradingState::WaitingForConfirmation) => {
+                    i18n::translate(locale, "error_state_trading_waiting_confirmation", None)
+                }
+                BotState::Normal => {
+                    i18n::translate(locale, "error_invalid_command", None)
+                }
+                _ => {
+                    i18n::translate(locale, "error_invalid_command", None)
+                }
+            };
+            
+            bot.send_message(msg.chat.id, error_msg)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await?;
+        } else {
+            // No state, show default error
+            let error_msg = i18n::translate(locale, "error_invalid_command", None);
+            bot.send_message(msg.chat.id, error_msg)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await?;
+        }
+    } else {
+        // Error getting state, show default error
+        let error_msg = i18n::translate(locale, "error_invalid_command", None);
+        bot.send_message(msg.chat.id, error_msg)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await?;
     }
+    
+    Ok(())
+}
 
-    bot.send_message(
-        msg.chat.id, 
-        "❌ Invalid command. Please use /help to see available commands."
-    ).await?;
+/// Handler for /back command to exit dialogue and return to Normal state
+pub async fn handle_back(
+    bot: Bot,
+    dialogue: MyDialogue,
+    msg: Message,
+    state: Arc<AppState>,
+) -> anyhow::Result<()> {
+    use crate::i18n;
+    use crate::state::BotState;
+    use shared::entity::users;
+    
+    // Get user locale
+    let telegram_id = msg.from.as_ref().map(|f| f.id.0 as i64).unwrap_or(0);
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    // Check current state
+    let current_state = dialogue.get().await?;
+    
+    // If already in Normal state, just send a message
+    if let Some(BotState::Normal) = current_state {
+        let msg_text = i18n::translate(locale, "back_already_normal", None);
+        bot.send_message(msg.chat.id, msg_text)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await?;
+        return Ok(());
+    }
+    
+    // Exit dialogue to Normal state
+    dialogue.exit().await?;
+    
+    // Send confirmation message
+    let msg_text = i18n::translate(locale, "back_success", None);
+    bot.send_message(msg.chat.id, msg_text)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await?;
+    
     Ok(())
 }
 
