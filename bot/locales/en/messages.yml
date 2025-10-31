@@ -1,7 +1,12 @@
 # English translations
 
 # Language selection
-lang_selection_title: "🌐 Welcome to WiseTrader!\n\nPlease select your preferred language:"
+lang_selection_title: |
+  🌐 <b>Welcome to WiseTrader!</b>
+  
+  ⚠️ <b>IMPORTANT:</b> Please select your language (<b>Vietnamese</b> or <b>English</b>) to continue using the bot.
+  
+  <b>Please select your language (Vietnamese or English):</b>
 lang_selection_button_vi: "🇻🇳 Tiếng Việt"
 lang_selection_button_en: "🇬🇧 English"
 lang_selected: "✅ Language set to English. Welcome!"
@@ -14,16 +19,31 @@ welcome_new_user: |
   
   You've been registered with a <b>7-day Free Trial</b>. 🆓🗓️
   
-  <b>Features available:</b>
-  ⭐ Delayed trading signals
-  🧪 1 backtest job
-  📚 Access to strategy library
+  <b>✨ What You Get:</b>
   
-  <b>Use</b> <code>/help</code> <b>to see all commands.</b> ℹ️
-  <b>Use</b> <code>/upgrade</code> <b>to see subscription plans.</b> 💎
+  🎯 <b>Smart Trading Signals</b>
+  Never miss opportunities! Get real-time trading signals based on proven algorithms (RSI, Bollinger Bands, EMA, MACD, MA).
   
-  <i>Note: ⚠️ This is a trading bot. Trading cryptocurrencies involves risk.</i>
-welcome_back: "Welcome back! Use /help to see available commands."
+  🔬 <b>Backtest Before You Trade</b>
+  Test your strategies risk-free! Run backtests on historical data across Binance and OKX to validate strategies before risking real money.
+  
+  📊 <b>Build & Save Your Strategies</b>
+  Create custom trading strategies tailored to your style. Mix and match indicators to find what works for you.
+  
+  📈 <b>Strategy Library Access</b>
+  Learn from proven strategies and customize them for your trading needs.
+  
+  <b>Ready to start?</b> Use <code>/help</code> to see all commands. ℹ️
+  
+  💎 <b>Want more features?</b> Use <code>/upgrade</code> to see premium plans.
+  
+  <i>⚠️ <b>Disclaimer:</b> Trading cryptocurrencies involves risk. This bot provides tools, not financial advice.</i>
+welcome_back: |
+  Welcome back! 👋
+  
+  ⚠️ <b>NOTE:</b> Make sure you have set up your language (vi/en) to receive all messages in your preferred language.
+  
+  Use /help to see available commands.
 
 # Commands
 cmd_help_title: "📚 <b>Available Commands:</b>\n\n"

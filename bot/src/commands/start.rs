@@ -33,7 +33,9 @@ pub async fn handle_start(
             let locale = i18n::get_user_language(Some(lang));
             let welcome_back = i18n::translate(locale, "welcome_back", None);
             
-            bot.send_message(msg.chat.id, welcome_back).await?;
+            bot.send_message(msg.chat.id, welcome_back)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await?;
             dialogue.exit().await?;
             return Ok(());
         }

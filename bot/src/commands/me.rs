@@ -106,15 +106,8 @@ pub async fn handle_me(
         );
         
         // Add button to change language
-        // Get translated text for button label
-        let change_lang_text = match locale {
-            "vi" => "🌐 Đổi Ngôn Ngữ / Change Language",
-            "en" => "🌐 Change Language",
-            _ => "🌐 Change Language",
-        };
-        
         let change_lang_button = InlineKeyboardButton::callback(
-            change_lang_text.to_string(),
+            i18n::get_button_text(locale, "profile_change_language"),
             "profile_change_language"
         );
         let deposit_button = InlineKeyboardButton::callback(

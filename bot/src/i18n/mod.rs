@@ -257,6 +257,30 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "pair_manual") => "✍️ Nhập thủ công".to_string(),
         ("en", "pair_manual") => "✍️ Manual".to_string(),
         
+        // Payment buttons
+        ("vi", "payment_deposit_100") => "💵 Nạp 100 điểm".to_string(),
+        ("en", "payment_deposit_100") => "💵 Deposit 100 points".to_string(),
+        ("vi", "payment_deposit_500") => "💵 Nạp 500 điểm".to_string(),
+        ("en", "payment_deposit_500") => "💵 Deposit 500 points".to_string(),
+        ("vi", "payment_deposit_1000") => "💵 Nạp 1,000 điểm".to_string(),
+        ("en", "payment_deposit_1000") => "💵 Deposit 1,000 points".to_string(),
+        ("vi", "payment_deposit_5000") => "💵 Nạp 5,000 điểm".to_string(),
+        ("en", "payment_deposit_5000") => "💵 Deposit 5,000 points".to_string(),
+        ("vi", "payment_deposit_custom") => "✏️ Nhập số lượng tùy chỉnh".to_string(),
+        ("en", "payment_deposit_custom") => "✏️ Custom Amount".to_string(),
+        ("vi", "payment_cancel") => "❌ Hủy".to_string(),
+        ("en", "payment_cancel") => "❌ Cancel".to_string(),
+        ("vi", "payment_deposit_button") => "💵 Nạp Tiền".to_string(),
+        ("en", "payment_deposit_button") => "💵 Deposit".to_string(),
+        
+        // Profile buttons
+        ("vi", "profile_change_language") => "🌐 Đổi Ngôn Ngữ / Change Language".to_string(),
+        ("en", "profile_change_language") => "🌐 Change Language".to_string(),
+        
+        // Strategy delete buttons
+        ("vi", "strategy_delete_with_name") => "🗑️ Xóa".to_string(),
+        ("en", "strategy_delete_with_name") => "🗑️ Delete".to_string(),
+        
         // Default fallback
         _ => key.to_string(),
     }

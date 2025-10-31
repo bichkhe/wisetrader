@@ -585,10 +585,8 @@ pub async fn handle_my_strategies(
         };
         
         // Create button text with strategy name
-        let delete_text = match locale {
-            "vi" => format!("🗑️ Xóa: {}", display_name),
-            _ => format!("🗑️ Delete: {}", display_name),
-        };
+        let delete_prefix = i18n::get_button_text(locale, "strategy_delete_with_name");
+        let delete_text = format!("{}: {}", delete_prefix, display_name);
         
         buttons.push(vec![
             InlineKeyboardButton::callback(

@@ -1,7 +1,12 @@
 # Vietnamese translations
 
 # Language selection
-lang_selection_title: "🌐 Chào mừng đến với WiseTrader!\n\nVui lòng chọn ngôn ngữ của bạn:"
+lang_selection_title: |
+  🌐 <b>Chào mừng đến với WiseTrader!</b>
+  
+  ⚠️ <b>QUAN TRỌNG:</b> Vui lòng chọn ngôn ngữ của bạn (<b>Tiếng Việt</b> hoặc <b>English</b>) để tiếp tục sử dụng bot.
+  
+  <b>Please select your language (Vietnamese or English):</b>
 lang_selection_button_vi: "🇻🇳 Tiếng Việt"
 lang_selection_button_en: "🇬🇧 English"
 lang_selected: "✅ Đã chọn ngôn ngữ Tiếng Việt. Chào mừng!"
@@ -14,16 +19,31 @@ welcome_new_user: |
   
   Bạn đã được đăng ký <b>Dùng thử miễn phí 7 ngày</b>. 🆓🗓️
   
-  <b>Các tính năng có sẵn:</b>
-  ⭐ Tín hiệu giao dịch trễ
-  🧪 1 công việc backtest
-  📚 Truy cập thư viện chiến lược
+  <b>✨ Bạn Nhận Được Gì:</b>
   
-  <b>Sử dụng</b> <code>/help</code> <b>để xem tất cả lệnh.</b> ℹ️
-  <b>Sử dụng</b> <code>/upgrade</code> <b>để xem các gói đăng ký.</b> 💎
+  🎯 <b>Tín Hiệu Giao Dịch Thông Minh</b>
+  Không bao giờ bỏ lỡ cơ hội! Nhận tín hiệu giao dịch theo thời gian thực dựa trên các thuật toán đã được chứng minh (RSI, Bollinger Bands, EMA, MACD, MA).
   
-  <i>Lưu ý: ⚠️ Đây là bot giao dịch. Giao dịch tiền điện tử có rủi ro.</i>
-welcome_back: "Chào mừng trở lại! Sử dụng /help để xem các lệnh có sẵn."
+  🔬 <b>Backtest Trước Khi Giao Dịch</b>
+  Kiểm tra chiến lược của bạn mà không rủi ro! Chạy backtest trên dữ liệu lịch sử từ Binance và OKX để xác minh chiến lược trước khi rủi ro tiền thật.
+  
+  📊 <b>Tạo & Lưu Chiến Lược Của Bạn</b>
+  Tạo chiến lược giao dịch tùy chỉnh phù hợp với phong cách của bạn. Kết hợp các chỉ báo để tìm ra cách thức phù hợp với bạn.
+  
+  📈 <b>Truy Cập Thư Viện Chiến Lược</b>
+  Học từ các chiến lược đã được chứng minh và tùy chỉnh chúng cho nhu cầu giao dịch của bạn.
+  
+  <b>Sẵn sàng bắt đầu?</b> Sử dụng <code>/help</code> để xem tất cả lệnh. ℹ️
+  
+  💎 <b>Muốn nhiều tính năng hơn?</b> Sử dụng <code>/upgrade</code> để xem các gói cao cấp.
+  
+  <i>⚠️ <b>Lưu ý:</b> Giao dịch tiền điện tử có rủi ro. Bot này cung cấp công cụ, không phải lời khuyên tài chính.</i>
+welcome_back: |
+  Chào mừng trở lại! 👋
+  
+  ⚠️ <b>LƯU Ý:</b> Đảm bảo bạn đã thiết lập ngôn ngữ (vi/en) để nhận được tất cả thông báo bằng ngôn ngữ ưa thích của bạn.
+  
+  Sử dụng /help để xem các lệnh có sẵn.
 
 # Commands
 cmd_help_title: "📚 <b>Các Lệnh Có Sẵn:</b>\n\n"
