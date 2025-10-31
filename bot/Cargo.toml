@@ -24,3 +24,19 @@ serde_json = { workspace = true }
 sea-orm = { version = "1.1.17", features = [ "sqlx-mysql", "runtime-tokio-native-tls", "macros", "debug-print" ] }
 askama = "0.12"
 rust-i18n = "3.1"
+
+# For barter-rs examples
+barter-data = "0.10.2"
+barter-instrument = "0.3.1"
+futures = "0.3"
+
+# For technical analysis
+ta = "0.5"
+
+[[example]]
+name = "rsi_bnbusdt"
+path = "examples/rsi_bnbusdt.rs"
+
+[[example]]
+name = "rsi_bnbusdt_barter"
+path = "examples/rsi_bnbusdt_barter.rs"
