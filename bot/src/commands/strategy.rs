@@ -7,6 +7,7 @@ use tracing;
 use sea_orm::{QueryFilter, QueryOrder};
 use crate::state::{AppState, BotState, CreateStrategyState, MyDialogue};
 use crate::i18n;
+use crate::services::preset_strategies;
 
 // Helper function to HTML escape (must escape & first!)
 fn escape_html(text: &str) -> String {
@@ -48,6 +49,159 @@ pub async fn handle_strategy_callback(
             tracing::info!("Processing callback: {}", data);
             
             match data.as_str() {
+                "strategy_type_custom" => {
+                    bot.answer_callback_query(q.id).await?;
+                    // Show algorithm selection buttons
+                    let algorithm_buttons = vec![
+                        vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_rsi"),
+                                "algorithm_rsi"
+                            ),
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_bollinger"),
+                                "algorithm_bollinger"
+                            ),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_ema"),
+                                "algorithm_ema"
+                            ),
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_macd"),
+                                "algorithm_macd"
+                            ),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_ma"),
+                                "algorithm_ma"
+                            ),
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "strategy_cancel_button"),
+                                "cancel_strategy"
+                            ),
+                        ],
+                    ];
+                    let custom_msg = i18n::translate(&locale, "strategy_choose_algorithm", None);
+                    bot.edit_message_text(chat_id, message_id, custom_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(algorithm_buttons))
+                        .await?;
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForAlgorithm)).await?;
+                }
+                "strategy_type_preset" => {
+                    bot.answer_callback_query(q.id).await?;
+                    // Show preset strategy selection buttons
+                    let preset_list = preset_strategies::get_preset_strategy_list();
+                    let mut preset_buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                    
+                    // Create buttons in pairs (2 per row)
+                    for chunk in preset_list.chunks(2) {
+                        let row: Vec<InlineKeyboardButton> = chunk
+                            .iter()
+                            .map(|(name, display)| {
+                                InlineKeyboardButton::callback(
+                                    display.to_string(),
+                                    format!("preset_{}", name)
+                                )
+                            })
+                            .collect();
+                        preset_buttons.push(row);
+                    }
+                    
+                    // Add cancel button
+                    preset_buttons.push(vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(&locale, "strategy_cancel_button"),
+                            "cancel_strategy"
+                        )
+                    ]);
+                    
+                    let preset_msg = i18n::translate(&locale, "strategy_choose_preset", None);
+                    bot.edit_message_text(chat_id, message_id, preset_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(preset_buttons))
+                        .await?;
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPresetSelection)).await?;
+                }
+                _ if data.starts_with("preset_") => {
+                    bot.answer_callback_query(q.id).await?;
+                    let strategy_name = data.replace("preset_", "");
+                    
+                    // Show loading message
+                    let loading_msg = i18n::translate(&locale, "strategy_loading_preset", Some(&[("name", &strategy_name)]));
+                    bot.edit_message_text(chat_id, message_id, loading_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                    
+                    // Fetch preset strategy from local filesystem
+                    match preset_strategies::load_strategy_from_local(&strategy_name).await {
+                        Ok(preset) => {
+                            // Auto-fill strategy details and jump to pair selection
+                            let algorithm = preset.indicators.first().unwrap_or(&"RSI".to_string()).clone();
+                            let buy_condition = preset.buy_condition.clone();
+                            let sell_condition = preset.sell_condition.clone();
+                            let timeframe = preset.timeframe.unwrap_or_else(|| "1h".to_string());
+                            
+                            // Show summary and ask for pair
+                            // Escape HTML in conditions before passing to translate
+                            let buy_condition_escaped = escape_html(&buy_condition);
+                            let sell_condition_escaped = escape_html(&sell_condition);
+                            let summary_msg = i18n::translate(&locale, "strategy_preset_loaded", Some(&[
+                                ("name", &escape_html(&preset.display_name)),
+                                ("algorithm", &escape_html(&algorithm)),
+                                ("buy_condition", &buy_condition_escaped),
+                                ("sell_condition", &sell_condition_escaped),
+                                ("timeframe", &escape_html(&timeframe)),
+                            ]));
+                            
+                            let mut pair_buttons = vec![
+                                vec![
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_btc_usdt"), "pair_BTCUSDT"),
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_eth_usdt"), "pair_ETHUSDT"),
+                                ],
+                                vec![
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_bnb_usdt"), "pair_BNBUSDT"),
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_ada_usdt"), "pair_ADAUSDT"),
+                                ],
+                                vec![
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_sol_usdt"), "pair_SOLUSDT"),
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_dot_usdt"), "pair_DOTUSDT"),
+                                ],
+                                vec![
+                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_manual"), "pair_manual"),
+                                ],
+                            ];
+                            pair_buttons.push(vec![
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "strategy_cancel_button"), "cancel_strategy"),
+                            ]);
+                            
+                            bot.edit_message_text(chat_id, message_id, summary_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .reply_markup(teloxide::types::InlineKeyboardMarkup::new(pair_buttons))
+                                .await?;
+                            
+                            dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPair {
+                                algorithm,
+                                buy_condition,
+                                sell_condition,
+                                timeframe,
+                            })).await?;
+                        }
+                        Err(e) => {
+                            let error_msg = i18n::translate(&locale, "strategy_preset_load_error", Some(&[
+                                ("name", &strategy_name),
+                                ("error", &e.to_string()),
+                            ]));
+                            bot.edit_message_text(chat_id, message_id, error_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await?;
+                            dialogue.exit().await?;
+                        }
+                    }
+                }
                 "algorithm_rsi" => {
                     bot.answer_callback_query(q.id).await?;
                     let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "RSI")]));
@@ -138,16 +292,16 @@ pub async fn handle_strategy_callback(
                     if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForTimeframe { algorithm, buy_condition, sell_condition }))) = dialogue.get().await {
                         let mut pair_buttons = vec![
                             vec![
-                                InlineKeyboardButton::callback("BTC/USDT", "pair_BTCUSDT"),
-                                InlineKeyboardButton::callback("ETH/USDT", "pair_ETHUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_btc_usdt"), "pair_BTCUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_eth_usdt"), "pair_ETHUSDT"),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("BNB/USDT", "pair_BNBUSDT"),
-                                InlineKeyboardButton::callback("ADA/USDT", "pair_ADAUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_bnb_usdt"), "pair_BNBUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_ada_usdt"), "pair_ADAUSDT"),
                             ],
                             vec![
-                                InlineKeyboardButton::callback("SOL/USDT", "pair_SOLUSDT"),
-                                InlineKeyboardButton::callback("DOT/USDT", "pair_DOTUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_sol_usdt"), "pair_SOLUSDT"),
+                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_dot_usdt"), "pair_DOTUSDT"),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_manual"), "pair_manual"),
@@ -282,32 +436,19 @@ pub async fn handle_create_strategy(
         return Ok(());
     }
 
-    let algorithm_buttons = vec![
+    // First, ask user to choose between Custom or Preset strategy
+    let strategy_type_buttons = vec![
         vec![
             InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "algorithm_rsi"),
-                "algorithm_rsi"
+                i18n::get_button_text(locale, "strategy_type_custom"),
+                "strategy_type_custom"
             ),
             InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "algorithm_bollinger"),
-                "algorithm_bollinger"
+                i18n::get_button_text(locale, "strategy_type_preset"),
+                "strategy_type_preset"
             ),
         ],
         vec![
-            InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "algorithm_ema"),
-                "algorithm_ema"
-            ),
-            InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "algorithm_macd"),
-                "algorithm_macd"
-            ),
-        ],
-        vec![
-            InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "algorithm_ma"),
-                "algorithm_ma"
-            ),
             InlineKeyboardButton::callback(
                 i18n::get_button_text(locale, "strategy_cancel_button"),
                 "cancel_strategy"
@@ -319,11 +460,11 @@ pub async fn handle_create_strategy(
 
     bot.send_message(msg.chat.id, welcome_msg)
         .parse_mode(teloxide::types::ParseMode::Html)
-        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(algorithm_buttons))
+        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_type_buttons))
         .await?;
 
-    // Update dialogue state to CreateStrategy
-    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForAlgorithm)).await?;
+    // Update dialogue state to wait for strategy type selection
+    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForStrategyType)).await?;
 
     Ok(())
 }

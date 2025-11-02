@@ -56,7 +56,14 @@ profile_not_registered: "🆔 User ID <b>{user_id}</b> does not exist in the sys
 profile_userid_param: "user_id"
 
 # Strategy creation
-strategy_welcome: "📊 <b>Strategy Creation Wizard</b>\n\nPlease select an algorithm to start:"
+strategy_welcome: "📊 <b>Strategy Creation Wizard</b>\n\nChoose how you want to create your strategy:"
+strategy_type_custom: "🛠️ Create Custom Strategy"
+strategy_type_preset: "📚 Use Preset Strategy"
+strategy_choose_algorithm: "📊 <b>Create Custom Strategy</b>\n\nPlease select an algorithm to start:"
+strategy_choose_preset: "📚 <b>Preset Strategies</b>\n\nSelect a strategy from available presets:"
+strategy_loading_preset: "⏳ Loading preset strategy: {name}..."
+strategy_preset_loaded: "✅ <b>Preset Strategy Loaded!</b>\n\n<b>Strategy:</b> {name}\n<b>Algorithm:</b> {algorithm}\n<b>Buy Condition:</b> {buy_condition}\n<b>Sell Condition:</b> {sell_condition}\n<b>Timeframe:</b> {timeframe}\n\n<b>Step 4:</b> Choose trading pair:"
+strategy_preset_load_error: "❌ <b>Failed to Load Preset Strategy</b>\n\n<b>Strategy:</b> {name}\n<b>Error:</b> <code>{error}</code>\n\nPlease try again or use a custom strategy."
 strategy_cancel: "❌ Cancel"
 strategy_saved: "✅ Strategy saved! Use /mystrategies to view all your strategies."
 strategy_already_saved: "✅ Strategy already saved! Use /strategies to view all your strategies."
@@ -83,8 +90,17 @@ period_3months: "📅 3 Months"
 period_6months: "📅 6 Months"
 
 # Exchanges
-xo: "🇬🇧 OKX"
+exchange_okx: "🇬🇧 OKX"
 exchange_binance: "🇧🇳 Binance"
+
+# Trading Pairs
+pair_btc_usdt: "₿ BTC/USDT"
+pair_eth_usdt: "Ξ ETH/USDT"
+pair_bnb_usdt: "BNB/USDT"
+pair_ada_usdt: "ADA/USDT"
+pair_sol_usdt: "◎ SOL/USDT"
+pair_dot_usdt: "DOT/USDT"
+pair_manual: "✏️ Enter Manually"
 
 # Algorithms
 algorithm_rsi: "📊 RSI"

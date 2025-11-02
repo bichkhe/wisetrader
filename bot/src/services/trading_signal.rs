@@ -1,0 +1,387 @@
+use std::sync::Arc;
+use anyhow::Result;
+use barter_data::{
+    exchange::binance::spot::BinanceSpot,
+    streams::Streams,
+    subscription::trade::PublicTrades,
+};
+use barter_instrument::instrument::market_data::kind::MarketDataInstrumentKind;
+use barter_data::streams::reconnect::Event;
+use futures::StreamExt;
+use ta::{
+    indicators::RelativeStrengthIndex,
+    Next,
+};
+use tokio::sync::RwLock;
+use tokio::time::{interval, Duration};
+use tracing::{info, warn, error};
+use teloxide::prelude::*;
+use chrono::Utc;
+
+use crate::state::AppState;
+
+/// 1-Minute Candle aggregator
+#[derive(Debug, Clone)]
+struct OneMinuteCandle {
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+    start_minute: i64,
+    processed: bool, // Flag to prevent double processing
+}
+
+impl OneMinuteCandle {
+    fn new(price: f64, timestamp: i64) -> Self {
+        let start_minute = (timestamp / 60) * 60;
+        Self {
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            start_minute,
+            processed: false,
+        }
+    }
+
+    fn update(&mut self, price: f64) {
+        self.high = self.high.max(price);
+        self.low = self.low.min(price);
+        self.close = price;
+    }
+
+    fn is_expired(&self, current_timestamp: i64) -> bool {
+        let current_minute = (current_timestamp / 60) * 60;
+        current_minute > self.start_minute
+    }
+}
+
+/// Trading Bot State
+#[derive(Debug, Clone)]
+struct TradingState {
+    rsi: RelativeStrengthIndex,
+    prices: Vec<f64>,
+    period: usize,
+    current_candle: Option<OneMinuteCandle>,
+    last_signal: Option<TradingSignalType>, // Track last signal type to avoid duplicates
+}
+
+/// Signal type enum to track state changes
+#[derive(Debug, Clone, PartialEq)]
+enum TradingSignalType {
+    Buy,
+    Sell,
+}
+
+impl TradingState {
+    fn new(period: usize) -> Self {
+        Self {
+            rsi: RelativeStrengthIndex::new(period).unwrap(),
+            prices: Vec::with_capacity(period + 10),
+            period,
+            current_candle: None,
+            last_signal: None,
+        }
+    }
+
+    fn process_trade(&mut self, price: f64, timestamp: i64) -> Option<TradingSignal> {
+        let current_minute = (timestamp / 60) * 60;
+        
+        // Check if candle exists and if it's expired
+        if let Some(ref mut candle) = self.current_candle {
+            if candle.is_expired(timestamp) {
+                // Candle completed! Process it only if not already processed by timer
+                if candle.processed {
+                    info!("🕐 Trade triggered: Candle already processed by timer, starting new candle");
+                    // Just start new candle, don't process again
+                    self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+                    return None;
+                }
+                
+                let completed_close = candle.close;
+                info!("🕐 Trade triggered: 1-minute candle completed! Close: {:.4}", completed_close);
+                
+                // Mark as processed BEFORE processing
+                candle.processed = true;
+                let signal = self.process_price(completed_close);
+                
+                // Start new candle for current minute
+                self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+                return signal;
+            } else {
+                // Update current candle
+                candle.update(price);
+            }
+        } else {
+            // No candle yet - initialize new one
+            info!("🕐 Starting new 1-minute candle at minute: {}", current_minute);
+            self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+        }
+        
+        None
+    }
+
+    fn force_process_candle(&mut self) -> Option<TradingSignal> {
+        if let Some(ref mut candle) = self.current_candle {
+            // Check if already processed
+            if candle.processed {
+                info!("🕐 Timer: Candle already processed, skipping");
+                return None;
+            }
+            
+            let completed_close = candle.close;
+            info!("🕐 Timer: Processing completed candle with close price: {:.4}", completed_close);
+            
+            // Mark as processed BEFORE processing to prevent race condition
+            candle.processed = true;
+            let signal = self.process_price(completed_close);
+            
+            // Don't reset candle here - let next trade create new one when it comes
+            return signal;
+        } else {
+            info!("🕐 Timer: No candle to process yet (waiting for first trade)");
+        }
+        None
+    }
+
+    fn process_price(&mut self, price: f64) -> Option<TradingSignal> {
+        self.prices.push(price);
+        
+        if self.prices.len() > self.period + 10 {
+            self.prices.remove(0);
+        }
+
+        if self.prices.len() < self.period + 1 {
+            info!("⏳ Collecting prices for RSI: {}/{} (need {} prices for RSI calculation)", 
+                  self.prices.len(), self.period + 1, self.period + 1);
+            return None;
+        }
+
+        // Always calculate and log RSI, even if no signal
+        let rsi_value = self.rsi.next(price);
+        info!("📊 1m Candle Close: {:.4} USDT, RSI: {:.2}", price, rsi_value);
+
+        // Strategy: Buy when RSI < 30, Sell when RSI > 70
+        // Only send signal when signal type CHANGES (to avoid spam)
+        let current_signal_type = if rsi_value < 30.0 {
+            Some(TradingSignalType::Buy)
+        } else if rsi_value > 70.0 {
+            Some(TradingSignalType::Sell)
+        } else {
+            None // RSI in neutral zone, reset last_signal
+        };
+
+        // Check if signal type changed
+        let should_send = match (&self.last_signal, &current_signal_type) {
+            (None, Some(_)) => true,  // First signal
+            (Some(TradingSignalType::Buy), Some(TradingSignalType::Sell)) => true,  // Buy -> Sell
+            (Some(TradingSignalType::Sell), Some(TradingSignalType::Buy)) => true,  // Sell -> Buy
+            (Some(_), None) => true,  // Signal -> No signal (reset)
+            (Some(same), Some(other)) if same != other => true,  // Signal type changed
+            _ => false,  // Same signal type, don't send again
+        };
+
+        if should_send {
+            // Update last signal
+            self.last_signal = current_signal_type.clone();
+            
+            // Return signal
+            match current_signal_type {
+                Some(TradingSignalType::Buy) => Some(TradingSignal::Buy { price, rsi: rsi_value }),
+                Some(TradingSignalType::Sell) => Some(TradingSignal::Sell { price, rsi: rsi_value }),
+                None => {
+                    // Signal cleared (RSI back to neutral)
+                    self.last_signal = None;
+                    None
+                }
+            }
+        } else {
+            // Same signal type, don't send
+            info!("⏸️  Signal already sent for this condition (RSI: {:.2}), skipping duplicate", rsi_value);
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum TradingSignal {
+    Buy { price: f64, rsi: f64 },
+    Sell { price: f64, rsi: f64 },
+}
+
+/// Format trading signal message for Telegram
+fn format_signal_message(signal: &TradingSignal, pair: &str, bot_name: &str) -> String {
+    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+    match signal {
+        TradingSignal::Buy { price, rsi } => {
+            format!(
+                "🟢 <b>BUY SIGNAL - {}</b>\n\n\
+💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
+📊 <b>RSI:</b> <code>{:.2}</code>\n\
+⏰ <b>Time:</b> <code>{}</code>\n\
+📈 <b>Strategy:</b> RSI &lt; 30 (Oversold)\n\
+📍 <b>Timeframe:</b> 1 minute candles\n\n\
+🤖 <b>Bot:</b> {}\n\
+🔄 <b>Status:</b> <code>Monitoring Live</code>\n\
+🌐 <b>Exchange:</b> Binance Spot\n\n\
+⚠️ <i>This is a paper trading signal. Always do your own research!</i>",
+                pair, price, rsi, timestamp, bot_name
+            )
+        },
+        TradingSignal::Sell { price, rsi } => {
+            format!(
+                "🔴 <b>SELL SIGNAL - {}</b>\n\n\
+💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
+📊 <b>RSI:</b> <code>{:.2}</code>\n\
+⏰ <b>Time:</b> <code>{}</code>\n\
+📉 <b>Strategy:</b> RSI &gt; 70 (Overbought)\n\
+📍 <b>Timeframe:</b> 1 minute candles\n\n\
+🤖 <b>Bot:</b> {}\n\
+🔄 <b>Status:</b> <code>Monitoring Live</code>\n\
+🌐 <b>Exchange:</b> Binance Spot\n\n\
+⚠️ <i>This is a paper trading signal. Always do your own research!</i>",
+                pair, price, rsi, timestamp, bot_name
+            )
+        },
+    }
+}
+
+/// Start trading signal service (runs forever in background)
+pub fn start_trading_signal_service(
+    app_state: Arc<AppState>,
+    bot: Bot,
+    channel_id: i64,
+    pair: String,
+) {
+    let bot_name = app_state.bot_name.clone();
+    info!("🚀 Starting Trading Signal Service for {}", pair);
+    
+    let state = Arc::new(RwLock::new(TradingState::new(14))); // Period 2 = need 3 prices for RSI
+    
+    // Clone variables for tasks
+    let state_for_stream = state.clone();
+    let bot_for_stream = bot.clone();
+    let pair_for_stream = pair.clone();
+    let channel_id_for_stream = channel_id;
+    let bot_name_for_stream = bot_name.clone();
+    
+    // Use LocalSet for non-Send futures
+    use tokio::task::LocalSet;
+    
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let local = LocalSet::new();
+            local.spawn_local(async move {
+                // Initialize streams
+                let streams_result = Streams::<PublicTrades>::builder()
+                    .subscribe([(
+                        BinanceSpot::default(),
+                        "bnb",
+                        "usdt",
+                        MarketDataInstrumentKind::Spot,
+                        PublicTrades,
+                    )])
+                    .init()
+                    .await;
+                    
+                let streams = match streams_result {
+                    Ok(streams) => streams,
+                    Err(e) => {
+                        error!("Failed to initialize streams: {}", e);
+                        return;
+                    }
+                };
+
+                info!("✅ Connected to Binance! Monitoring {} for trading signals...", pair_for_stream);
+
+                let mut market_stream = streams.select_all();
+                let state_trades = state_for_stream.clone();
+                let bot_trades = bot_for_stream.clone();
+                let pair_trades = pair_for_stream.clone();
+
+                // Process trades
+                while let Some(event) = market_stream.next().await {
+                    match event {
+                        Event::Item(market_event_result) => {
+                            match market_event_result {
+                                Ok(market_event) => {
+                                    let price = market_event.kind.price;
+                                    let timestamp = market_event.time_received.timestamp();
+                                    
+                                    let mut state_guard = state_trades.write().await;
+                                    if let Some(signal) = state_guard.process_trade(price, timestamp) {
+                                        let message = format_signal_message(&signal, &pair_trades, &bot_name_for_stream);
+                                        
+                                        if let Err(e) = bot_trades.send_message(
+                                            ChatId(channel_id_for_stream),
+                                            message
+                                        )
+                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                        .await {
+                                            error!("Failed to send trading signal: {}", e);
+                                        } else {
+                                            info!("✅ Trading signal sent to channel {}", channel_id_for_stream);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Error in market event: {}", e);
+                                }
+                            }
+                        }
+                        Event::Reconnecting(_origin) => {
+                            warn!("Reconnecting to Binance...");
+                        }
+                    }
+                }
+            });
+            local.await;
+        });
+    });
+
+    // Start timer to force process candle every minute
+    let state_timer = state.clone();
+    let bot_timer = bot.clone();
+    let pair_timer = pair.clone();
+    let bot_name_timer = bot_name.clone();
+    
+    // Spawn task for timer-based processing
+    tokio::spawn(async move {
+        let mut minute_timer = interval(Duration::from_secs(60));
+        minute_timer.tick().await; // Skip first tick
+        info!("⏰ Timer started: will process candles every 60 seconds");
+        let mut count = 0;
+        
+        loop {
+            minute_timer.tick().await;
+            count += 1;
+            info!("⏰ Timer tick #{}", count);
+            let mut state_guard = state_timer.write().await;
+            
+            // Only process if candle exists (was started by a trade)
+            // After processing, reset candle to prevent double processing when next trade comes
+            if state_guard.current_candle.is_some() {
+                if let Some(signal) = state_guard.force_process_candle() {
+                    let message = format_signal_message(&signal, &pair_timer, &bot_name_timer);
+                    
+                    if let Err(e) = bot_timer.send_message(
+                        ChatId(channel_id),
+                        message
+                    )
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await {
+                        error!("Failed to send trading signal: {}", e);
+                    } else {
+                        info!("✅ Trading signal sent to channel {} (timer-based)", channel_id);
+                    }
+                }
+            } else {
+                info!("⏰ Timer: No active candle to process (waiting for trades to start candle)");
+            }
+        }
+    });
+
+    info!("✅ Trading Signal Service started successfully");
+}
+

@@ -224,16 +224,20 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         // Strategy buttons
         ("vi", "algorithm_rsi") => "📊 RSI".to_string(),
         ("en", "algorithm_rsi") => "📊 RSI".to_string(),
-        ("vi", "algorithm_bollinger") => "📊 Bollinger Bands".to_string(),
-        ("en", "algorithm_bollinger") => "📊 Bollinger Bands".to_string(),
-        ("vi", "algorithm_ema") => "📊 EMA".to_string(),
-        ("en", "algorithm_ema") => "📊 EMA".to_string(),
+        ("vi", "algorithm_bollinger") => "📈 BB".to_string(),
+        ("en", "algorithm_bollinger") => "📈 BB".to_string(),
+        ("vi", "algorithm_ema") => "📉 EMA".to_string(),
+        ("en", "algorithm_ema") => "📉 EMA".to_string(),
         ("vi", "algorithm_macd") => "📊 MACD".to_string(),
         ("en", "algorithm_macd") => "📊 MACD".to_string(),
         ("vi", "algorithm_ma") => "📊 MA".to_string(),
         ("en", "algorithm_ma") => "📊 MA".to_string(),
         ("vi", "strategy_cancel_button") => "❌ Hủy".to_string(),
         ("en", "strategy_cancel_button") => "❌ Cancel".to_string(),
+        ("vi", "strategy_type_custom") => "🛠️ Tùy Chỉnh".to_string(),
+        ("en", "strategy_type_custom") => "🛠️ Custom".to_string(),
+        ("vi", "strategy_type_preset") => "📚 Có Sẵn".to_string(),
+        ("en", "strategy_type_preset") => "📚 Preset".to_string(),
         
         // Timeframe buttons
         ("vi", "timeframe_1m") => "1 phút".to_string(),
@@ -253,9 +257,21 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "timeframe_1w") => "1 tuần".to_string(),
         ("en", "timeframe_1w") => "1w".to_string(),
         
-        // Pair buttons - keep as is since they are market symbols
-        ("vi", "pair_manual") => "✍️ Nhập thủ công".to_string(),
-        ("en", "pair_manual") => "✍️ Manual".to_string(),
+        // Pair buttons
+        ("vi", "pair_btc_usdt") => "₿ BTC".to_string(),
+        ("en", "pair_btc_usdt") => "₿ BTC".to_string(),
+        ("vi", "pair_eth_usdt") => "Ξ ETH".to_string(),
+        ("en", "pair_eth_usdt") => "Ξ ETH".to_string(),
+        ("vi", "pair_bnb_usdt") => "BNB".to_string(),
+        ("en", "pair_bnb_usdt") => "BNB".to_string(),
+        ("vi", "pair_ada_usdt") => "ADA".to_string(),
+        ("en", "pair_ada_usdt") => "ADA".to_string(),
+        ("vi", "pair_sol_usdt") => "◎ SOL".to_string(),
+        ("en", "pair_sol_usdt") => "◎ SOL".to_string(),
+        ("vi", "pair_dot_usdt") => "DOT".to_string(),
+        ("en", "pair_dot_usdt") => "DOT".to_string(),
+        ("vi", "pair_manual") => "✏️ Khác".to_string(),
+        ("en", "pair_manual") => "✏️ Other".to_string(),
         
         // Payment buttons
         ("vi", "payment_deposit_100") => "💵 Nạp 100 điểm".to_string(),

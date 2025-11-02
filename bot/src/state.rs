@@ -57,6 +57,8 @@ pub enum BotState {
 pub enum CreateStrategyState {
     #[default]
     Start,
+    WaitingForStrategyType, // Choose between Custom or Preset
+    WaitingForPresetSelection, // Waiting for user to select a preset strategy
     WaitingForName,
     WaitingForAlgorithm,
     WaitingForBuyCondition {

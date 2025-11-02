@@ -56,7 +56,14 @@ profile_not_registered: "🆔 User ID <b>{user_id}</b> chưa tồn tại trong h
 profile_userid_param: "user_id"
 
 # Strategy creation
-strategy_welcome: "📊 <b>Trình Tạo Chiến Lược</b>\n\nVui lòng chọn thuật toán để bắt đầu:"
+strategy_welcome: "📊 <b>Trình Tạo Chiến Lược</b>\n\nChọn cách bạn muốn tạo chiến lược:"
+strategy_type_custom: "🛠️ Tạo Chiến Lược Tùy Chỉnh"
+strategy_type_preset: "📚 Sử Dụng Chiến Lược Có Sẵn"
+strategy_choose_algorithm: "📊 <b>Tạo Chiến Lược Tùy Chỉnh</b>\n\nVui lòng chọn thuật toán để bắt đầu:"
+strategy_choose_preset: "📚 <b>Chiến Lược Có Sẵn</b>\n\nChọn một chiến lược từ các preset có sẵn:"
+strategy_loading_preset: "⏳ Đang tải chiến lược có sẵn: {name}..."
+strategy_preset_loaded: "✅ <b>Đã Tải Chiến Lược Có Sẵn!</b>\n\n<b>Chiến lược:</b> {name}\n<b>Thuật toán:</b> {algorithm}\n<b>Điều kiện mua:</b> {buy_condition}\n<b>Điều kiện bán:</b> {sell_condition}\n<b>Khung thời gian:</b> {timeframe}\n\n<b>Bước 4:</b> Chọn cặp giao dịch:"
+strategy_preset_load_error: "❌ <b>Không Thể Tải Chiến Lược Có Sẵn</b>\n\n<b>Chiến lược:</b> {name}\n<b>Lỗi:</b> <code>{error}</code>\n\nVui lòng thử lại hoặc sử dụng chiến lược tùy chỉnh."
 strategy_cancel: "❌ Hủy"
 strategy_saved: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
 strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
@@ -85,6 +92,15 @@ period_6months: "📅 6 Tháng"
 # Exchanges
 exchange_okx: "🇬🇧 OKX"
 exchange_binance: "🇧🇳 Binance"
+
+# Trading Pairs
+pair_btc_usdt: "₿ BTC/USDT"
+pair_eth_usdt: "Ξ ETH/USDT"
+pair_bnb_usdt: "BNB/USDT"
+pair_ada_usdt: "ADA/USDT"
+pair_sol_usdt: "◎ SOL/USDT"
+pair_dot_usdt: "DOT/USDT"
+pair_manual: "✏️ Nhập Thủ Công"
 
 # Algorithms
 algorithm_rsi: "📊 RSI"
