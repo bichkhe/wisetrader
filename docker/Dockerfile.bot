@@ -60,6 +60,9 @@ COPY --from=builder /app/target/release/bot /app/bot
 # Copy locales
 COPY --from=builder /app/bot/locales ./locales
 
+# Copy .env file (will be overridden by docker-compose env vars)
+COPY .env /app/.env
+
 # Copy entrypoint script
 COPY docker/entrypoint-bot.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
