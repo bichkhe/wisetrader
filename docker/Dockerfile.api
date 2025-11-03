@@ -5,21 +5,23 @@ WORKDIR /app
 # Copy workspace files
 COPY Cargo.toml ./
 
-# Create workspace structure
+# Create workspace structure - copy all Cargo.toml for all members
 COPY shared ./shared
 COPY api/Cargo.toml ./api/Cargo.toml
+COPY bot/Cargo.toml ./bot/Cargo.toml
 
-# Create dummy main.rs to build dependencies
-RUN mkdir -p api/src && \
-    echo "fn main() {}" > api/src/main.rs
+# Create dummy files for all workspace members to build dependencies
+RUN mkdir -p api/src bot/src && \
+    echo "fn main() {}" > api/src/main.rs && \
+    echo "fn main() {}" > bot/src/main.rs
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --package api --release
 
-# Remove dummy source
-RUN rm -rf api/src
+# Remove dummy sources
+RUN rm -rf api/src bot/src
 
-# Copy real source files
+# Copy real source files (only api)
 COPY api/src ./api/src
 
 # Build the actual API
