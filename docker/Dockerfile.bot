@@ -14,13 +14,13 @@ COPY Cargo.toml ./
 # Create workspace structure - copy shared library (needed by all members)
 COPY shared ./shared
 
-# Create directories and copy Cargo.toml for all workspace members
-RUN mkdir -p api/src bot/src
-COPY api/Cargo.toml ./api/
-COPY bot/Cargo.toml ./bot/
+# Copy Cargo.toml for all workspace members (COPY will create dirs automatically)
+COPY api/Cargo.toml ./api/Cargo.toml
+COPY bot/Cargo.toml ./bot/Cargo.toml
 
 # Create dummy files for all workspace members to build dependencies
-RUN echo "fn main() {}" > api/src/main.rs && \
+RUN mkdir -p api/src bot/src && \
+    echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs
 
 # Build dependencies (this layer will be cached)
