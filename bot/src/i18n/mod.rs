@@ -41,7 +41,13 @@ pub fn translate(locale: &str, key: &str, args: Option<&[(&str, &str)]>) -> Stri
             let base = PathBuf::from(base_str);
             if base.exists() {
                 for lang in ["en", "vi"] {
+                    // Only use messages.yml format (en/messages.yml, vi/messages.yml)
                     let yaml_file = base.join(lang).join("messages.yml");
+                    
+                    if !yaml_file.exists() {
+                        continue;
+                    }
+                    
                     if let Ok(content) = fs::read_to_string(&yaml_file) {
                         let mut lang_map = HashMap::new();
                         let lines: Vec<&str> = content.lines().collect();
@@ -258,18 +264,18 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "timeframe_1w") => "1w".to_string(),
         
         // Pair buttons
-        ("vi", "pair_btc_usdt") => "₿ BTC".to_string(),
-        ("en", "pair_btc_usdt") => "₿ BTC".to_string(),
-        ("vi", "pair_eth_usdt") => "Ξ ETH".to_string(),
-        ("en", "pair_eth_usdt") => "Ξ ETH".to_string(),
-        ("vi", "pair_bnb_usdt") => "BNB".to_string(),
-        ("en", "pair_bnb_usdt") => "BNB".to_string(),
-        ("vi", "pair_ada_usdt") => "ADA".to_string(),
-        ("en", "pair_ada_usdt") => "ADA".to_string(),
-        ("vi", "pair_sol_usdt") => "◎ SOL".to_string(),
-        ("en", "pair_sol_usdt") => "◎ SOL".to_string(),
-        ("vi", "pair_dot_usdt") => "DOT".to_string(),
-        ("en", "pair_dot_usdt") => "DOT".to_string(),
+        ("vi", "pair_btc_usdt") => "₿ BTC/USDT".to_string(),
+        ("en", "pair_btc_usdt") => "₿ BTC/USDT".to_string(),
+        ("vi", "pair_eth_usdt") => "Ξ ETH/USDT".to_string(),
+        ("en", "pair_eth_usdt") => "Ξ ETH/USDT".to_string(),
+        ("vi", "pair_bnb_usdt") => "BNB/USDT".to_string(),
+        ("en", "pair_bnb_usdt") => "BNB/USDT".to_string(),
+        ("vi", "pair_ada_usdt") => "ADA/USDT".to_string(),
+        ("en", "pair_ada_usdt") => "ADA/USDT".to_string(),
+        ("vi", "pair_sol_usdt") => "◎ SOL/USDT".to_string(),
+        ("en", "pair_sol_usdt") => "◎ SOL/USDT".to_string(),
+        ("vi", "pair_dot_usdt") => "DOT/USDT".to_string(),
+        ("en", "pair_dot_usdt") => "DOT/USDT".to_string(),
         ("vi", "pair_manual") => "✏️ Khác".to_string(),
         ("en", "pair_manual") => "✏️ Other".to_string(),
         
@@ -300,6 +306,8 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "strategy_delete_confirm_yes") => "✅ Confirm".to_string(),
         ("vi", "strategy_delete_confirm_no") => "❌ Hủy".to_string(),
         ("en", "strategy_delete_confirm_no") => "❌ Cancel".to_string(),
+        ("vi", "trading_cancel") => "❌ Hủy".to_string(),
+        ("en", "trading_cancel") => "❌ Cancel".to_string(),
         
         // Default fallback
         _ => key.to_string(),

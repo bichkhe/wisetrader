@@ -263,8 +263,9 @@ pub async fn handle_deposit_callback(
                         }
                     }
                 } else {
+                    let error_msg = i18n::translate(locale, "error_invalid_amount", None);
                     bot.answer_callback_query(q.id)
-                        .text("Invalid amount")
+                        .text(&error_msg)
                         .await?;
                 }
             }

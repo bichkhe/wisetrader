@@ -271,28 +271,40 @@ fn parse_strategy_description(description: &str) -> (String, String, String, Str
     (algorithm, buy_condition, sell_condition, timeframe, pair)
 }
 
-/// Generate Python strategy file from strategy data
-fn generate_strategy_file(
-    strategy_id: u64,
-    strategy_name: &str,
+/// Extract thresholds from conditions (e.g., "RSI < 30" -> 30)
+fn extract_threshold(condition: &str, indicator: &str) -> Option<i32> {
+    if condition.contains(indicator) {
+        // Try to find number after <, >, <=, >= operators
+        for part in condition.split_whitespace() {
+            // Remove common operators and check if remaining is a number
+            let cleaned = part.trim_matches(&['<', '>', '='][..]);
+            if let Ok(num) = cleaned.parse::<i32>() {
+                return Some(num);
+            }
+        }
+    }
+    None
+}
+
+/// Map StrategyConfig to Freqtrade template parameters
+/// This ensures consistency between backtest (Freqtrade) and live trading
+fn map_config_to_freqtrade_template(
     algorithm: &str,
     buy_condition: &str,
     sell_condition: &str,
     timeframe: &str,
-    strategies_path: &Path,
-) -> Result<PathBuf, anyhow::Error> {
-    use std::fs;
-    
-    // Ensure strategies directory exists
-    fs::create_dir_all(strategies_path)?;
+    parameters: &serde_json::Value,
+) -> (bool, i32, bool, i32, i32, i32, bool, i32, i32, bool, i32, bool, i32, bool, bool, bool, bool, i32) {
+    let empty_map = serde_json::Map::new();
+    let params = parameters.as_object().unwrap_or(&empty_map);
     
     // Determine indicators based on algorithm
-    let (use_rsi, use_macd, use_ema, use_bb) = match algorithm {
+    let (use_rsi, use_macd, use_ema, use_bb) = match algorithm.to_uppercase().as_str() {
         "RSI" => (true, false, false, false),
         "MACD" => (false, true, false, false),
         "EMA" => (false, false, true, false),
-        "Bollinger Bands" => (false, false, false, true),
-        "MA" => (false, false, true, false),
+        "BOLLINGER" | "BOLLINGER BANDS" | "BB" => (false, false, false, true),
+        "MA" | "SMA" => (false, false, true, false),
         _ => (true, false, false, false),
     };
 
@@ -302,6 +314,104 @@ fn generate_strategy_file(
     let entry_condition_macd = buy_condition.contains("MACD");
     let entry_condition_ema = buy_condition.contains("EMA");
     let entry_condition_bb = buy_condition.contains("Bollinger") || buy_condition.contains("LowerBand");
+
+    // Extract RSI parameters from config
+    let rsi_period = params
+        .get("period")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(14) as i32;
+    
+    // Extract RSI thresholds from conditions
+    let rsi_oversold = extract_threshold(buy_condition, "RSI").unwrap_or(30);
+    let rsi_overbought = extract_threshold(sell_condition, "RSI").unwrap_or(70);
+
+    // Extract MACD parameters from config
+    let macd_fast = params
+        .get("fast")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(12) as i32;
+    let macd_slow = params
+        .get("slow")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(26) as i32;
+    let macd_signal = params
+        .get("signal")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(9) as i32;
+
+    // Extract EMA parameters from config
+    let ema_fast = params
+        .get("fast")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(12) as i32;
+    let ema_slow = params
+        .get("slow")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(26) as i32;
+    
+    // If EMA uses single period, use that for both
+    let (ema_fast_final, ema_slow_final) = if params.contains_key("period") && !params.contains_key("fast") {
+        let period = params
+            .get("period")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+            .unwrap_or(20) as i32;
+        (period, period)
+    } else {
+        (ema_fast, ema_slow)
+    };
+
+    // Extract Bollinger Bands parameters from config
+    let bb_period = params
+        .get("period")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(20) as i32;
+
+    (
+        use_rsi, rsi_period,
+        use_macd, macd_fast, macd_slow, macd_signal,
+        use_ema, ema_fast_final, ema_slow_final,
+        use_bb, bb_period,
+        entry_condition_rsi, rsi_oversold,
+        entry_condition_macd, entry_condition_ema, entry_condition_bb,
+        exit_condition_rsi, rsi_overbought,
+    )
+}
+
+/// Generate Python strategy file from strategy data
+/// Uses StrategyConfig to ensure consistency with live trading
+fn generate_strategy_file(
+    strategy_id: u64,
+    strategy_name: &str,
+    algorithm: &str,
+    buy_condition: &str,
+    sell_condition: &str,
+    timeframe: &str,
+    strategies_path: &Path,
+    config: Option<&crate::services::strategy_engine::StrategyConfig>,
+) -> Result<PathBuf, anyhow::Error> {
+    use std::fs;
+    
+    // Ensure strategies directory exists
+    fs::create_dir_all(strategies_path)?;
+
+    // Use config parameters if available, otherwise extract from conditions
+    let parameters = if let Some(cfg) = config {
+        cfg.parameters.clone()
+    } else {
+        // Fallback: create empty parameters object
+        serde_json::json!({})
+    };
+
+    // Map config to Freqtrade template parameters
+    let (
+        use_rsi, rsi_period,
+        use_macd, macd_fast, macd_slow, macd_signal,
+        use_ema, ema_fast, ema_slow,
+        use_bb, bb_period,
+        entry_condition_rsi, rsi_oversold,
+        entry_condition_macd, entry_condition_ema, entry_condition_bb,
+        exit_condition_rsi, rsi_overbought,
+    ) = map_config_to_freqtrade_template(algorithm, buy_condition, sell_condition, timeframe, &parameters);
 
     // Generate filename first to use for class name
     let safe_name = strategy_name
@@ -330,25 +440,25 @@ fn generate_strategy_file(
         startup_candle_count: 200,
         
         use_rsi,
-        rsi_period: 14,
+        rsi_period,
         use_macd,
-        macd_fast: 12,
-        macd_slow: 26,
-        macd_signal: 9,
+        macd_fast,
+        macd_slow,
+        macd_signal,
         use_ema,
-        ema_fast: 12,
-        ema_slow: 26,
+        ema_fast,
+        ema_slow,
         use_bb,
-        bb_period: 20,
+        bb_period,
         
         entry_condition_rsi,
-        rsi_oversold: 30,
+        rsi_oversold,
         entry_condition_macd,
         entry_condition_ema,
         entry_condition_bb,
         
         exit_condition_rsi,
-        rsi_overbought: 70,
+        rsi_overbought,
     };
 
     // Render template (class name already matches filename)
@@ -406,8 +516,10 @@ pub async fn handle_backtest(
         let name = strategy.name.as_ref()
             .map(|n| escape_html(n))
             .unwrap_or_else(|| format!("Strategy #{}", strategy.id));
-        let button_text = if name.len() > 30 {
-            format!("{}...", &name[..27])
+        // Use character-based truncation to avoid UTF-8 boundary errors
+        let button_text = if name.chars().count() > 30 {
+            let truncated: String = name.chars().take(27).collect();
+            format!("{}...", truncated)
         } else {
             name
         };
@@ -581,13 +693,34 @@ pub async fn handle_backtest_callback(
                             .one(state.db.as_ref())
                             .await?;
 
-                        let strategy_desc = strategy.as_ref()
-                            .and_then(|s| s.description.as_ref())
-                            .map(|s| s.as_str())
-                            .unwrap_or("");
-
-                        let (algorithm, buy_condition, sell_condition, timeframe, pair) = 
-                            parse_strategy_description(strategy_desc);
+                        // Try to get config from strategy service (supports both content JSON and description)
+                        let (algorithm, buy_condition, sell_condition, timeframe, pair, strategy_config) = 
+                            if let Some(strategy_model) = strategy.as_ref() {
+                                match state.strategy_service.strategy_to_config(strategy_model) {
+                                    Ok(config) => {
+                                        // Use validated config from content field
+                                        (
+                                            config.strategy_type.clone(),
+                                            config.buy_condition.clone(),
+                                            config.sell_condition.clone(),
+                                            config.timeframe.clone(),
+                                            config.pair.clone(),
+                                            Some(config),
+                                        )
+                                    }
+                                    Err(e) => {
+                                        // Fallback to parsing description
+                                        tracing::warn!("Failed to parse strategy config: {}, falling back to description parsing", e);
+                                        let strategy_desc = strategy_model.description.as_ref()
+                                            .map(|s| s.as_str())
+                                            .unwrap_or("");
+                                        let (alg, buy, sell, tf, pr) = parse_strategy_description(strategy_desc);
+                                        (alg, buy, sell, tf, pr, None)
+                                    }
+                                }
+                            } else {
+                                ("RSI".to_string(), "RSI < 30".to_string(), "RSI > 70".to_string(), "1h".to_string(), "BTC/USDT".to_string(), None)
+                            };
                         
                         // Convert pair format if needed (BTCUSDT -> BTC/USDT)
                         let freqtrade_pair = if pair.contains('/') {
@@ -620,6 +753,7 @@ pub async fn handle_backtest_callback(
                             &sell_condition,
                             &timeframe,
                             strategies_path,
+                            strategy_config.as_ref(),
                         ) {
                             Ok(filepath) => {
                                 tracing::info!("Generated strategy file: {:?}", filepath);
@@ -690,9 +824,11 @@ pub async fn handle_backtest_callback(
                                     Ok(result) => Ok(result),
                                     Err(e) => {
                                         // Truncate error message to avoid Telegram MESSAGE_TOO_LONG error
+                                        // Use character-based truncation to avoid UTF-8 boundary errors
                                         let error_str = e.to_string();
-                                        let truncated_error = if error_str.len() > 1500 {
-                                            format!("{}...\n\n(Error message truncated)", &error_str[..1500])
+                                        let truncated_error = if error_str.chars().count() > 1500 {
+                                            let truncated: String = error_str.chars().take(1500).collect();
+                                            format!("{}...\n\n(Error message truncated)", truncated)
                                         } else {
                                             error_str.clone()
                                         };

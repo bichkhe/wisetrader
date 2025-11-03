@@ -32,7 +32,7 @@ COPY --from=builder /app/target/release/api /app/api
 # Create html_reports directory
 RUN mkdir -p /app/html_reports
 
-EXPOSE 3000
+EXPOSE 9999
 
 CMD ["./api"]
 

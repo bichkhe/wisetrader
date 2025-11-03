@@ -55,6 +55,7 @@ cmd_help_me: "Hiển thị hồ sơ người dùng của bạn"
 cmd_help_create_strategy: "Tạo chiến lược giao dịch mới"
 cmd_help_mystrategies: "Liệt kê tất cả chiến lược của bạn"
 cmd_help_backtest: "Chạy backtest trên một chiến lược"
+cmd_help_start_trading: "Bắt đầu giao dịch với chiến lược đã chọn"
 cmd_help_back: "Thoát dialogue hiện tại và trở về trạng thái bình thường"
 cmd_help_deposit: "Nạp điểm vào tài khoản"
 cmd_help_balance: "Xem số dư hiện tại"
@@ -142,6 +143,39 @@ strategy_delete_cancelled: "❌ <b>Đã hủy xóa.</b>\n\nSử dụng <code>/my
 strategy_delete_button: "🗑️ Xóa Chiến Lược"
 strategy_cancel: "❌ Hủy"
 strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
+strategy_delete_confirm_yes: "Có, xóa"
+strategy_delete_confirm_no: "Không, hủy"
+strategy_choose_algorithm: "📊 <b>Chọn Thuật Toán</b>\n\nVui lòng chọn một thuật toán cho chiến lược của bạn:"
+strategy_choose_preset: "📚 <b>Chiến Lược Có Sẵn</b>\n\nChọn một chiến lược có sẵn để sử dụng làm mẫu:"
+strategy_loading_preset: "⏳ <b>Đang Tải Chiến Lược Có Sẵn...</b>\n\n<b>Chiến Lược:</b> {name}\n\nVui lòng đợi..."
+strategy_preset_loaded: "✅ <b>Đã Tải Chiến Lược Có Sẵn!</b>\n\n📋 <b>Tóm Tắt Chiến Lược:</b>\n\n📛 <b>Tên:</b> {name}\n📊 <b>Thuật Toán:</b> {algorithm}\n📈 <b>Điều Kiện Mua:</b> <code>{buy_condition}</code>\n📉 <b>Điều Kiện Bán:</b> <code>{sell_condition}</code>\n⏰ <b>Khung Thời Gian:</b> {timeframe}\n\n<b>Bước 5:</b> Chọn cặp giao dịch:"
+strategy_preset_load_error: "❌ <b>Không Thể Tải Chiến Lược Có Sẵn</b>\n\n<b>Chiến Lược:</b> {name}\n<b>Lỗi:</b> {error}\n\nVui lòng thử lại hoặc chọn chiến lược có sẵn khác."
+strategy_delete_with_name: "🗑️ Xóa"
+
+# Trading pairs
+pair_btc_usdt: "₿ BTC/USDT"
+pair_eth_usdt: "⟠ ETH/USDT"
+pair_bnb_usdt: "BNB/USDT"
+pair_ada_usdt: "₳ ADA/USDT"
+pair_sol_usdt: "◎ SOL/USDT"
+pair_dot_usdt: "● DOT/USDT"
+pair_manual: "✏️ Nhập Thủ Công"
+
+# Trading
+trading_already_active: "⚠️ Bạn đã có một chiến lược đang chạy. Vui lòng dừng trước khi bắt đầu chiến lược mới."
+trading_no_strategies: "❌ Bạn chưa tạo chiến lược nào. Hãy sử dụng /createstrategy để tạo chiến lược trước."
+trading_select_strategy: "📊 <b>Chọn Chiến Lược để Bắt Đầu Giao Dịch</b>\n\nVui lòng chọn một chiến lược từ danh sách:"
+trading_cancel: "❌ Hủy"
+trading_started: "✅ Bắt đầu giao dịch thành công!"
+trading_started_message: "✅ <b>Đã bắt đầu giao dịch!</b>\n\n📊 <b>Chiến lược:</b> {strategy_name}"
+trading_start_error: "❌ Lỗi khi bắt đầu giao dịch: {error}"
+trading_config_error: "❌ Lỗi cấu hình chiến lược: {error}"
+trading_strategy_not_found: "❌ Không tìm thấy chiến lược."
+
+# Errors (additional)
+error_invalid_strategy_id: "❌ ID chiến lược không hợp lệ"
+error_invalid_selection: "❌ Lựa chọn không hợp lệ"
+error_invalid_amount: "❌ Số tiền không hợp lệ"
 
 # Backtest
 backtest_welcome: "📊 <b>Trình Backtest</b>\n\n<b>Bước 1:</b> Chọn chiến lược để backtest:\n\nBạn có <b>{count}</b> chiến lược có sẵn."

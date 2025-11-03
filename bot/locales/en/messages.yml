@@ -55,6 +55,7 @@ cmd_help_me: "Show your user profile"
 cmd_help_create_strategy: "Create a new trading strategy"
 cmd_help_mystrategies: "List all your strategies"
 cmd_help_backtest: "Run backtest on a strategy"
+cmd_help_start_trading: "Start trading with a selected strategy"
 cmd_help_back: "Exit current dialogue and return to normal state"
 cmd_help_deposit: "Deposit points to your account"
 cmd_help_balance: "View your current balance"
@@ -142,6 +143,39 @@ strategy_delete_error: "❌ <b>Error deleting strategy!</b>\n\nFailed to delete 
 strategy_delete_not_found: "❌ <b>Strategy not found!</b>\n\nThe strategy you're trying to delete doesn't exist or doesn't belong to you."
 strategy_delete_cancelled: "❌ <b>Delete cancelled.</b>\n\nUse <code>/mystrategies</code> to view your strategies again."
 strategy_delete_button: "🗑️ Delete Strategy"
+strategy_delete_confirm_yes: "Yes, Delete"
+strategy_delete_confirm_no: "No, Cancel"
+strategy_choose_algorithm: "📊 <b>Choose Algorithm</b>\n\nPlease select an algorithm for your strategy:"
+strategy_choose_preset: "📚 <b>Preset Strategies</b>\n\nSelect a preset strategy to use as a template:"
+strategy_loading_preset: "⏳ <b>Loading Preset Strategy...</b>\n\n<b>Strategy:</b> {name}\n\nPlease wait..."
+strategy_preset_loaded: "✅ <b>Preset Strategy Loaded!</b>\n\n📋 <b>Strategy Summary:</b>\n\n📛 <b>Name:</b> {name}\n📊 <b>Algorithm:</b> {algorithm}\n📈 <b>Buy Condition:</b> <code>{buy_condition}</code>\n📉 <b>Sell Condition:</b> <code>{sell_condition}</code>\n⏰ <b>Timeframe:</b> {timeframe}\n\n<b>Step 5:</b> Choose trading pair:"
+strategy_preset_load_error: "❌ <b>Failed to Load Preset Strategy</b>\n\n<b>Strategy:</b> {name}\n<b>Error:</b> {error}\n\nPlease try again or choose a different preset."
+strategy_delete_with_name: "🗑️ Delete"
+
+# Trading pairs
+pair_btc_usdt: "₿ BTC/USDT"
+pair_eth_usdt: "⟠ ETH/USDT"
+pair_bnb_usdt: "BNB/USDT"
+pair_ada_usdt: "₳ ADA/USDT"
+pair_sol_usdt: "◎ SOL/USDT"
+pair_dot_usdt: "● DOT/USDT"
+pair_manual: "✏️ Enter Manually"
+
+# Trading
+trading_already_active: "⚠️ You already have a strategy running. Please stop it before starting a new one."
+trading_no_strategies: "❌ You haven't created any strategies yet. Use /createstrategy to create one first."
+trading_select_strategy: "📊 <b>Select Strategy to Start Trading</b>\n\nPlease select a strategy from the list:"
+trading_cancel: "❌ Cancel"
+trading_started: "✅ Trading started successfully!"
+trading_started_message: "✅ <b>Trading Started!</b>\n\n📊 <b>Strategy:</b> {strategy_name}"
+trading_start_error: "❌ Error starting trading: {error}"
+trading_config_error: "❌ Strategy configuration error: {error}"
+trading_strategy_not_found: "❌ Strategy not found."
+
+# Errors (additional)
+error_invalid_strategy_id: "❌ Invalid strategy ID"
+error_invalid_selection: "❌ Invalid selection"
+error_invalid_amount: "❌ Invalid amount"
 
 # Backtest
 backtest_welcome: "📊 <b>Backtest Wizard</b>\n\n<b>Step 1:</b> Choose a strategy to backtest:\n\nYou have <b>{count}</b> strategy(ies) available."

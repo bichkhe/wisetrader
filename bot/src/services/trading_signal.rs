@@ -84,7 +84,7 @@ impl TradingState {
         }
     }
 
-    fn process_trade(&mut self, price: f64, timestamp: i64) -> Option<TradingSignal> {
+    fn process_trade(&mut self, price: f64, timestamp: i64, app_state: Arc<crate::state::AppState>) -> Option<TradingSignal> {
         let current_minute = (timestamp / 60) * 60;
         
         // Check if candle exists and if it's expired
@@ -100,6 +100,28 @@ impl TradingState {
                 
                 let completed_close = candle.close;
                 info!("🕐 Trade triggered: 1-minute candle completed! Close: {:.4}", completed_close);
+                
+                // Create Candle for strategy executor
+                use crate::services::strategy_engine::Candle as StrategyCandle;
+                let strategy_candle = StrategyCandle {
+                    open: candle.open,
+                    high: candle.high,
+                    low: candle.low,
+                    close: candle.close,
+                    volume: 0.0, // Volume not available from trades
+                    timestamp,
+                };
+                
+                // Process candle through strategy executor for all users (async)
+                let executor = app_state.strategy_executor.clone();
+                tokio::spawn(async move {
+                    let signals = executor.process_candle_for_all(&strategy_candle).await;
+                    for (user_id, signal) in signals {
+                        info!("📊 User {} strategy signal: {:?}", user_id, signal);
+                        // TODO: In future, send personalized signals to each user
+                        // For now, signals are logged
+                    }
+                });
                 
                 // Mark as processed BEFORE processing
                 candle.processed = true;
@@ -264,6 +286,7 @@ pub fn start_trading_signal_service(
     let pair_for_stream = pair.clone();
     let channel_id_for_stream = channel_id;
     let bot_name_for_stream = bot_name.clone();
+    let app_state_for_stream = app_state.clone();
     
     // Use LocalSet for non-Send futures
     use tokio::task::LocalSet;
@@ -310,7 +333,7 @@ pub fn start_trading_signal_service(
                                     let timestamp = market_event.time_received.timestamp();
                                     
                                     let mut state_guard = state_trades.write().await;
-                                    if let Some(signal) = state_guard.process_trade(price, timestamp) {
+                                    if let Some(signal) = state_guard.process_trade(price, timestamp, app_state_for_stream.clone()) {
                                         let message = format_signal_message(&signal, &pair_trades, &bot_name_for_stream);
                                         
                                         if let Err(e) = bot_trades.send_message(

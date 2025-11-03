@@ -3,6 +3,8 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, prelude::*, sqlx::MySqlPool};
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::Dialogue};
 use crate::services::user_service::UserService;
+use crate::services::strategy_engine::StrategyExecutor;
+use crate::services::strategy_service::StrategyService;
 
 pub type MyDialogue = Dialogue<BotState, InMemStorage<BotState>>;
 pub type HandlerResult = Result<(), anyhow::Error>;
@@ -16,6 +18,8 @@ pub struct AppState {
     pub redis_url: String,
     pub db: Arc<DatabaseConnection>,
     pub user_service: Arc<UserService>,
+    pub strategy_service: Arc<StrategyService>,
+    pub strategy_executor: Arc<StrategyExecutor>,
     pub config: Arc<Config>,
 }
 
@@ -26,19 +30,29 @@ impl AppState {
         let db = get_db_connection(&config.database_url).await?;
         tracing::info!("Connected to database successfully");
         
-        // Initialize UserService
-        let user_service = Arc::new(UserService::new(Arc::new(db.clone())));
+        // Initialize services
+        let db_arc = Arc::new(db);
+        let user_service = Arc::new(UserService::new(db_arc.clone()));
+        let strategy_service = Arc::new(StrategyService::new(db_arc.clone()));
         
-        Ok(AppState {
+        // Create StrategyExecutor (it doesn't need AppState)
+        let executor = Arc::new(StrategyExecutor::new());
+        
+        // Create the AppState
+        let app_state = Self {
             bot_token: config.bot_token.clone(),
             bot_name: config.bot_name.clone(),
             pool: Arc::new(pool),
             database_url: config.database_url.clone(),
             redis_url: config.redis_url.clone(),
-            db: Arc::new(db),
+            db: db_arc,
             user_service,
+            strategy_service,
+            strategy_executor: executor,
             config: Arc::new(config),
-        })
+        };
+        
+        Ok(app_state)
     }
 }
 

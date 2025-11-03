@@ -21,6 +21,8 @@ pub use backtest::{handle_backtest as handle_backtest_wizard, handle_backtest_ca
 pub use start::{handle_start, handle_language_selection, handle_language_callback};
 pub use me::handle_profile_callback;
 pub use payment::{handle_deposit, handle_balance, handle_deposit_callback};
+pub mod start_trading;
+pub use start_trading::{handle_start_trading, handle_start_trading_callback};
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -61,6 +63,8 @@ pub enum Command {
    Deposit,
    /// Xem số dư hiện tại
    Balance,
+   /// Bắt đầu giao dịch với chiến lược đã chọn
+   StartTrading,
 }
 
 
@@ -107,6 +111,7 @@ pub async fn handle_help(
     help_text.push_str(&format!("/me - {}\n", i18n::translate(locale, "cmd_help_me", None)));
     help_text.push_str(&format!("/createstrategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
     help_text.push_str(&format!("/mystrategies - {}\n", i18n::translate(locale, "cmd_help_mystrategies", None)));
+    help_text.push_str(&format!("/starttrading - {}\n", i18n::translate(locale, "cmd_help_start_trading", None)));
     help_text.push_str(&format!("/backtest - {}\n", i18n::translate(locale, "cmd_help_backtest", None)));
     help_text.push_str(&format!("/back - {}\n", i18n::translate(locale, "cmd_help_back", None)));
     help_text.push_str(&format!("/deposit - {}\n", i18n::translate(locale, "cmd_help_deposit", None)));

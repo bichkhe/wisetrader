@@ -16,6 +16,8 @@ pub struct Model {
     pub created_at: Option<DateTimeUtc>,
     #[sea_orm(column_type = "Text")]
     pub telegram_id: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub content: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

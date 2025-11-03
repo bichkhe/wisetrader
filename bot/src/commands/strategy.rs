@@ -345,6 +345,22 @@ pub async fn handle_strategy_callback(
                             // Get telegram_id from callback query
                             let telegram_id = q.from.id.0.to_string();
                             let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
+                            
+                            // Create StrategyConfig for content field
+                            use crate::services::strategy_engine::StrategyConfig;
+                            let strategy_service = crate::services::strategy_service::StrategyService::new(state.db.clone());
+                            let parameters = strategy_service.extract_parameters(&algorithm, &buy_condition, &sell_condition);
+                            let config = StrategyConfig {
+                                strategy_type: algorithm.clone(),
+                                parameters,
+                                pair: pair.clone(),
+                                timeframe: timeframe.clone(),
+                                buy_condition: buy_condition.clone(),
+                                sell_condition: sell_condition.clone(),
+                            };
+                            let content_json = serde_json::to_string(&config)
+                                .unwrap_or_else(|_| "{}".to_string());
+                            
                             let new_strategy = strategies::ActiveModel {
                                 telegram_id: ActiveValue::Set(telegram_id.clone()),
                                 name: ActiveValue::Set(Some(strategy_name.clone())),
@@ -352,6 +368,7 @@ pub async fn handle_strategy_callback(
                                     "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
                                     algorithm, buy_condition, sell_condition, timeframe, pair
                                 ))),
+                                content: ActiveValue::Set(Some(content_json)),
                                 repo_ref: ActiveValue::Set(Some(format!("custom_{}_{}", pair, chrono::Utc::now().timestamp()))),
                                 created_at: ActiveValue::Set(Some(chrono::Utc::now())),
                                 ..Default::default()
@@ -377,7 +394,12 @@ pub async fn handle_strategy_callback(
                                     dialogue.exit().await?;
                                 }
                                 Err(e) => {
-                                    bot.send_message(chat_id, format!("❌ Failed to save: {}", e)).await?;
+                                    let error_msg = i18n::translate(&locale, "strategy_saved_error", Some(&[
+                                        ("error", &e.to_string())
+                                    ]));
+                                    bot.send_message(chat_id, error_msg)
+                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                        .await?;
                                 }
                             }
                         }
@@ -559,6 +581,22 @@ pub async fn handle_strategy_input_callback(
                     // Save strategy to database
                     let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
                     let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
+                    
+                    // Create StrategyConfig for content field
+                    use crate::services::strategy_engine::StrategyConfig;
+                    let strategy_service = crate::services::strategy_service::StrategyService::new(state.db.clone());
+                    let parameters = strategy_service.extract_parameters(&algorithm, &buy_condition, &sell_condition);
+                    let config = StrategyConfig {
+                        strategy_type: algorithm.clone(),
+                        parameters,
+                        pair: pair.clone(),
+                        timeframe: timeframe.clone(),
+                        buy_condition: buy_condition.clone(),
+                        sell_condition: sell_condition.clone(),
+                    };
+                    let content_json = serde_json::to_string(&config)
+                        .unwrap_or_else(|_| "{}".to_string());
+                    
                     let new_strategy = strategies::ActiveModel {
                         telegram_id: ActiveValue::Set(telegram_id.clone()),
                         name: ActiveValue::Set(Some(strategy_name.clone())),
@@ -566,6 +604,7 @@ pub async fn handle_strategy_input_callback(
                             "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
                             algorithm, buy_condition, sell_condition, timeframe, pair
                         ))),
+                        content: ActiveValue::Set(Some(content_json)),
                         repo_ref: ActiveValue::Set(Some(format!("custom_{}_{}", pair, chrono::Utc::now().timestamp()))),
                         created_at: ActiveValue::Set(Some(chrono::Utc::now())),
                         ..Default::default()
@@ -719,8 +758,10 @@ pub async fn handle_my_strategies(
     for strategy in &user_strategies {
         let strategy_name = strategy.name.as_ref().unwrap_or(&unnamed_str);
         // Truncate name if too long (Telegram button text limit is ~64 chars)
-        let display_name = if strategy_name.len() > 30 {
-            format!("{}...", &strategy_name[..27])
+        // Use character-based truncation to avoid UTF-8 boundary errors
+        let display_name = if strategy_name.chars().count() > 30 {
+            let truncated: String = strategy_name.chars().take(27).collect();
+            format!("{}...", truncated)
         } else {
             strategy_name.clone()
         };
@@ -758,6 +799,17 @@ pub async fn handle_delete_strategy_callback(
 ) -> Result<(), anyhow::Error> {
     tracing::info!("handle_delete_strategy_callback called with data: {:?}", q.data);
     
+    // Get user locale
+    let user_id = q.from.id.0 as i64;
+    let user = users::Entity::find_by_id(user_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
     if let Some(data) = &q.data {
         // Handle confirmation callbacks (delete_confirm_<strategy_id>)
         if data.as_str().starts_with("delete_confirm_") {
@@ -765,8 +817,9 @@ pub async fn handle_delete_strategy_callback(
             let strategy_id: u64 = match strategy_id_str.parse() {
                 Ok(id) => id,
                 Err(_) => {
+                    let error_msg = i18n::translate(locale, "error_invalid_strategy_id", None);
                     bot.answer_callback_query(q.id)
-                        .text("Invalid strategy ID")
+                        .text(&error_msg)
                         .await?;
                     return Ok(());
                 }
@@ -844,8 +897,9 @@ pub async fn handle_delete_strategy_callback(
             let strategy_id: u64 = match strategy_id_str.parse() {
                 Ok(id) => id,
                 Err(_) => {
+                    let error_msg = i18n::translate(locale, "error_invalid_strategy_id", None);
                     bot.answer_callback_query(q.id)
-                        .text("Invalid strategy ID")
+                        .text(&error_msg)
                         .await?;
                     return Ok(());
                 }
