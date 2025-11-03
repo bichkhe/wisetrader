@@ -25,19 +25,59 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new() -> Result<Self, anyhow::Error> {
-        let config = Config::from_env()?;
-        let pool = get_pool(&config.database_url).await?;
-        let db = get_db_connection(&config.database_url).await?;
-        tracing::info!("Connected to database successfully");
-        
+        tracing::info!("Loading configuration from environment...");
+        let config = match Config::from_env() {
+            Ok(cfg) => {
+                tracing::info!("Configuration loaded successfully");
+                tracing::info!("Bot name: {}", cfg.bot_name);
+                tracing::info!("Database URL: {}", cfg.database_url);
+                tracing::info!("Redis URL: {}", cfg.redis_url);
+                tracing::info!("API Base URL: {}", cfg.api_base_url);
+                cfg
+            }
+            Err(e) => {
+                tracing::error!("Failed to load configuration: {:?}", e);
+                return Err(e);
+            }
+        };
+
+        tracing::info!("Connecting to MySQL database...");
+        let pool = match get_pool(&config.database_url).await {
+            Ok(p) => {
+                tracing::info!("MySQL pool created successfully");
+                p
+            }
+            Err(e) => {
+                tracing::error!("Failed to create MySQL pool: {:?}", e);
+                return Err(e);
+            }
+        };
+
+        tracing::info!("Connecting to database via SeaORM...");
+        let db = match get_db_connection(&config.database_url).await {
+            Ok(conn) => {
+                tracing::info!("Database connection established successfully");
+                conn
+            }
+            Err(e) => {
+                tracing::error!("Failed to connect to database: {:?}", e);
+                return Err(e);
+            }
+        };
+
         // Initialize services
+        tracing::info!("Initializing services...");
         let db_arc = Arc::new(db);
         let user_service = Arc::new(UserService::new(db_arc.clone()));
+        tracing::info!("UserService initialized");
+
         let strategy_service = Arc::new(StrategyService::new(db_arc.clone()));
-        
+        tracing::info!("StrategyService initialized");
+
         // Create StrategyExecutor (it doesn't need AppState)
         let executor = Arc::new(StrategyExecutor::new());
-        
+        tracing::info!("StrategyExecutor initialized");
+
         // Create the AppState
         let app_state = Self {
             bot_token: config.bot_token.clone(),
@@ -51,7 +91,8 @@ impl AppState {
             strategy_executor: executor,
             config: Arc::new(config),
         };
-        
+
+        tracing::info!("AppState created successfully");
         Ok(app_state)
     }
 }

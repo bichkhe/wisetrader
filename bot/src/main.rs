@@ -118,8 +118,19 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Starting WiseTrader bot...");
 
     // Initialize AppState with configuration
-    let app_state = Arc::new(AppState::new().await?);
-    tracing::info!("AppState initialized");
+    tracing::info!("Initializing AppState...");
+    let app_state = match AppState::new().await {
+        Ok(state) => {
+            tracing::info!("AppState initialized successfully");
+            Arc::new(state)
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize AppState: {:?}", e);
+            tracing::error!("Error details: {}", e);
+            return Err(e);
+        }
+    };
+    tracing::info!("AppState wrapped in Arc");
 
     // Create bot - teloxide will handle timeout internally
     // We'll configure error handling instead
