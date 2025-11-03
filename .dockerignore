@@ -1,0 +1,31 @@
+# Ignore target directory
+target/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore test files
+*_test.rs
+
+# Ignore local env files (keep .env for docker-compose)
+.env.local
+
+# Ignore HTML reports
+html_reports/
+
+# Ignore examples
+bot/examples/
+
+# Do NOT ignore Cargo.lock - we need it for reproducible builds
+# Cargo.lock
