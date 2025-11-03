@@ -107,12 +107,19 @@ services:
         - RUST_VERSION=1.90
     image: wisetrader/bot:latest
     container_name: wisetrader_bot
+    volumes:
+      - ./html_reports:/app/html_reports
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_NAME=${BOT_NAME:-wisetrader}
       - TELOXIDE_TOKEN=${TELOXIDE_TOKEN}
       - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
       - REDIS_URL=redis://redis:6379
       - API_BASE_URL=http://api:9999
+      - GENERATE_HTML_REPORTS=${GENERATE_HTML_REPORTS:-false}
+      - HTML_REPORTS_DIR=/app/html_reports
+      - HTML_REPORTS_BASE_URL=${HTML_REPORTS_BASE_URL:-http://localhost:9999/reports}
+      - TRADING_SIGNAL_CHANNEL_ID=${TRADING_SIGNAL_CHANNEL_ID}
       - FREQTRADE_API_URL=http://freqtrade:8081
       - FREQTRADE_USERNAME=freqtrader
       - FREQTRADE_PASSWORD=freqtraderpass
