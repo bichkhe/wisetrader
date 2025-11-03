@@ -1,18 +1,26 @@
-FROM rust:1.90 as builder
+FROM rust:1.90-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy workspace files
 COPY Cargo.toml ./
 
-# Create workspace structure - copy all Cargo.toml for all members
+# Create workspace structure - copy shared library (needed by all members)
 COPY shared ./shared
-COPY api/Cargo.toml ./api/Cargo.toml
-COPY bot/Cargo.toml ./bot/Cargo.toml
+
+# Create directories and copy Cargo.toml for all workspace members
+RUN mkdir -p api/src bot/src
+COPY api/Cargo.toml ./api/
+COPY bot/Cargo.toml ./bot/
 
 # Create dummy files for all workspace members to build dependencies
-RUN mkdir -p api/src bot/src && \
-    echo "fn main() {}" > api/src/main.rs && \
+RUN echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs
 
 # Build dependencies (this layer will be cached)
@@ -24,8 +32,9 @@ RUN rm -rf api/src bot/src
 # Copy real source files (only api)
 COPY api/src ./api/src
 
-# Build the actual API
-RUN cargo build --package api --release
+# Build the actual API with optimizations
+RUN cargo build --package api --release && \
+    strip target/release/api
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -33,17 +42,29 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/api /app/api
 
-# Create html_reports directory
-RUN mkdir -p /app/html_reports
+# Create html_reports directory and set ownership
+RUN mkdir -p /app/html_reports && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 EXPOSE 9999
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:9999/health || exit 1
 
 CMD ["./api"]
 

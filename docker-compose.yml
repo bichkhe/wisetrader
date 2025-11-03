@@ -13,10 +13,14 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot2025"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - wisetrader
 
   redis:
     image: redis:7-alpine
@@ -30,6 +34,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - wisetrader
 
   freqtrade:
     image: freqtradeorg/freqtrade:stable
@@ -47,8 +55,8 @@ services:
       - "9081:8081"  # API
     volumes:
       - freqtrade_data:/freqtrade/user_data
-      - ./docker/freqtrade/config.json:/freqtrade/user_data/config.json
-      - ./docker/freqtrade/strategies:/freqtrade/user_data/strategies
+      - ./docker/freqtrade/config.json:/freqtrade/user_data/config.json:ro
+      - ./docker/freqtrade/strategies:/freqtrade/user_data/strategies:ro
     environment:
       - FT_ENFORCE_ENV=false
     healthcheck:
@@ -56,14 +64,21 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - wisetrader
 
   api:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+      args:
+        - RUST_VERSION=1.90
+    image: wisetrader/api:latest
     container_name: wisetrader_api
     ports:
       - "9999:9999"
@@ -74,21 +89,23 @@ services:
       - REDIS_URL=redis://redis:6379
       - HTML_REPORTS_DIR=/app/html_reports
       - API_BASE_URL=http://localhost:9999
+      - RUST_LOG=${RUST_LOG:-info}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    restart: unless-stopped
+    networks:
+      - wisetrader
 
   bot:
     build:
       context: .
       dockerfile: docker/Dockerfile.bot
+      args:
+        - RUST_VERSION=1.90
+    image: wisetrader/bot:latest
     container_name: wisetrader_bot
     environment:
       - TELOXIDE_TOKEN=${TELOXIDE_TOKEN}
@@ -98,18 +115,27 @@ services:
       - FREQTRADE_API_URL=http://freqtrade:8081
       - FREQTRADE_USERNAME=freqtrader
       - FREQTRADE_PASSWORD=freqtraderpass
-      - RUST_LOG=info
+      - RUST_LOG=${RUST_LOG:-info}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
       api:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
+    networks:
+      - wisetrader
+
+networks:
+  wisetrader:
+    driver: bridge
 
 volumes:
   mysql_data:
+    driver: local
   redis_data:
+    driver: local
   freqtrade_data:
+    driver: local
 

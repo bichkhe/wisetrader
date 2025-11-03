@@ -1,18 +1,26 @@
-FROM rust:1.90 as builder
+FROM rust:1.90-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy workspace files
 COPY Cargo.toml ./
 
-# Create workspace structure - copy all Cargo.toml for all members
+# Create workspace structure - copy shared library (needed by all members)
 COPY shared ./shared
-COPY api/Cargo.toml ./api/Cargo.toml
-COPY bot/Cargo.toml ./bot/Cargo.toml
+
+# Create directories and copy Cargo.toml for all workspace members
+RUN mkdir -p api/src bot/src
+COPY api/Cargo.toml ./api/
+COPY bot/Cargo.toml ./bot/
 
 # Create dummy files for all workspace members to build dependencies
-RUN mkdir -p api/src bot/src && \
-    echo "fn main() {}" > api/src/main.rs && \
+RUN echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs
 
 # Build dependencies (this layer will be cached)
@@ -25,15 +33,20 @@ RUN rm -rf api/src bot/src
 COPY bot/src ./bot/src
 COPY bot/locales ./bot/locales
 
-# Build the actual bot
-RUN cargo build --package bot --release
+# Build the actual bot with optimizations
+RUN cargo build --package bot --release && \
+    strip target/release/bot
 
 # Runtime stage
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
@@ -41,6 +54,12 @@ WORKDIR /app
 COPY --from=builder /app/target/release/bot /app/bot
 
 # Copy locales
-COPY bot/locales ./locales
+COPY --from=builder /app/bot/locales ./locales
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 CMD ["./bot"]
