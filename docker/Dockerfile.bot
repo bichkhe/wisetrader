@@ -35,8 +35,10 @@ COPY bot/src ./bot/src
 COPY bot/locales ./bot/locales
 
 # Build the actual bot with optimizations
-RUN cargo build --package bot --release && \
-    strip target/release/bot
+RUN cargo build --package bot --release
+
+# Strip binary to reduce size (install binutils if needed)
+RUN strip target/release/bot || true
 
 # Runtime stage
 FROM debian:bookworm-slim

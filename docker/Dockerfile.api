@@ -34,8 +34,10 @@ COPY shared/src ./shared/src
 COPY api/src ./api/src
 
 # Build the actual API with optimizations
-RUN cargo build --package api --release && \
-    strip target/release/api
+RUN cargo build --package api --release
+
+# Strip binary to reduce size (install binutils if needed)
+RUN strip target/release/api || true
 
 # Runtime stage
 FROM debian:bookworm-slim
