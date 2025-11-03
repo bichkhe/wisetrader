@@ -9,6 +9,9 @@ pub struct Config {
     pub html_reports_dir: String,
     pub html_reports_base_url: Option<String>,
     pub api_base_url: String,
+    pub webhook_url: Option<String>,
+    pub webhook_path: String,
+    pub webhook_port: u16,
 }
 
 impl Config {
@@ -31,6 +34,13 @@ impl Config {
             html_reports_base_url: std::env::var("HTML_REPORTS_BASE_URL").ok(),
             api_base_url: std::env::var("API_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:9999".to_string()),
+            webhook_url: std::env::var("WEBHOOK_URL").ok(),
+            webhook_path: std::env::var("WEBHOOK_PATH")
+                .unwrap_or_else(|_| "/webhook".to_string()),
+            webhook_port: std::env::var("WEBHOOK_PORT")
+                .unwrap_or_else(|_| "8443".to_string())
+                .parse()
+                .unwrap_or(8443),
         })
     }
 }

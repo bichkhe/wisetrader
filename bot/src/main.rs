@@ -3,6 +3,7 @@ use std::sync::Arc;
 use teloxide::{dispatching::{UpdateHandler, dialogue}, prelude::*};
 use teloxide::{dispatching::dialogue::InMemStorage};
 use tracing::{info, warn, error};
+use url::Url;
 mod commands;
 mod state;
 mod services;
@@ -111,25 +112,18 @@ async fn main() -> Result<(), anyhow::Error> {
     let app_state = Arc::new(AppState::new().await?);
     tracing::info!("AppState initialized");
 
-    // Create HTTP client with increased timeout for unstable network connections
-    let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60)) // 60 seconds timeout instead of default 30
-        .connect_timeout(std::time::Duration::from_secs(30)) // 30 seconds connection timeout
-        .build()
-        .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
+    // Create bot - teloxide will handle timeout internally
+    // We'll configure error handling instead
+    let bot = Bot::new(&app_state.bot_token);
+    tracing::info!("Bot created");
 
-    // Create bot with custom HTTP client
-    let bot = Bot::with_client(&app_state.bot_token, http_client);
-    tracing::info!("Bot created with extended timeout configuration");
-
-    // Spawn the dispatcher in a separate Tokio task (thread)
+    // Spawn the dispatcher with error handler for network timeout recovery
     let mut dispatcher = Dispatcher::builder(bot.clone(), schema())
         .dependencies(dptree::deps![
             InMemStorage::<BotState>::new(),
             app_state.clone()
         ])
         .enable_ctrlc_handler()
-        .error_handler(LoggingErrorHandler::new())
         .build();
 
     // Start trading signal service if channel ID is configured
@@ -151,8 +145,66 @@ async fn main() -> Result<(), anyhow::Error> {
         info!("ℹ️  TRADING_SIGNAL_CHANNEL_ID not set, trading signals disabled");
     }
 
-    tracing::info!("Bot is running and waiting for updates...");
-    dispatcher.dispatch().await;
-
+    // Check if webhook mode is enabled
+    if let Some(webhook_url) = &app_state.config.webhook_url {
+        // WEBHOOK MODE
+        info!("🌐 Starting bot in WEBHOOK mode");
+        info!("📡 Webhook URL: {}", webhook_url);
+        info!("🔗 Webhook path: {}", app_state.config.webhook_path);
+        info!("🔌 Listening on port: {}", app_state.config.webhook_port);
+        
+        // Delete old webhook if exists (cleanup)
+        bot.delete_webhook().await?;
+        info!("🧹 Old webhook deleted");
+        
+        // Set new webhook
+        let webhook_url_full = format!("{}{}", webhook_url, app_state.config.webhook_path);
+        let webhook_url_parsed = Url::parse(&webhook_url_full)?;
+        bot.set_webhook(webhook_url_parsed).await?;
+        info!("✅ Webhook set: {}", webhook_url_full);
+        
+        // Create webhook listener using teloxide's built-in webhook support
+        use teloxide::update_listeners::webhooks;
+        use std::net::SocketAddr;
+        
+        let addr = SocketAddr::from(([0, 0, 0, 0], app_state.config.webhook_port));
+        let path = app_state.config.webhook_path.parse()?;
+        
+        info!("🚀 Starting webhook server on {}", addr);
+        info!("📥 Webhook endpoint: {}", app_state.config.webhook_path);
+        
+        // Create webhook listener with Axum
+        // axum_to_router returns (listener, server_future, stop_token)
+        // The server_future needs to be spawned to run the HTTP server
+        let (listener, server_future, _stop_token) = webhooks::axum_to_router(
+            bot.clone(),
+            webhooks::Options::new(addr, path),
+        )
+        .await?;
+        
+        // Start Axum server in background - this runs the HTTP server
+        info!("🌐 Starting webhook HTTP server on {}", addr);
+        tokio::spawn(async move {
+            server_future.await;
+        });
+        
+        // Start dispatcher with webhook listener
+        // The listener already handles receiving updates from Telegram
+        // Use teloxide's built-in IgnoringErrorHandlerSafe for Infallible errors
+        use teloxide::error_handlers::IgnoringErrorHandlerSafe;
+        use std::sync::Arc;
+        dispatcher.dispatch_with_listener(listener, Arc::new(IgnoringErrorHandlerSafe)).await;
+    } else {
+        // POLLING MODE (fallback)
+        warn!("📡 Webhook URL not set, using POLLING mode");
+        warn!("💡 To use webhook mode, set WEBHOOK_URL environment variable");
+        
+        tracing::info!("Bot is running and waiting for updates...");
+        
+        // Note: The "TimedOut" errors from update listener are expected during network issues.
+        // Teloxide automatically retries connections. These errors don't crash the bot.
+        dispatcher.dispatch().await;
+    }
+    
     Ok(())
 }
