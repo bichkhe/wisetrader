@@ -26,8 +26,8 @@ RUN mkdir -p shared/src api/src bot/src && \
 # Build dependencies (this layer will be cached)
 RUN cargo build --package bot --release
 
-# Remove dummy sources
-RUN rm -rf shared/src api/src bot/src
+# Remove dummy sources (keep api/src with dummy for workspace)
+RUN rm -rf shared/src bot/src
 
 # Copy real source files
 COPY shared/src ./shared/src
