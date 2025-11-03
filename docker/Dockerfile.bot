@@ -38,7 +38,7 @@ COPY bot/locales ./bot/locales
 RUN cargo build --package bot --release
 
 # Strip binary to reduce size (install binutils if needed)
-RUN strip target/release/bot || true
+# RUN strip target/release/bot || true
 
 # Runtime stage
 FROM debian:bookworm-slim
