@@ -1,0 +1,44 @@
+FROM rust:1.75 as builder
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+
+# Create workspace structure
+COPY shared ./shared
+COPY bot/Cargo.toml ./bot/Cargo.toml
+
+# Create dummy main.rs to build dependencies
+RUN mkdir -p bot/src && \
+    echo "fn main() {}" > bot/src/main.rs
+
+# Build dependencies (this layer will be cached)
+RUN cargo build --package bot --release
+
+# Remove dummy source
+RUN rm -rf bot/src
+
+# Copy real source files
+COPY bot/src ./bot/src
+COPY bot/locales ./bot/locales
+
+# Build the actual bot
+RUN cargo build --package bot --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/bot /app/bot
+
+# Copy locales
+COPY bot/locales ./locales
+
+CMD ["./bot"]

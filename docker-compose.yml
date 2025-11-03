@@ -85,6 +85,29 @@ services:
       timeout: 10s
       retries: 3
 
+  bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.bot
+    container_name: wisetrader_bot
+    environment:
+      - TELOXIDE_TOKEN=${TELOXIDE_TOKEN}
+      - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
+      - REDIS_URL=redis://redis:6379
+      - API_BASE_URL=http://api:9999
+      - FREQTRADE_API_URL=http://freqtrade:8081
+      - FREQTRADE_USERNAME=freqtrader
+      - FREQTRADE_PASSWORD=freqtraderpass
+      - RUST_LOG=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   mysql_data:
   redis_data:
