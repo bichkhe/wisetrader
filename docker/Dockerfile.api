@@ -31,6 +31,7 @@ RUN rm -rf shared/src api/src
 
 # Copy real source files
 COPY shared/src ./shared/src
+COPY shared/templates ./shared/templates
 COPY api/src ./api/src
 
 # Build the actual API with optimizations
