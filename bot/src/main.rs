@@ -111,9 +111,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let app_state = Arc::new(AppState::new().await?);
     tracing::info!("AppState initialized");
 
-    // Create bot
-    let bot = Bot::new(&app_state.bot_token);
-    tracing::info!("Bot created");
+    // Create HTTP client with increased timeout for unstable network connections
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60)) // 60 seconds timeout instead of default 30
+        .connect_timeout(std::time::Duration::from_secs(30)) // 30 seconds connection timeout
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
+
+    // Create bot with custom HTTP client
+    let bot = Bot::with_client(&app_state.bot_token, http_client);
+    tracing::info!("Bot created with extended timeout configuration");
 
     // Spawn the dispatcher in a separate Tokio task (thread)
     let mut dispatcher = Dispatcher::builder(bot.clone(), schema())
@@ -122,6 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
             app_state.clone()
         ])
         .enable_ctrlc_handler()
+        .error_handler(LoggingErrorHandler::new())
         .build();
 
     // Start trading signal service if channel ID is configured
