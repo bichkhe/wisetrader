@@ -60,10 +60,17 @@ COPY --from=builder /app/target/release/bot /app/bot
 # Copy locales
 COPY --from=builder /app/bot/locales ./locales
 
-# Set ownership
-RUN chown -R appuser:appuser /app
+# Copy entrypoint script
+COPY docker/entrypoint-bot.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Create html_reports directory and set ownership
+RUN mkdir -p /app/html_reports && \
+    chown -R appuser:appuser /app && \
+    chmod +x /app/bot
 
 # Switch to non-root user
 USER appuser
 
-CMD ["./bot"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []
