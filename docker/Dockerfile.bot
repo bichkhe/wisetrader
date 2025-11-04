@@ -45,6 +45,9 @@ COPY . .
 # Build bot binary (optimized)
 RUN cargo build --release --package bot
 
+# Build migration binary
+RUN cargo build --release --package migration
+
 # ====== Stage 3: Runtime ======
 FROM debian:trixie-slim
 
@@ -63,12 +66,15 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 # Copy compiled bot binary
 COPY --from=builder /app/target/release/bot /app/bot
 
+# Copy migration binary
+COPY --from=builder /app/target/release/migration /app/migration
+
 # Copy bot assets
 COPY --from=builder /app/bot/locales ./locales
 
 # Copy entrypoint
 COPY docker/entrypoint-bot.sh /entrypoint.sh
-RUN mkdir -p /app/html_reports && chmod +x /entrypoint.sh && chmod +x /app/bot
+RUN mkdir -p /app/html_reports && chmod +x /entrypoint.sh && chmod +x /app/bot && chmod +x /app/migration
 
 # Set permissions
 RUN chown -R appuser:appuser /app
