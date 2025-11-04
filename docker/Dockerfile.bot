@@ -69,12 +69,13 @@ RUN cargo build --release --package migration
 # ====== Stage 5: Runtime ======
 FROM debian:trixie-slim
 
-# Install runtime dependencies
+# Install runtime dependencies including gosu for user switching
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
     tzdata \
     netcat-traditional \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory and user
@@ -97,7 +98,8 @@ RUN mkdir -p /app/html_reports && chmod +x /entrypoint.sh && chmod +x /app/bot &
 # Set permissions
 RUN chown -R appuser:appuser /app
 
-USER appuser
+# Don't switch to appuser here - entrypoint will do it after fixing volume permissions
+# USER appuser
 
 # Entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

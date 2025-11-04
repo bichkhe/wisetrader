@@ -1,7 +1,29 @@
 #!/bin/bash
 set -e
 
+# Check if we're being re-executed as appuser (after fixing permissions)
+if [ "$SKIP_PERMISSIONS_FIX" = "1" ]; then
+    # We're already running as appuser, skip permission fix
+    :
+else
+    # Running as root, fix permissions first
+    # Fix permissions for strategies directory (if mounted volume has wrong permissions)
+    if [ -d /app/strategies ]; then
+        echo "Fixing permissions for /app/strategies..."
+        chown -R appuser:appuser /app/strategies || true
+        chmod -R 755 /app/strategies || true
+    fi
+    
+    # Switch to appuser and re-exec this script
+    if [ "$(id -u)" = "0" ]; then
+        echo "Switching to appuser for bot execution..."
+        export SKIP_PERMISSIONS_FIX=1
+        exec gosu appuser "$0" "$@"
+    fi
+fi
+
 echo "=== Bot Container Starting ==="
+echo "Running as user: $(whoami) (uid: $(id -u))"
 echo "Environment Variables:"
 echo "BOT_TOKEN: ${BOT_TOKEN:0:10}..."
 echo "BOT_NAME: $BOT_NAME"
