@@ -46,7 +46,7 @@ COPY . .
 RUN cargo build --release --package bot
 
 # ====== Stage 3: Runtime ======
-FROM ubuntu:22.04-slim
+FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
