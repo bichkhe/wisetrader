@@ -168,7 +168,6 @@ impl FreqtradeApiClient {
         );
 
         let start_time = Instant::now();
-        // Download data only for the specific pair
         // Ensure data directory exists first
         let _mkdir_output = Command::new("docker")
             .arg("exec")
@@ -180,29 +179,24 @@ impl FreqtradeApiClient {
             .await;
         
         // Download data only for the specific pair
+        // Use shell wrapper to ensure proper working directory and command resolution
+        let command_str = format!(
+            "cd /freqtrade/user_data && freqtrade download-data --exchange {} --pairs {} --timeframes {} --days {} --config /freqtrade/user_data/config.json --user-data-dir /freqtrade/user_data",
+            exchange, pair, timeframe, days
+        );
+        
         let output = Command::new("docker")
             .arg("exec")
             .arg(container_name)
-            .arg("freqtrade")
-            .arg("download-data")
-            .arg("--exchange")
-            .arg(exchange)
-            .arg("--pairs")
-            .arg(pair) // Specify the exact pair to download
-            .arg("--timeframes")
-            .arg(timeframe)
-            .arg("--days")
-            .arg(days.to_string())
-            .arg("--config")
-            .arg("/freqtrade/user_data/config.json")
-            .arg("--user-data-dir")
-            .arg("/freqtrade/user_data")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(&command_str)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .await?;
         tracing::info!(
-            "Running command: docker exec {} freqtrade download-data --exchange {} --pairs {} --timeframes {} --days {} --config /freqtrade/user_data/config.json --user-data-dir /freqtrade/user_data",
+            "Running command: docker exec {} /bin/sh -c 'cd /freqtrade/user_data && freqtrade download-data --exchange {} --pairs {} --timeframes {} --days {} --config /freqtrade/user_data/config.json --user-data-dir /freqtrade/user_data'",
             container_name,
             exchange,
             pair,

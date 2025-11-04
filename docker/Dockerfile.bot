@@ -69,14 +69,31 @@ RUN cargo build --release --package migration
 # ====== Stage 5: Runtime ======
 FROM debian:trixie-slim
 
-# Install runtime dependencies including gosu for user switching
+# Install runtime dependencies including gosu for user switching and docker CLI
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
     tzdata \
     netcat-traditional \
     gosu \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (needed for docker exec into freqtrade container)
+# Detect architecture and install appropriate Docker CLI
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        DOCKER_ARCH="x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        DOCKER_ARCH="aarch64"; \
+    else \
+        DOCKER_ARCH="x86_64"; \
+    fi && \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-24.0.7.tgz" | \
+    tar -xzC /tmp && \
+    mv /tmp/docker/docker /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker && \
+    rm -rf /tmp/docker
 
 # Create app directory and user
 WORKDIR /app

@@ -50,9 +50,9 @@
         "enabled": false
     },
     "telegram": {
-        "enabled": false,
+        "enabled": true,
         "token": "dummy_token_not_used",
-        "chat_id": "0"
+        "chat_id": "-5032774929"
     },
     "api_server": {
         "enabled": true,

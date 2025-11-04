@@ -115,6 +115,9 @@ services:
       - strategies_data:/app/strategies
       # Preset strategies from host (read-only, for reference)
       - ./docker/freqtrade/strategies:/app/strategies_presets:ro
+      # Mount Docker socket to allow docker exec into other containers
+      # This enables bot container to execute commands in freqtrade container
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - BOT_NAME=${BOT_NAME:-wisetrader}
