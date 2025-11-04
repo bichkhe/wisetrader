@@ -8,39 +8,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files
+# Copy all source files
 COPY Cargo.toml ./
-
-# Copy Cargo.toml and build scripts for all workspace members
-COPY shared/Cargo.toml ./shared/Cargo.toml
-COPY shared/build.rs ./shared/build.rs
-COPY api/Cargo.toml ./api/Cargo.toml
-COPY bot/Cargo.toml ./bot/Cargo.toml
-COPY migration/Cargo.toml ./migration/Cargo.toml
-
-# Create dummy source files for all workspace members to build dependencies
-RUN mkdir -p shared/src api/src bot/src migration/src && \
-    echo "pub fn dummy() {}" > shared/src/lib.rs && \
-    echo "fn main() {}" > api/src/main.rs && \
-    echo "fn main() {}" > bot/src/main.rs && \
-    echo "pub fn dummy() {}" > migration/src/lib.rs
-
-# Build dependencies (this layer will be cached)
+COPY Cargo.lock ./
+COPY shared ./shared
+COPY api ./api
+COPY migration ./migration
+# Build the API
 RUN cargo build --package api --release
-
-# Remove dummy sources (keep bot/src with dummy for workspace)
-RUN rm -rf shared/src api/src
-
-# Copy real source files
-COPY shared/src ./shared/src
-COPY shared/templates ./shared/templates
-COPY api/src ./api/src
-
-# Build the actual API with optimizations
-RUN cargo build --package api --release
-
-# Strip binary to reduce size (install binutils if needed)
-RUN strip target/release/api || true
 
 # Runtime stage
 FROM debian:bookworm-slim
