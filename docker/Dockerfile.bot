@@ -1,56 +1,77 @@
-# ===== Stage 1: Build dependencies =====
+# ====== Stage 1: Cache dependencies ======
 FROM rust:1.90-slim AS chef
 WORKDIR /app
 
-# Copy manifests only
+# Install build dependencies (OpenSSL, pkg-config, compiler)
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Cargo manifests for all workspace members
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml ./shared/Cargo.toml
 COPY shared/build.rs ./shared/build.rs
 COPY api/Cargo.toml ./api/Cargo.toml
 COPY bot/Cargo.toml ./bot/Cargo.toml
 
-# Create dummy sources for caching dependencies
+# Dummy sources to build deps
 RUN mkdir -p shared/src api/src bot/src && \
     echo "pub fn dummy() {}" > shared/src/lib.rs && \
     echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs
 
-# Build dependencies only
+# Prebuild dependencies (cached layer)
 RUN cargo build --release --package bot || true
 
-# ===== Stage 2: Build real binary =====
+
+# ====== Stage 2: Build real binary ======
 FROM rust:1.90-slim AS builder
 WORKDIR /app
 
-# Copy cached deps from previous stage
+# Copy cached target and dependencies
 COPY --from=chef /usr/local/cargo /usr/local/cargo
 COPY --from=chef /app/target /app/target
 
-# Copy full source code
+# Copy full source code (real)
 COPY . .
 
-# Build the real bot
+# Build bot binary (optimized)
 RUN cargo build --release --package bot
 
-# ===== Stage 3: Runtime =====
+# ====== Stage 3: Runtime ======
 FROM debian:bookworm-slim
 
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    netcat-traditional \
     tzdata \
+    netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
+# Create app directory and user
 WORKDIR /app
 RUN useradd -m -u 1001 -s /bin/bash appuser
 
-# Copy binary + resources
+# Copy compiled bot binary
 COPY --from=builder /app/target/release/bot /app/bot
+
+# Copy bot assets
 COPY --from=builder /app/bot/locales ./locales
+COPY --from=builder /app/bot/html_reports ./html_reports 
+
+# Copy entrypoint
 COPY docker/entrypoint-bot.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chmod +x /app/bot
+
+# Set permissions
+RUN chown -R appuser:appuser /app
 
 USER appuser
 
+# Entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
+CMD []
