@@ -76,26 +76,26 @@ migrate_gen:
 # Generate migration file
 migrate_create:
 	@echo "Creating migration: $(name)"
-	cd shared && sea-orm-cli migrate generate --database-url mysql://wisetrader:wisetrader2025@localhost:23306/wisetrader_db $(name)
+	cd migration && sea-orm-cli migrate generate --database-url mysql://wisetrader:wisetrader2025@localhost:23306/wisetrader_db $(name)
 
 # Run migrations using Sea-ORM
 migrate_up:
 	@echo "Running migrations with Sea-ORM..."
-	cd shared/migration && cargo run -- up -u mysql://wisetrader:wisetrader2025@localhost:23306/wisetrader_db 2>&1 | grep -v "Warning" || echo "✅ Migrations completed or already applied!"
+	cd migration && cargo run -- up -u mysql://wisetrader:wisetrader2025@localhost:23306/wisetrader_db 2>&1 | grep -v "Warning" || echo "✅ Migrations completed or already applied!"
 	@echo "Generating entities from database..."
 	@make migrate_auto
 
 # Rollback last migration
 migrate_down:
-	cd shared && sea-orm-cli migrate down
+	cd migration && sea-orm-cli migrate down
 
 # Show migration status
 migrate_status:
-	cd shared && sea-orm-cli migrate status
+	cd migration && sea-orm-cli migrate status
 
 # Fresh migration - rollback all and run again
 migrate_fresh:
-	cd shared && sea-orm-cli migrate fresh
+	cd migration && sea-orm-cli migrate fresh
 
 # Auto-migrate: generate entities from database
 migrate_auto:

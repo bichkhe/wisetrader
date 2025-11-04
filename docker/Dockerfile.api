@@ -16,14 +16,14 @@ COPY shared/Cargo.toml ./shared/Cargo.toml
 COPY shared/build.rs ./shared/build.rs
 COPY api/Cargo.toml ./api/Cargo.toml
 COPY bot/Cargo.toml ./bot/Cargo.toml
-COPY shared/migration/Cargo.toml ./shared/migration/Cargo.toml
+COPY migration/Cargo.toml ./migration/Cargo.toml
 
 # Create dummy source files for all workspace members to build dependencies
-RUN mkdir -p shared/src api/src bot/src shared/migration/src && \
+RUN mkdir -p shared/src api/src bot/src migration/src && \
     echo "pub fn dummy() {}" > shared/src/lib.rs && \
     echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs && \
-    echo "pub fn dummy() {}" > shared/migration/src/lib.rs
+    echo "pub fn dummy() {}" > migration/src/lib.rs
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --package api --release
