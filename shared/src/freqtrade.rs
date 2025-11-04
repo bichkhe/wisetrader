@@ -169,6 +169,17 @@ impl FreqtradeApiClient {
 
         let start_time = Instant::now();
         // Download data only for the specific pair
+        // Ensure data directory exists first
+        let _mkdir_output = Command::new("docker")
+            .arg("exec")
+            .arg(container_name)
+            .arg("mkdir")
+            .arg("-p")
+            .arg("/freqtrade/user_data/data")
+            .output()
+            .await;
+        
+        // Download data only for the specific pair
         let output = Command::new("docker")
             .arg("exec")
             .arg(container_name)
@@ -184,12 +195,14 @@ impl FreqtradeApiClient {
             .arg(days.to_string())
             .arg("--config")
             .arg("/freqtrade/user_data/config.json")
+            .arg("--user-data-dir")
+            .arg("/freqtrade/user_data")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .await?;
         tracing::info!(
-            "Running command: docker exec {} freqtrade download-data --exchange {} --pairs {} --timeframes {} --days {} --config /freqtrade/user_data/config.json",
+            "Running command: docker exec {} freqtrade download-data --exchange {} --pairs {} --timeframes {} --days {} --config /freqtrade/user_data/config.json --user-data-dir /freqtrade/user_data",
             container_name,
             exchange,
             pair,

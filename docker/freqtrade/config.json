@@ -66,6 +66,7 @@
         "username": "freqtrader",
         "password": "freqtraderpass"
     },
+    "user_data_dir": "/freqtrade/user_data",
     "initial_state": "stopped"
 }
 
