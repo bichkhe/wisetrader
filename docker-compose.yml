@@ -56,7 +56,9 @@ services:
     volumes:
       - freqtrade_data:/freqtrade/user_data
       - ./docker/freqtrade/config.json:/freqtrade/user_data/config.json:ro
-      - ./docker/freqtrade/strategies:/freqtrade/user_data/strategies:ro
+      - strategies_data:/freqtrade/user_data/strategies
+      # Preset strategies from host (read-only, for initial setup)
+      - ./docker/freqtrade/strategies:/freqtrade/user_data/strategies_presets:ro
     environment:
       - FT_ENFORCE_ENV=false
     healthcheck:
@@ -109,7 +111,10 @@ services:
     container_name: wisetrader_bot
     volumes:
       - ./html_reports:/app/html_reports
-      - ./docker/freqtrade/strategies:/app/strategies:ro
+      # Shared volume for strategies (read-write, fast for many tests)
+      - strategies_data:/app/strategies
+      # Preset strategies from host (read-only, for reference)
+      - ./docker/freqtrade/strategies:/app/strategies_presets:ro
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - BOT_NAME=${BOT_NAME:-wisetrader}
@@ -125,6 +130,7 @@ services:
       - FREQTRADE_USERNAME=freqtrader
       - FREQTRADE_PASSWORD=freqtraderpass
       - STRATEGIES_PATH=/app/strategies
+      - STRATEGIES_PRESETS_PATH=/app/strategies_presets
       - RUST_LOG=${RUST_LOG:-info}
     depends_on:
       db:
@@ -147,5 +153,7 @@ volumes:
   redis_data:
     driver: local
   freqtrade_data:
+    driver: local
+  strategies_data:
     driver: local
 

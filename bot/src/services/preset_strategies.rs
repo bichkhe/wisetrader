@@ -39,9 +39,15 @@ pub async fn load_strategy_from_local(strategy_name: &str) -> Result<PresetStrat
     let base_path = std::env::var("STRATEGIES_PATH")
         .unwrap_or_else(|_| "/app/strategies".to_string());
     
+    // Preset strategies path (read-only from host)
+    let presets_path = std::env::var("STRATEGIES_PRESETS_PATH")
+        .unwrap_or_else(|_| "/app/strategies_presets".to_string());
+    
     // Try multiple possible paths
+    // Priority: 1) Generated strategies (read-write volume), 2) Preset strategies (read-only), 3) Local paths
     let possible_paths = vec![
         format!("{}/{}.py", base_path, strategy_name),
+        format!("{}/{}.py", presets_path, strategy_name),
         format!("./docker/freqtrade/strategies/{}.py", strategy_name),
         format!("docker/freqtrade/strategies/{}.py", strategy_name),
         format!("../docker/freqtrade/strategies/{}.py", strategy_name),
