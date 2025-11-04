@@ -1,24 +1,53 @@
 use std::process::Command;
+use std::path::PathBuf;
 
 fn main() {
-    // Get git information
+    // Find git root (go up from bot/ directory to workspace root)
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let workspace_root = manifest_dir.parent().unwrap(); // Go up from bot/ to workspace root
+    
+    // Get git information from workspace root
     let hash = Command::new("git")
         .args(&["rev-parse", "HEAD"])
+        .current_dir(workspace_root)
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string());
     
     let branch = Command::new("git")
         .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(workspace_root)
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string());
     
     let tag = Command::new("git")
         .args(&["describe", "--tags", "--abbrev=0"])
+        .current_dir(workspace_root)
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string());
     
     // Get build time
     let build_time = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
