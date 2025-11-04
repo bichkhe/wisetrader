@@ -54,7 +54,7 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
             continue;
         }
         
-        // Skip lines that are only separators (dashes, underscores, box-drawing chars)
+        // Skip lines that are only separators (dashes, underscores, box-drawing chars, pipes)
         if trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || c == '━' || 
                                   c == '═' || c == '┡' || c == '┏' || c == '┗' || 
                                   c == '┳' || c == '┻' || c == '┣' || c == '┫' ||
@@ -63,9 +63,15 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
             continue;
         }
         
+        // Skip lines with pattern like |----|----| or |----|----|----| (pipe + dashes pattern)
+        if trimmed.contains('|') && trimmed.chars().filter(|c| *c == '|' || *c == '-' || *c == '_' || *c == '=').count() as f64 / trimmed.len() as f64 > 0.8 {
+            continue;
+        }
+        
         // Skip lines that are mostly dashes/separators (e.g., "------", "━━━━━━")
         let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
-                                                           *c == '━' || *c == '═' || *c == '─').count();
+                                                           *c == '━' || *c == '═' || *c == '─' ||
+                                                           *c == '|').count();
         if separator_chars as f64 / trimmed.len() as f64 > 0.7 {
             continue;
         }
@@ -142,9 +148,14 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
             }
             
             // Skip separator lines
+            // Skip lines with pattern like |----|----| or |----|----|----| (pipe + dashes pattern)
+            if trimmed.contains('|') && trimmed.chars().filter(|c| *c == '|' || *c == '-' || *c == '_' || *c == '=').count() as f64 / trimmed.len() as f64 > 0.8 {
+                continue;
+            }
+            
             let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
                                                                *c == '━' || *c == '═' || *c == '─' ||
-                                                               *c == '┃' || *c == '│').count();
+                                                               *c == '┃' || *c == '│' || *c == '|').count();
             if separator_chars as f64 / trimmed.len() as f64 > 0.7 {
                 continue;
             }
@@ -185,8 +196,14 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
                 return false;
             }
             // Skip lines that are mostly separators
+            // Skip lines with pattern like |----|----| or |----|----|----| (pipe + dashes pattern)
+            if trimmed.contains('|') && trimmed.chars().filter(|c| *c == '|' || *c == '-' || *c == '_' || *c == '=').count() as f64 / trimmed.len() as f64 > 0.8 {
+                return false;
+            }
+            
             let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
-                                                               *c == '━' || *c == '═' || *c == '─').count();
+                                                               *c == '━' || *c == '═' || *c == '─' ||
+                                                               *c == '|').count();
             let ratio = separator_chars as f64 / trimmed.len() as f64;
             ratio < 0.7
         })
@@ -239,7 +256,14 @@ fn extract_all_tables(stdout: &str) -> Vec<(String, String)> {
             current_table_title = trimmed.to_string();
             in_table = true;
         } else if in_table {
-            if is_table_line {
+            // Skip separator lines with pattern |----|----| or similar
+            let is_separator_line = trimmed.contains('|') && 
+                trimmed.chars().filter(|c| *c == '|' || *c == '-' || *c == '_' || *c == '=').count() as f64 / trimmed.len() as f64 > 0.8;
+            
+            if is_separator_line {
+                // Skip separator lines
+                continue;
+            } else if is_table_line {
                 current_table_lines.push(line.to_string());
             } else if trimmed.is_empty() {
                 // Empty line within table (separator)
