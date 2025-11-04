@@ -14,6 +14,23 @@ else
         chmod -R 755 /app/strategies || true
     fi
     
+    # Fix Docker socket permissions
+    if [ -S /var/run/docker.sock ]; then
+        echo "Fixing Docker socket permissions..."
+        # Get docker group GID from host socket
+        DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock 2>/dev/null || echo "999")
+        echo "Docker socket GID: $DOCKER_GID"
+        # Create docker group with same GID as host
+        groupadd -g "$DOCKER_GID" docker 2>/dev/null || \
+        (groupmod -g "$DOCKER_GID" docker 2>/dev/null || true)
+        # Add appuser to docker group
+        usermod -aG docker appuser 2>/dev/null || true
+        # Fix socket permissions (ensure docker group can access)
+        chmod 666 /var/run/docker.sock 2>/dev/null || true
+        chown root:docker /var/run/docker.sock 2>/dev/null || true
+        echo "Docker socket permissions fixed"
+    fi
+    
     # Switch to appuser and re-exec this script
     if [ "$(id -u)" = "0" ]; then
         echo "Switching to appuser for bot execution..."

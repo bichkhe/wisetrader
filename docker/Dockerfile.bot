@@ -97,7 +97,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 # Create app directory and user
 WORKDIR /app
-RUN useradd -m -u 1001 -s /bin/bash appuser
+RUN useradd -m -u 1001 -s /bin/bash appuser && \
+    # Create docker group (usually GID 999, but we'll check)
+    groupadd -f docker || true && \
+    # Add appuser to docker group to access Docker socket
+    usermod -aG docker appuser || true
 
 # Copy compiled bot binary
 COPY --from=builder /app/target/release/bot /app/bot
