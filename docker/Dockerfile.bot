@@ -61,11 +61,10 @@ COPY --from=builder /app/target/release/bot /app/bot
 
 # Copy bot assets
 COPY --from=builder /app/bot/locales ./locales
-COPY --from=builder /app/bot/html_reports ./html_reports 
 
 # Copy entrypoint
 COPY docker/entrypoint-bot.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && chmod +x /app/bot
+RUN mkdir -p /app/html_reports && chmod +x /entrypoint.sh && chmod +x /app/bot
 
 # Set permissions
 RUN chown -R appuser:appuser /app
