@@ -9,10 +9,12 @@ RUN cargo install cargo-chef --locked
 FROM chef AS planner
 WORKDIR /app
 
-# Copy Cargo manifests
+# Copy Cargo manifests for all workspace members
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml ./shared/Cargo.toml
 COPY api/Cargo.toml ./api/Cargo.toml
+COPY bot/Cargo.toml ./bot/Cargo.toml
+COPY migration/Cargo.toml ./migration/Cargo.toml
 
 # Generate recipe
 RUN cargo chef prepare --recipe-path recipe.json
