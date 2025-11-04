@@ -33,7 +33,6 @@ WORKDIR /app
 
 # Copy cached dependencies only, không copy target binary của bot
 COPY --from=chef /usr/local/cargo /usr/local/cargo
-COPY --from=chef /app/target/debug/deps /app/target/debug/deps
 COPY --from=chef /app/target/release/deps /app/target/release/deps
 # Copy full source code (real)
 COPY . .
