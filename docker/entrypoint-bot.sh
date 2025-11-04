@@ -7,11 +7,27 @@ if [ "$SKIP_PERMISSIONS_FIX" = "1" ]; then
     :
 else
     # Running as root, fix permissions first
-    # Fix permissions for strategies directory (if mounted volume has wrong permissions)
+    # Ensure strategies directory exists and has correct permissions
+    echo "Setting up /app/strategies directory..."
+    mkdir -p /app/strategies || true
+    echo "Fixing permissions for /app/strategies..."
+    chown -R appuser:appuser /app/strategies || true
+    chmod -R 755 /app/strategies || true
+    # Verify permissions
     if [ -d /app/strategies ]; then
-        echo "Fixing permissions for /app/strategies..."
-        chown -R appuser:appuser /app/strategies || true
-        chmod -R 755 /app/strategies || true
+        echo "✅ /app/strategies permissions: $(ls -ld /app/strategies | awk '{print $1, $3, $4}')"
+        # Test write permission
+        if touch /app/strategies/.test_write 2>/dev/null; then
+            rm -f /app/strategies/.test_write
+            echo "✅ Write permission test passed for /app/strategies"
+        else
+            echo "⚠️  Warning: Write permission test failed for /app/strategies"
+            # Try to fix again
+            chown -R appuser:appuser /app/strategies || true
+            chmod -R 777 /app/strategies || true
+        fi
+    else
+        echo "⚠️  Warning: /app/strategies directory does not exist"
     fi
     
     # Fix permissions for html_reports directory
@@ -47,7 +63,8 @@ else
 fi
 
 echo "=== Bot Container Starting ==="
-echo "Running as user: $(whoami) (uid: $(id -u))"
+echo "Running as user: $(whoami) (uid: $(id -u), gid: $(id -g))"
+echo "Groups: $(groups)"
 echo "Environment Variables:"
 echo "BOT_TOKEN: ${BOT_TOKEN:0:10}..."
 echo "BOT_NAME: $BOT_NAME"
@@ -56,6 +73,18 @@ echo "REDIS_URL: $REDIS_URL"
 echo "API_BASE_URL: $API_BASE_URL"
 echo "RUST_LOG: $RUST_LOG"
 echo "GENERATE_HTML_REPORTS: $GENERATE_HTML_REPORTS"
+echo "STRATEGIES_PATH: ${STRATEGIES_PATH:-/app/strategies}"
+echo ""
+echo "=== Directory Permissions ==="
+if [ -d /app/strategies ]; then
+    echo "/app/strategies: $(ls -ld /app/strategies | awk '{print $1, $3, $4, $9}')"
+    echo "Can write to /app/strategies: $(touch /app/strategies/.test 2>&1 && echo 'YES' && rm -f /app/strategies/.test || echo 'NO')"
+else
+    echo "/app/strategies: DOES NOT EXIST"
+fi
+if [ -d /app/html_reports ]; then
+    echo "/app/html_reports: $(ls -ld /app/html_reports | awk '{print $1, $3, $4, $9}')"
+fi
 echo "============================"
 
 # Wait for database to be ready

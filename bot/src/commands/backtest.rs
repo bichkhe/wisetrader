@@ -577,9 +577,37 @@ fn generate_strategy_file(
     config: Option<&crate::services::strategy_engine::StrategyConfig>,
 ) -> Result<PathBuf, anyhow::Error> {
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     
     // Ensure strategies directory exists
-    fs::create_dir_all(strategies_path)?;
+    tracing::info!("Creating strategies directory: {:?}", strategies_path);
+    fs::create_dir_all(strategies_path)
+        .map_err(|e| anyhow::anyhow!("Failed to create strategies directory {:?}: {}", strategies_path, e))?;
+    
+    // Verify directory is writable
+    let metadata = fs::metadata(strategies_path)
+        .map_err(|e| anyhow::anyhow!("Failed to get metadata for {:?}: {}", strategies_path, e))?;
+    tracing::info!("Strategies directory metadata: {:?}, permissions: {:o}", 
+        metadata, metadata.permissions().mode());
+    
+    // Check write permission by attempting to create a test file
+    let test_file = strategies_path.join(".write_test");
+    match fs::File::create(&test_file) {
+        Ok(_) => {
+            fs::remove_file(&test_file)
+                .map_err(|e| tracing::warn!("Failed to remove test file: {}", e)).ok();
+            tracing::info!("✅ Write permission verified for {:?}", strategies_path);
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "No write permission for strategies directory {:?}: {}. \
+                Please check container permissions. Current user: {:?}, UID: {:?}",
+                strategies_path, e,
+                std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
+            ));
+        }
+    }
 
     // Use config parameters if available, otherwise extract from conditions
     let parameters = if let Some(cfg) = config {
@@ -653,8 +681,15 @@ fn generate_strategy_file(
 
     // Write file
     let filepath = strategies_path.join(&filename);
-    fs::write(&filepath, code)?;
-
+    tracing::info!("Writing strategy file to: {:?}", filepath);
+    fs::write(&filepath, code)
+        .map_err(|e| anyhow::anyhow!(
+            "Failed to write strategy file to {:?}: {}. \
+            Please check write permissions for strategies directory.",
+            filepath, e
+        ))?;
+    
+    tracing::info!("✅ Successfully created strategy file: {:?}", filepath);
     Ok(filepath)
 }
 
