@@ -12,6 +12,7 @@ pub struct Config {
     pub webhook_url: Option<String>,
     pub webhook_path: String,
     pub webhook_port: u16,
+    pub mobile_friendly_tables: bool,
 }
 
 impl Config {
@@ -41,6 +42,10 @@ impl Config {
                 .unwrap_or_else(|_| "8443".to_string())
                 .parse()
                 .unwrap_or(8443),
+            mobile_friendly_tables: std::env::var("MOBILE_FRIENDLY_TABLES")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
         })
     }
 }

@@ -134,6 +134,7 @@ services:
       - FREQTRADE_PASSWORD=freqtraderpass
       - STRATEGIES_PATH=/app/strategies
       - STRATEGIES_PRESETS_PATH=/app/strategies_presets
+      - MOBILE_FRIENDLY_TABLES=${MOBILE_FRIENDLY_TABLES:-true}
       - RUST_LOG=${RUST_LOG:-info}
     depends_on:
       db:

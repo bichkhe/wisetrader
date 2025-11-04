@@ -38,6 +38,98 @@ fn split_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
     chunks
 }
 
+/// Convert table with box-drawing characters to mobile-friendly format
+/// Parses table rows and converts to simple list format
+fn format_table_mobile_friendly(table_content: &str) -> String {
+    let lines: Vec<&str> = table_content.lines().collect();
+    let mut formatted = String::new();
+    let mut headers: Vec<String> = Vec::new();
+    let mut data_rows: Vec<Vec<String>> = Vec::new();
+    
+    for line in lines.iter() {
+        let trimmed = line.trim();
+        
+        // Skip separator lines (box-drawing only)
+        if trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || c == '━' || 
+                                  c == '═' || c == '┡' || c == '┏' || c == '┗' || 
+                                  c == '┳' || c == '┻' || c == '┣' || c == '┫' ||
+                                  c == ' ' || c == '─') {
+            continue;
+        }
+        
+        // Parse table row - split by box-drawing characters
+        let cells: Vec<String> = trimmed
+            .split(|c| c == '┃' || c == '│' || c == '┼')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        
+        if cells.is_empty() {
+            continue;
+        }
+        
+        // First non-separator row is usually headers
+        if headers.is_empty() && cells.len() > 1 {
+            headers = cells.clone();
+        } else if !headers.is_empty() && cells.len() == headers.len() {
+            // Data row with same number of columns as headers
+            data_rows.push(cells);
+        } else if !headers.is_empty() && cells.len() > 0 {
+            // Row with different column count - might be summary or special row
+            // Format as single line
+            let row_text: String = cells.join(" | ");
+            if !row_text.trim().is_empty() {
+                formatted.push_str(&format!("• {}\n", row_text));
+            }
+        }
+    }
+    
+    // Format table rows with headers
+    if !headers.is_empty() && !data_rows.is_empty() {
+        // Limit rows for mobile readability
+        let max_rows = 20;
+        let rows_to_show = std::cmp::min(data_rows.len(), max_rows);
+        
+        for (row_idx, row) in data_rows.iter().take(rows_to_show).enumerate() {
+            formatted.push_str(&format!("\n📌 <b>Row {}</b>\n", row_idx + 1));
+            for (col_idx, cell) in row.iter().enumerate() {
+                if col_idx < headers.len() && !cell.trim().is_empty() {
+                    let header = &headers[col_idx];
+                    formatted.push_str(&format!("  • <b>{}</b>: {}\n", 
+                        escape_html(header), escape_html(cell)));
+                }
+            }
+        }
+        
+        if data_rows.len() > max_rows {
+            formatted.push_str(&format!("\n... ({} more rows)\n", data_rows.len() - max_rows));
+        }
+    } else if formatted.is_empty() {
+        // Fallback: just clean up the table format
+        for line in lines.iter() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && 
+               !trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || 
+                                       c == '━' || c == '═' || c == ' ' || c == '─') {
+                // Remove box-drawing chars, keep content
+                let cleaned = trimmed
+                    .chars()
+                    .filter(|c| *c != '┃' && *c != '│' && *c != '┼' && 
+                               *c != '┡' && *c != '┏' && *c != '┗')
+                    .collect::<String>()
+                    .trim()
+                    .to_string();
+                
+                if !cleaned.is_empty() {
+                    formatted.push_str(&format!("• {}\n", cleaned));
+                }
+            }
+        }
+    }
+    
+    formatted
+}
+
 /// Extract all tables from freqtrade output, returns vector of (title, content)
 fn extract_all_tables(stdout: &str) -> Vec<(String, String)> {
     let lines: Vec<&str> = stdout.lines().collect();
@@ -997,6 +1089,9 @@ pub async fn handle_backtest_callback(
                                         
                                         // Extract and send all tables from backtest output
                                         if !tables.is_empty() {
+                                            // Check if mobile-friendly format is enabled
+                                            let use_mobile_format = config.mobile_friendly_tables;
+                                            
                                             // Send each table as a separate message for better readability
                                             for (idx, (title, table_content)) in tables.iter().enumerate() {
                                                 let table_num = idx + 1;
@@ -1021,8 +1116,17 @@ pub async fn handle_backtest_callback(
                                                     total_tables
                                                 );
                                                 
+                                                // Format table content based on mobile-friendly flag
+                                                let formatted_content = if use_mobile_format {
+                                                    format_table_mobile_friendly(table_content)
+                                                } else {
+                                                    escape_html(table_content)
+                                                };
+                                                
                                                 // Split table content into chunks if needed
-                                                let chunks = split_into_chunks(table_content, 3200); // Smaller chunk for table formatting
+                                                // Use larger chunk size for mobile format (it's more compact)
+                                                let chunk_size = if use_mobile_format { 3500 } else { 3200 };
+                                                let chunks = split_into_chunks(&formatted_content, chunk_size);
                                                 
                                                 for (chunk_idx, chunk) in chunks.iter().enumerate() {
                                                     let mut table_msg = if chunk_idx == 0 {
@@ -1031,9 +1135,15 @@ pub async fn handle_backtest_callback(
                                                         format!("{} <b>{} (cont.)</b>\n", emoji, escape_html(title))
                                                     };
                                                     
-                                                    table_msg.push_str("<pre>");
-                                                    table_msg.push_str(&escape_html(chunk));
-                                                    table_msg.push_str("</pre>");
+                                                    if use_mobile_format {
+                                                        // Mobile-friendly format: no <pre> tag, just formatted text
+                                                        table_msg.push_str(&chunk);
+                                                    } else {
+                                                        // Original format: use <pre> for monospace
+                                                        table_msg.push_str("<pre>");
+                                                        table_msg.push_str(chunk);
+                                                        table_msg.push_str("</pre>");
+                                                    }
                                                     
                                                     bot.send_message(chat_id, table_msg)
                                                         .parse_mode(teloxide::types::ParseMode::Html)
