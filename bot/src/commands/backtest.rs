@@ -743,7 +743,10 @@ pub async fn handle_backtest_callback(
                             .await?;
 
                         // Generate strategy file
-                        let strategies_path = Path::new("./docker/freqtrade/strategies");
+                        // Use env var for Docker path, fallback to local path
+                        let strategies_path_str = std::env::var("STRATEGIES_PATH")
+                            .unwrap_or_else(|_| "./docker/freqtrade/strategies".to_string());
+                        let strategies_path = Path::new(&strategies_path_str);
                         
                         match generate_strategy_file(
                             strategy_id,

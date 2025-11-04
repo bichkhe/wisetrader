@@ -35,8 +35,13 @@ use tokio::fs;
 
 /// Load strategy file from local filesystem and parse it
 pub async fn load_strategy_from_local(strategy_name: &str) -> Result<PresetStrategy> {
+    // Get strategy path from env var or use defaults
+    let base_path = std::env::var("STRATEGIES_PATH")
+        .unwrap_or_else(|_| "/app/strategies".to_string());
+    
     // Try multiple possible paths
     let possible_paths = vec![
+        format!("{}/{}.py", base_path, strategy_name),
         format!("./docker/freqtrade/strategies/{}.py", strategy_name),
         format!("docker/freqtrade/strategies/{}.py", strategy_name),
         format!("../docker/freqtrade/strategies/{}.py", strategy_name),
