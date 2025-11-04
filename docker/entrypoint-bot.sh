@@ -14,6 +14,13 @@ else
         chmod -R 755 /app/strategies || true
     fi
     
+    # Fix permissions for html_reports directory
+    if [ -d /app/html_reports ]; then
+        echo "Fixing permissions for /app/html_reports..."
+        chown -R appuser:appuser /app/html_reports || true
+        chmod -R 755 /app/html_reports || true
+    fi
+    
     # Fix Docker socket permissions
     if [ -S /var/run/docker.sock ]; then
         echo "Fixing Docker socket permissions..."

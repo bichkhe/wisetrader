@@ -49,11 +49,24 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
     for line in lines.iter() {
         let trimmed = line.trim();
         
-        // Skip separator lines (box-drawing only)
+        // Skip separator lines (box-drawing only, dashes, or empty)
+        if trimmed.is_empty() {
+            continue;
+        }
+        
+        // Skip lines that are only separators (dashes, underscores, box-drawing chars)
         if trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || c == '━' || 
                                   c == '═' || c == '┡' || c == '┏' || c == '┗' || 
                                   c == '┳' || c == '┻' || c == '┣' || c == '┫' ||
-                                  c == ' ' || c == '─') {
+                                  c == ' ' || c == '─' || c == '-' || c == '_' ||
+                                  c == '=' || c == '|') {
+            continue;
+        }
+        
+        // Skip lines that are mostly dashes/separators (e.g., "------", "━━━━━━")
+        let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
+                                                           *c == '━' || *c == '═' || *c == '─').count();
+        if separator_chars as f64 / trimmed.len() as f64 > 0.7 {
             continue;
         }
         
@@ -86,17 +99,33 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
     
     // Format table rows with headers
     if !headers.is_empty() && !data_rows.is_empty() {
+        // Check if this is a summary/metrics table (usually has 2 columns: Metrics/Key and Value)
+        let is_summary_table = headers.len() == 2 && 
+            (headers[0].to_lowercase().contains("metric") || 
+             headers[0].to_lowercase().contains("key") ||
+             headers[1].to_lowercase().contains("value"));
+        
         // Limit rows for mobile readability
         let max_rows = 20;
         let rows_to_show = std::cmp::min(data_rows.len(), max_rows);
         
-        for (row_idx, row) in data_rows.iter().take(rows_to_show).enumerate() {
-            formatted.push_str(&format!("\n📌 <b>Row {}</b>\n", row_idx + 1));
-            for (col_idx, cell) in row.iter().enumerate() {
-                if col_idx < headers.len() && !cell.trim().is_empty() {
-                    let header = &headers[col_idx];
-                    formatted.push_str(&format!("  • <b>{}</b>: {}\n", 
-                        escape_html(header), escape_html(cell)));
+        for row in data_rows.iter().take(rows_to_show) {
+            if is_summary_table && row.len() == 2 {
+                // Simple format for summary: "Key: Value"
+                let key = row[0].trim();
+                let value = row[1].trim();
+                if !key.is_empty() && !value.is_empty() {
+                    formatted.push_str(&format!("{}: {}\n", 
+                        escape_html(key), escape_html(value)));
+                }
+            } else {
+                // For other tables, use simple format: "Key: Value" for each column
+                for (col_idx, cell) in row.iter().enumerate() {
+                    if col_idx < headers.len() && !cell.trim().is_empty() {
+                        let header = &headers[col_idx];
+                        formatted.push_str(&format!("{}: {}\n", 
+                            escape_html(header), escape_html(cell)));
+                    }
                 }
             }
         }
@@ -108,17 +137,37 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
         // Fallback: just clean up the table format
         for line in lines.iter() {
             let trimmed = line.trim();
-            if !trimmed.is_empty() && 
-               !trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || 
-                                       c == '━' || c == '═' || c == ' ' || c == '─') {
+            if trimmed.is_empty() {
+                continue;
+            }
+            
+            // Skip separator lines
+            let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
+                                                               *c == '━' || *c == '═' || *c == '─' ||
+                                                               *c == '┃' || *c == '│').count();
+            if separator_chars as f64 / trimmed.len() as f64 > 0.7 {
+                continue;
+            }
+            
+            if !trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || 
+                                       c == '━' || c == '═' || c == ' ' || c == '─' ||
+                                       c == '-' || c == '_' || c == '=') {
                 // Remove box-drawing chars, keep content
-                let cleaned = trimmed
+                let mut cleaned = trimmed
                     .chars()
                     .filter(|c| *c != '┃' && *c != '│' && *c != '┼' && 
                                *c != '┡' && *c != '┏' && *c != '┗')
                     .collect::<String>()
                     .trim()
                     .to_string();
+                
+                // Remove leading/trailing dashes and separators
+                cleaned = cleaned.trim_start_matches(|c| c == '-' || c == '_' || c == '=' || 
+                                                              c == '━' || c == '═' || c == '─')
+                                     .trim_end_matches(|c| c == '-' || c == '_' || c == '=' || 
+                                                            c == '━' || c == '═' || c == '─')
+                                     .trim()
+                                     .to_string();
                 
                 if !cleaned.is_empty() {
                     formatted.push_str(&format!("• {}\n", cleaned));
@@ -127,7 +176,29 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
         }
     }
     
-    formatted
+    // Clean up formatted string: remove leading/trailing dashes and empty lines
+    let cleaned: String = formatted
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                return false;
+            }
+            // Skip lines that are mostly separators
+            let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
+                                                               *c == '━' || *c == '═' || *c == '─').count();
+            let ratio = separator_chars as f64 / trimmed.len() as f64;
+            ratio < 0.7
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    
+    // Remove leading dashes/separators from the entire string
+    cleaned.trim_start_matches(|c| c == '-' || c == '_' || c == '=' || 
+                                    c == '━' || c == '═' || c == '─' ||
+                                    c == '\n' || c == ' ')
+           .trim()
+           .to_string()
 }
 
 /// Extract all tables from freqtrade output, returns vector of (title, content)
