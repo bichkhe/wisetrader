@@ -30,7 +30,12 @@ RUN cargo build --release --package bot || true
 # ====== Stage 2: Build real binary ======
 FROM rust:1.90-slim AS builder
 WORKDIR /app
-
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
 # Copy cached dependencies only, không copy target binary của bot
 COPY --from=chef /usr/local/cargo /usr/local/cargo
 COPY --from=chef /app/target/release/deps /app/target/release/deps
