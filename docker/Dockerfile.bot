@@ -46,7 +46,7 @@ COPY . .
 RUN cargo build --release --package bot
 
 # ====== Stage 3: Runtime ======
-FROM debian:bookworm-slim
+FROM ubuntu:24.04-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
