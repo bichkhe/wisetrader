@@ -23,6 +23,8 @@ RUN mkdir -p shared/src api/src bot/src && \
     echo "fn main() {}" > api/src/main.rs && \
     echo "fn main() {}" > bot/src/main.rs
 
+COPY shared/src ./shared/src
+
 # Build dependencies (this layer will be cached)
 RUN cargo build --package bot --release
 
