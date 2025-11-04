@@ -1,56 +1,71 @@
-# ====== Stage 1: Cache dependencies ======
+# ====== Stage 1: Chef - Install cargo-chef ======
 FROM rust:1.90-slim AS chef
 WORKDIR /app
 
-# Install build dependencies (OpenSSL, pkg-config, compiler)
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    build-essential \
-    libclang-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install cargo-chef
+RUN cargo install cargo-chef --locked
 
-# Copy Cargo manifests for all workspace members
+# ====== Stage 2: Planner - Generate recipe ======
+FROM chef AS planner
+WORKDIR /app
+
+# Copy Cargo manifests
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml ./shared/Cargo.toml
-COPY shared/build.rs ./shared/build.rs
-COPY api/Cargo.toml ./api/Cargo.toml
 COPY bot/Cargo.toml ./bot/Cargo.toml
 COPY migration/Cargo.toml ./migration/Cargo.toml
 
-# Dummy sources to build deps
-RUN mkdir -p shared/src api/src bot/src migration/src && \
-    echo "pub fn dummy() {}" > shared/src/lib.rs && \
-    echo "fn main() {}" > api/src/main.rs && \
-    echo "fn main() {}" > bot/src/main.rs && \
-    echo "pub fn dummy() {}" > migration/src/lib.rs
+# Generate recipe
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Prebuild dependencies (cached layer)
-RUN cargo build --release --package bot || true
-
-
-# ====== Stage 2: Build real binary ======
-FROM rust:1.90-slim AS builder
+# ====== Stage 3: Cacher - Build dependencies (cached layer) ======
+FROM chef AS cacher
 WORKDIR /app
+
+# Copy recipe
+COPY --from=planner /app/recipe.json recipe.json
+
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     build-essential \
     libclang-dev \
     && rm -rf /var/lib/apt/lists/*
-# Copy cached dependencies only, không copy target binary của bot
-COPY --from=chef /usr/local/cargo /usr/local/cargo
-COPY --from=chef /app/target/release/deps /app/target/release/deps
-# Copy full source code (real)
+
+# Build dependencies only (this layer will be cached)
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# ====== Stage 4: Builder - Build actual binary ======
+FROM chef AS builder
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy cached dependencies
+COPY --from=cacher /app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
+
+# Copy source code
+# Note: .git is excluded by .dockerignore, so build.rs will show "unknown" for git info
+# If you need git info, you can either:
+# 1. Remove .git from .dockerignore (will increase image size)
+# 2. Or inject git info via build args (requires more complex setup)
 COPY . .
 
-# Build bot binary (optimized)
+# Build bot binary
 RUN cargo build --release --package bot
 
 # Build migration binary
 RUN cargo build --release --package migration
 
-# ====== Stage 3: Runtime ======
+# ====== Stage 5: Runtime ======
 FROM debian:trixie-slim
 
 # Install runtime dependencies
