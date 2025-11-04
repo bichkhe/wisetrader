@@ -11,9 +11,10 @@ WORKDIR /app
 
 # Copy Cargo manifests for all workspace members
 COPY Cargo.toml Cargo.lock ./
-COPY shared/Cargo.toml ./shared/Cargo.toml
+COPY shared ./shared
 COPY api/Cargo.toml ./api/Cargo.toml
 COPY bot/Cargo.toml ./bot/Cargo.toml
+COPY bot/build.rs ./bot/build.rs
 COPY migration/Cargo.toml ./migration/Cargo.toml
 
 # Generate recipe
