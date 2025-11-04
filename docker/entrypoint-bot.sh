@@ -48,6 +48,7 @@ echo "DATABASE_URL: $DATABASE_URL"
 echo "REDIS_URL: $REDIS_URL"
 echo "API_BASE_URL: $API_BASE_URL"
 echo "RUST_LOG: $RUST_LOG"
+echo "GENERATE_HTML_REPORTS: $GENERATE_HTML_REPORTS"
 echo "============================"
 
 # Wait for database to be ready
