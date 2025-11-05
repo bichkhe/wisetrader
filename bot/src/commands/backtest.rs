@@ -599,13 +599,76 @@ fn generate_strategy_file(
             tracing::info!("✅ Write permission verified for {:?}", strategies_path);
         }
         Err(e) => {
-            return Err(anyhow::anyhow!(
-                "No write permission for strategies directory {:?}: {}. \
-                Please check container permissions. Current user: {:?}, UID: {:?}",
-                strategies_path, e,
-                std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
-                std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
-            ));
+            tracing::warn!("Write permission test failed: {}. Attempting to fix permissions...", e);
+            
+            // Try to fix permissions using the helper script
+            let fix_script = "/fix-permissions.sh";
+            if std::path::Path::new(fix_script).exists() {
+                use std::process::Command;
+                match Command::new("sudo")
+                    .arg("-n") // Non-interactive
+                    .arg(fix_script)
+                    .output()
+                {
+                    Ok(output) => {
+                        if output.status.success() {
+                            tracing::info!("✅ Permissions fixed successfully via helper script");
+                            // Try again after fix
+                            match fs::File::create(&test_file) {
+                                Ok(_) => {
+                                    fs::remove_file(&test_file)
+                                        .map_err(|e| tracing::warn!("Failed to remove test file: {}", e)).ok();
+                                    tracing::info!("✅ Write permission verified after fix");
+                                }
+                                Err(e2) => {
+                                    return Err(anyhow::anyhow!(
+                                        "No write permission for strategies directory {:?}: {}. \
+                                        Fix script ran but permission still denied. \
+                                        Please restart container or check volume permissions manually. \
+                                        Current user: {:?}, UID: {:?}",
+                                        strategies_path, e2,
+                                        std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                                        std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
+                                    ));
+                                }
+                            }
+                        } else {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            tracing::warn!("Fix script failed: {}", stderr);
+                            return Err(anyhow::anyhow!(
+                                "No write permission for strategies directory {:?}: {}. \
+                                Attempted to fix but failed: {}. \
+                                Please restart container or run: sudo /fix-permissions.sh \
+                                Current user: {:?}, UID: {:?}",
+                                strategies_path, e, stderr,
+                                std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                                std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
+                            ));
+                        }
+                    }
+                    Err(e2) => {
+                        tracing::warn!("Could not run fix script: {}", e2);
+                        return Err(anyhow::anyhow!(
+                            "No write permission for strategies directory {:?}: {}. \
+                            Could not run fix script: {}. \
+                            Please restart container or check volume permissions. \
+                            Current user: {:?}, UID: {:?}",
+                            strategies_path, e, e2,
+                            std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                            std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
+                        ));
+                    }
+                }
+            } else {
+                return Err(anyhow::anyhow!(
+                    "No write permission for strategies directory {:?}: {}. \
+                    Fix script not found. Please restart container to fix permissions. \
+                    Current user: {:?}, UID: {:?}",
+                    strategies_path, e,
+                    std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                    std::env::var("UID").unwrap_or_else(|_| "unknown".to_string())
+                ));
+            }
         }
     }
 

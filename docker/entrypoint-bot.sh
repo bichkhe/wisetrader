@@ -7,27 +7,38 @@ if [ "$SKIP_PERMISSIONS_FIX" = "1" ]; then
     :
 else
     # Running as root, fix permissions first
+    # Wait a moment for volumes to be fully mounted (sometimes there's a race condition)
+    sleep 1
+    
     # Ensure strategies directory exists and has correct permissions
     echo "Setting up /app/strategies directory..."
     mkdir -p /app/strategies || true
-    echo "Fixing permissions for /app/strategies..."
-    chown -R appuser:appuser /app/strategies || true
-    chmod -R 755 /app/strategies || true
+    
+    # Fix permissions multiple times to handle race conditions with volume mounting
+    echo "Fixing permissions for /app/strategies (as root)..."
+    for i in 1 2 3; do
+        chown -R appuser:appuser /app/strategies 2>/dev/null || true
+        chmod -R 755 /app/strategies 2>/dev/null || true
+        sleep 0.5
+    done
+    
     # Verify permissions
     if [ -d /app/strategies ]; then
         echo "✅ /app/strategies permissions: $(ls -ld /app/strategies | awk '{print $1, $3, $4}')"
-        # Test write permission
-        if touch /app/strategies/.test_write 2>/dev/null; then
-            rm -f /app/strategies/.test_write
-            echo "✅ Write permission test passed for /app/strategies"
+        # Test write permission as root (should always work)
+        if touch /app/strategies/.test_write_root 2>/dev/null; then
+            # Ensure appuser owns it before removing
+            chown appuser:appuser /app/strategies/.test_write_root 2>/dev/null || true
+            rm -f /app/strategies/.test_write_root
+            echo "✅ Directory exists and is writable"
         else
-            echo "⚠️  Warning: Write permission test failed for /app/strategies"
-            # Try to fix again
+            echo "⚠️  Warning: Write permission test failed even as root"
+            # Try to fix with more permissive permissions
             chown -R appuser:appuser /app/strategies || true
             chmod -R 777 /app/strategies || true
         fi
     else
-        echo "⚠️  Warning: /app/strategies directory does not exist"
+        echo "⚠️  Warning: /app/strategies directory does not exist after mkdir"
     fi
     
     # Fix permissions for html_reports directory
@@ -75,12 +86,40 @@ echo "RUST_LOG: $RUST_LOG"
 echo "GENERATE_HTML_REPORTS: $GENERATE_HTML_REPORTS"
 echo "STRATEGIES_PATH: ${STRATEGIES_PATH:-/app/strategies}"
 echo ""
-echo "=== Directory Permissions ==="
+echo "=== Directory Permissions (after user switch) ==="
 if [ -d /app/strategies ]; then
     echo "/app/strategies: $(ls -ld /app/strategies | awk '{print $1, $3, $4, $9}')"
-    echo "Can write to /app/strategies: $(touch /app/strategies/.test 2>&1 && echo 'YES' && rm -f /app/strategies/.test || echo 'NO')"
+    # Test write permission as appuser
+    if touch /app/strategies/.test_write_appuser 2>/dev/null; then
+        rm -f /app/strategies/.test_write_appuser
+        echo "✅ Can write to /app/strategies: YES"
+    else
+        echo "❌ Can write to /app/strategies: NO"
+        echo "⚠️  Attempting to fix permissions using helper script..."
+        # Try to fix using sudo (appuser has NOPASSWD sudo for /fix-permissions.sh)
+        if [ -f /fix-permissions.sh ] && sudo -n /fix-permissions.sh 2>/dev/null; then
+            echo "✅ Permissions fixed successfully"
+            # Test again
+            if touch /app/strategies/.test_write_appuser 2>/dev/null; then
+                rm -f /app/strategies/.test_write_appuser
+                echo "✅ Write permission verified after fix"
+            else
+                echo "⚠️  Warning: Write permission still failed after fix attempt"
+            fi
+        else
+            echo "⚠️  Could not fix permissions automatically (sudo not available or failed)"
+            echo "⚠️  Application will attempt to handle this with better error messages"
+        fi
+    fi
 else
     echo "/app/strategies: DOES NOT EXIST"
+    echo "Creating /app/strategies directory..."
+    mkdir -p /app/strategies || true
+    # Try to fix ownership if we can (might need root)
+    if [ "$(id -u)" = "0" ]; then
+        chown -R appuser:appuser /app/strategies || true
+        chmod -R 755 /app/strategies || true
+    fi
 fi
 if [ -d /app/html_reports ]; then
     echo "/app/html_reports: $(ls -ld /app/html_reports | awk '{print $1, $3, $4, $9}')"

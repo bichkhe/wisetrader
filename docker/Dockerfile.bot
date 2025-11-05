@@ -77,6 +77,7 @@ RUN apt-get update && apt-get install -y \
     netcat-traditional \
     gosu \
     curl \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI (needed for docker exec into freqtrade container)
@@ -112,12 +113,19 @@ COPY --from=builder /app/target/release/migration /app/migration
 # Copy bot assets
 COPY --from=builder /app/bot/locales ./locales
 
-# Copy entrypoint
+# Copy entrypoint and permission fix script
 COPY docker/entrypoint-bot.sh /entrypoint.sh
-RUN mkdir -p /app/html_reports && chmod +x /entrypoint.sh && chmod +x /app/bot && chmod +x /app/migration
+COPY docker/fix-permissions.sh /fix-permissions.sh
+RUN mkdir -p /app/html_reports && \
+    chmod +x /entrypoint.sh && \
+    chmod +x /fix-permissions.sh && \
+    chmod +x /app/bot && \
+    chmod +x /app/migration
 
 # Set permissions
-RUN chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app && \
+    # Allow appuser to run fix-permissions.sh with sudo without password
+    echo "appuser ALL=(ALL) NOPASSWD: /fix-permissions.sh" >> /etc/sudoers.d/appuser
 
 # Don't switch to appuser here - entrypoint will do it after fixing volume permissions
 # USER appuser
