@@ -1,0 +1,45 @@
+[package]
+name = "freqtrade-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["WiseTrader Team"]
+description = "A Rust implementation of Freqtrade trading bot using barter-rs and ta-rs"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Trading & Exchange integration
+barter-data = "0.10"
+barter-instrument = "0.3"
+# barter-execution = "0.10"  # Comment out until we need order execution
+barter-integration = "0.9"
+futures = "0.3"
+
+# Technical Analysis
+ta = "0.5"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["clock", "serde"] }
+chrono-tz = "0.9"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+dotenv = "0.15"
+
+[dev-dependencies]
+criterion = "0.5"
+
