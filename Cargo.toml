@@ -1,5 +1,5 @@
 [workspace]
-members = ["bot", "api", "shared", "migration", "freqtrade-rs"]
+members = ["bot", "api", "shared", "migration"]
 resolver = "2"
 
 [workspace.dependencies]
