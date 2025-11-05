@@ -16,7 +16,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::RwLock;
-use totp_rs::{TOTP, Algorithm};
+use totp_rs::{TOTP, Algorithm, Secret};
 use askama::Template;
 
 /// TOTP secret state (shared across requests)
@@ -178,19 +178,32 @@ async fn generate_totp(
         return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
     }
 
-    // Generate a new secret (32 bytes random)
-    let mut secret_bytes = [0u8; 32];
-    use rand::RngCore;
-    rand::thread_rng().fill_bytes(&mut secret_bytes);
-    let secret_string = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes);
+    // Generate a new secret using totp-rs 5.7.0 API
+    let secret = Secret::generate_secret();
+    let secret_string = secret.to_encoded();
     
-    // Create TOTP instance  
+    // Convert secret to Vec<u8> for TOTP::new
+    let secret_bytes = match secret.to_bytes() {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            error!("Failed to convert secret to bytes: {:?}", e);
+            let template = TotpSetupTemplate {
+                qr_code: String::new(),
+                secret: String::new(),
+                error: format!("Failed to convert secret: {:?}", e),
+                success: String::new(),
+            };
+            return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
+        }
+    };
+    
+    // Create TOTP instance
     let totp = match TOTP::new(
         Algorithm::SHA1,
         6,
         1,
         30,
-        secret_bytes.to_vec(),
+        secret_bytes,
         Some("WiseTrader Deploy".to_string()),
         "wisetrader".to_string(),
     ) {
@@ -208,7 +221,7 @@ async fn generate_totp(
     };
     
     // Generate QR code as base64
-    let qr_code_base64 = match totp.get_qr() {
+    let qr_code_base64_str = match totp.get_qr_base64() {
         Ok(qr) => qr,
         Err(e) => {
             error!("Failed to generate QR code: {:?}", e);
@@ -221,18 +234,16 @@ async fn generate_totp(
             return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
         }
     };
-    use base64::{Engine as _, engine::general_purpose};
-    let qr_code_base64_str = general_purpose::STANDARD.encode(&qr_code_base64);
     
     // Store secret and TOTP instance (but don't mark as verified yet)
-    *secret_guard = Some(secret_string.clone());
+    *secret_guard = Some(secret_string.to_string());
     *totp_guard = Some(totp);
     
     info!("TOTP secret generated successfully");
     
     let template = TotpSetupTemplate {
         qr_code: qr_code_base64_str,
-        secret: secret_string,
+        secret: secret_string.to_string(),
         error: String::new(),
         success: String::new(),
     };
