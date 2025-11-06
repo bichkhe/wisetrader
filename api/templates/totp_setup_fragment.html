@@ -1,0 +1,52 @@
+{% if !qr_code.is_empty() %}
+<div class="qr-code">
+    <p><strong>Scan this QR code with your authenticator app:</strong></p>
+    <img src="data:image/png;base64,{{ qr_code }}" alt="TOTP QR Code" />
+    <p style="margin-top: 15px; font-size: 14px; color: #666;">
+        Or enter this secret manually:<br>
+        <code style="background: #f0f0f0; padding: 5px 10px; border-radius: 3px; font-size: 12px;">{{ secret }}</code>
+    </p>
+</div>
+
+<div class="instructions">
+    <strong>Instructions:</strong>
+    <ol>
+        <li>Open your authenticator app (Google Authenticator, Authy, etc.)</li>
+        <li>Scan the QR code above or enter the secret manually</li>
+        <li>Enter the 6-digit code from your app to verify setup</li>
+        <li>Once verified, you can use this code to deploy the bot</li>
+    </ol>
+</div>
+
+<div id="verify-section" hx-target="this" hx-swap="outerHTML">
+    <p><strong>Verify your setup:</strong></p>
+    <form hx-post="/api/deploy/verify-totp" hx-target="this" hx-swap="outerHTML">
+        <input type="text" 
+               name="code"
+               id="totp-code" 
+               placeholder="Enter 6-digit code" 
+               maxlength="6" 
+               pattern="[0-9]{6}"
+               required
+               style="padding: 10px; font-size: 18px; width: 200px; text-align: center; letter-spacing: 5px; border: 2px solid #ddd; border-radius: 4px;">
+        <br>
+        <button type="submit" style="margin-top: 15px;">
+            Verify & Complete Setup
+        </button>
+    </form>
+</div>
+{% else %}
+<div id="setup-section" hx-target="this" hx-swap="outerHTML">
+    <p>Click the button below to generate a TOTP secret and QR code:</p>
+    <button hx-post="/api/deploy/generate-totp">Generate TOTP Secret</button>
+</div>
+{% endif %}
+
+{% if !error.is_empty() %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+{% if !success.is_empty() %}
+<div class="success">{{ success }}</div>
+{% endif %}
+

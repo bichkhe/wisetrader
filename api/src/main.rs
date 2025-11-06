@@ -18,12 +18,25 @@ use tokio::process::Command;
 use tokio::sync::RwLock;
 use totp_rs::{TOTP, Algorithm, Secret};
 use askama::Template;
+use base32;
+use rand::Rng;
 
 /// TOTP secret state (shared across requests)
 #[derive(Clone)]
 struct TotpState {
     secret: Arc<RwLock<Option<String>>>,
     totp_instance: Arc<RwLock<Option<TOTP>>>,
+}
+
+/// Generate a random TOTP secret (base32 encoded)
+fn generate_random_totp_secret() -> String {
+    // Generate 20 random bytes (160 bits, standard TOTP secret length)
+    let mut rng = rand::thread_rng();
+    let mut secret_bytes = vec![0u8; 20];
+    rng.fill(&mut secret_bytes[..]);
+    
+    // Encode as base32
+    base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes)
 }
 
 /// TOTP setup request
@@ -49,6 +62,16 @@ struct TotpVerifyRequest {
 #[derive(Template)]
 #[template(path = "totp_setup.html")]
 struct TotpSetupTemplate {
+    qr_code: String,
+    secret: String,
+    error: String,
+    success: String,
+}
+
+/// TOTP setup fragment template (for HTMX partial updates)
+#[derive(Template)]
+#[template(path = "totp_setup_fragment.html")]
+struct TotpSetupFragment {
     qr_code: String,
     secret: String,
     error: String,
@@ -82,11 +105,63 @@ async fn main() -> Result<()> {
         error!("Failed to create reports directory: {}", e);
     }
 
-    // Initialize TOTP state
+    // Initialize TOTP state and load from environment variable or generate random fallback
     let totp_state = TotpState {
         secret: Arc::new(RwLock::new(None)),
         totp_instance: Arc::new(RwLock::new(None)),
     };
+
+    // Try to load TOTP secret from environment variable
+    let secret_str = if let Ok(env_secret) = std::env::var("TOTP_SECRET") {
+        let env_secret = env_secret.trim();
+        if !env_secret.is_empty() {
+            info!("Loading TOTP secret from TOTP_SECRET environment variable");
+            env_secret.to_string()
+        } else {
+            // Empty env var, generate random fallback
+            warn!("TOTP_SECRET is empty, generating random secret as fallback");
+            let random_secret = generate_random_totp_secret();
+            info!("Generated random TOTP secret: {}", random_secret);
+            random_secret
+        }
+    } else {
+        // No env var, generate random fallback
+        warn!("TOTP_SECRET environment variable not set, generating random secret as fallback");
+        let random_secret = generate_random_totp_secret();
+        info!("Generated random TOTP secret: {}", random_secret);
+        random_secret
+    };
+    
+    // Parse secret string (base32 encoded)
+    let secret_bytes = match base32::decode(base32::Alphabet::RFC4648 { padding: false }, &secret_str) {
+        Some(bytes) => bytes,
+        None => {
+            error!("Failed to decode TOTP secret from base32");
+            return Err(anyhow::anyhow!("Invalid TOTP_SECRET format (must be base32)"));
+        }
+    };
+    
+    match TOTP::new(
+        Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("WiseTrader Deploy".to_string()),
+        "wisetrader".to_string(),
+    ) {
+        Ok(totp) => {
+            let mut secret_guard = totp_state.secret.write().await;
+            let mut totp_guard = totp_state.totp_instance.write().await;
+            *secret_guard = Some(secret_str.clone());
+            *totp_guard = Some(totp);
+            info!("✅ TOTP secret loaded successfully (from env var or generated fallback)");
+        }
+        Err(e) => {
+            error!("Failed to create TOTP from secret: {:?}", e);
+            return Err(anyhow::anyhow!("Invalid TOTP configuration"));
+        }
+    }
 
     let app = Router::new()
         .route("/health", get(health_check))
@@ -137,13 +212,28 @@ async fn show_totp_setup(
     let secret_guard = totp_state.secret.read().await;
     let totp_guard = totp_state.totp_instance.read().await;
     
-    let template = if secret_guard.is_some() {
-        // Already configured, show success message
+    // Check if TOTP is already configured
+    let is_configured = secret_guard.is_some() && totp_guard.is_some();
+    let has_env_var = std::env::var("TOTP_SECRET").is_ok();
+    
+    let template = if is_configured {
+        // Already configured
+        let secret_display = secret_guard.as_ref().map(|s| s.clone()).unwrap_or_default();
+        let source_msg = if has_env_var {
+            "✅ TOTP has been configured via TOTP_SECRET environment variable."
+        } else {
+            "✅ TOTP is using a randomly generated secret (fallback mode)."
+        };
+        
         TotpSetupTemplate {
             qr_code: String::new(),
-            secret: String::new(),
+            secret: secret_display,
             error: String::new(),
-            success: "TOTP has already been configured. You can use it to deploy the bot.".to_string(),
+            success: format!("{} Current secret: {}\n\nYou can use this secret to deploy the bot. To make it persistent, add TOTP_SECRET={} to your docker-compose.yml", 
+                source_msg, 
+                secret_guard.as_ref().unwrap_or(&String::new()),
+                secret_guard.as_ref().unwrap_or(&String::new())
+            ),
         }
     } else {
         // Not configured yet
@@ -167,30 +257,56 @@ async fn generate_totp(
     let mut secret_guard = totp_state.secret.write().await;
     let mut totp_guard = totp_state.totp_instance.write().await;
     
+    // Check if secret already exists in memory
     if secret_guard.is_some() {
-        warn!("TOTP secret already set");
-        let template = TotpSetupTemplate {
+        warn!("TOTP secret already set in memory");
+        let template = TotpSetupFragment {
             qr_code: String::new(),
             secret: String::new(),
-            error: "TOTP secret has already been set and cannot be changed".to_string(),
+            error: "TOTP secret has already been set and cannot be changed. Please use the existing secret.".to_string(),
             success: String::new(),
         };
         return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
     }
 
-    // Generate a new secret using totp-rs 5.7.0 API
-    let secret = Secret::generate_secret();
-    let secret_string = secret.to_encoded();
-    
-    // Convert secret to Vec<u8> for TOTP::new
-    let secret_bytes = match secret.to_bytes() {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            error!("Failed to convert secret to bytes: {:?}", e);
-            let template = TotpSetupTemplate {
+    // Get TOTP_SECRET from environment variable
+    let secret_string = match std::env::var("TOTP_SECRET") {
+        Ok(env_secret) => {
+            let trimmed = env_secret.trim();
+            if trimmed.is_empty() {
+                error!("TOTP_SECRET environment variable is empty");
+                let template = TotpSetupFragment {
+                    qr_code: String::new(),
+                    secret: String::new(),
+                    error: "TOTP_SECRET environment variable is set but empty. Please set a valid base32-encoded secret.".to_string(),
+                    success: String::new(),
+                };
+                return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
+            }
+            info!("Using TOTP_SECRET from environment variable");
+            trimmed.to_string()
+        }
+        Err(_) => {
+            error!("TOTP_SECRET environment variable is not set");
+            let template = TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
-                error: format!("Failed to convert secret: {:?}", e),
+                error: "TOTP_SECRET environment variable is not set. Please set it in docker-compose.yml before generating TOTP.".to_string(),
+                success: String::new(),
+            };
+            return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
+        }
+    };
+    
+    // Convert secret string to bytes for TOTP::new
+    let secret_bytes = match base32::decode(base32::Alphabet::RFC4648 { padding: false }, &secret_string) {
+        Some(bytes) => bytes,
+        None => {
+            error!("Failed to decode TOTP_SECRET from base32");
+            let template = TotpSetupFragment {
+                qr_code: String::new(),
+                secret: String::new(),
+                error: "Failed to decode TOTP_SECRET. Please ensure it's a valid base32-encoded string.".to_string(),
                 success: String::new(),
             };
             return Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)));
@@ -210,7 +326,7 @@ async fn generate_totp(
         Ok(t) => t,
         Err(e) => {
             error!("Failed to create TOTP: {:?}", e);
-            let template = TotpSetupTemplate {
+            let template = TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: format!("Failed to create TOTP: {:?}", e),
@@ -225,7 +341,7 @@ async fn generate_totp(
         Ok(qr) => qr,
         Err(e) => {
             error!("Failed to generate QR code: {:?}", e);
-            let template = TotpSetupTemplate {
+            let template = TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: format!("Failed to generate QR code: {:?}", e),
@@ -235,17 +351,23 @@ async fn generate_totp(
         }
     };
     
-    // Store secret and TOTP instance (but don't mark as verified yet)
-    *secret_guard = Some(secret_string.to_string());
-    *totp_guard = Some(totp);
+    // Store secret and TOTP instance in memory
+    *secret_guard = Some(secret_string.clone());
+    *totp_guard = Some(totp.clone());
     
-    info!("TOTP secret generated successfully");
+    info!("TOTP secret loaded from environment variable successfully");
     
-    let template = TotpSetupTemplate {
+    // Show success message
+    let success_msg = format!(
+        "✅ TOTP secret loaded from TOTP_SECRET environment variable!\n\nSecret: {}\n\nYou can now use this secret to set up your authenticator app.",
+        secret_string
+    );
+    
+    let template = TotpSetupFragment {
         qr_code: qr_code_base64_str,
-        secret: secret_string.to_string(),
+        secret: secret_string.clone(),
         error: String::new(),
-        success: String::new(),
+        success: success_msg,
     };
     
     Html(template.render().unwrap_or_else(|e| format!("Template error: {}", e)))
@@ -263,7 +385,7 @@ async fn verify_totp(
     let totp = match totp_guard.as_ref() {
         Some(t) => t,
         None => {
-            let template = TotpSetupTemplate {
+            let template = TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: "TOTP not initialized. Please generate a secret first.".to_string(),
@@ -277,7 +399,7 @@ async fn verify_totp(
     let template = match totp.check_current(&req.code) {
         Ok(true) => {
             info!("TOTP code verified successfully");
-            TotpSetupTemplate {
+            TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: String::new(),
@@ -286,7 +408,7 @@ async fn verify_totp(
         }
         Ok(false) => {
             error!("Invalid TOTP code provided");
-            TotpSetupTemplate {
+            TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: "Invalid TOTP code. Please try again.".to_string(),
@@ -295,7 +417,7 @@ async fn verify_totp(
         }
         Err(e) => {
             error!("Error verifying TOTP: {}", e);
-            TotpSetupTemplate {
+            TotpSetupFragment {
                 qr_code: String::new(),
                 secret: String::new(),
                 error: format!("Error verifying code: {}", e),

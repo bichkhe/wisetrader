@@ -99,6 +99,7 @@ services:
       - API_BASE_URL=http://localhost:9999
       - RUST_LOG=${RUST_LOG:-info}
       - DEPLOY_WORK_DIR=${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}
+      - TOTP_SECRET=${TOTP_SECRET:-MJ7C4G2BR33RR6IWVDAQ3RS5NPOYBBZK}
     depends_on:
       db:
         condition: service_healthy
