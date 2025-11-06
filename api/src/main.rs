@@ -553,12 +553,11 @@ async fn deploy_bot(
     info!("Detected UID {} for git operations (from mounted directory ownership)", bichkhe_uid);
     
     // Run git pull directly - the directory is mounted with host user permissions
-    // Git credentials should be stored in .git/config or .git-credentials
-    // If we need to run as specific user, we can use runuser or create a wrapper
-    // For now, run git pull directly since the mounted directory has correct permissions
+    // First, add the directory to git safe.directory to avoid ownership issues
+    // Then run git pull
     let git_script = format!(
-        r#"cd {} && git pull origin"#,
-        work_dir
+        r#"cd {} && git config --global --add safe.directory {} && git pull origin"#,
+        work_dir, work_dir
     );
     
     let git_output = Command::new("sh")
