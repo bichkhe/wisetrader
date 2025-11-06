@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/subscriptions/status", get(subscription_status))
-        .route("/api/deploy/setup", get(show_totp_setup))
+        // .route("/api/deploy/setup", get(show_totp_setup))
         .route("/api/deploy/generate-totp", post(generate_totp))
         .route("/api/deploy/verify-totp", post(verify_totp))
         .route("/api/deploy/bot", get(deploy_bot))
@@ -552,12 +552,13 @@ async fn deploy_bot(
     
     info!("Detected UID {} for git operations (from mounted directory ownership)", bichkhe_uid);
     
-    // Use sudo with numeric UID to run git pull as host user
-    // sudo -u \#UID format allows running as a user by UID without the user existing in container
-    // The backslash escapes the # so it's treated as numeric UID
+    // Run git pull directly - the directory is mounted with host user permissions
+    // Git credentials should be stored in .git/config or .git-credentials
+    // If we need to run as specific user, we can use runuser or create a wrapper
+    // For now, run git pull directly since the mounted directory has correct permissions
     let git_script = format!(
-        r#"cd {} && sudo -u \#{} git pull origin"#,
-        work_dir, bichkhe_uid
+        r#"cd {} && git pull origin"#,
+        work_dir
     );
     
     let git_output = Command::new("sh")
