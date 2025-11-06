@@ -62,10 +62,48 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     libssl3 \
+    git \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (standalone, not docker.io which includes daemon)
+# This allows us to use docker commands via mounted socket
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        DOCKER_ARCH="x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        DOCKER_ARCH="aarch64"; \
+    else \
+        DOCKER_ARCH="x86_64"; \
+    fi && \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-24.0.7.tgz" | \
+    tar -xzC /tmp && \
+    mv /tmp/docker/docker /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker && \
+    rm -rf /tmp/docker
+
+# Install docker-compose-plugin (v2) as a plugin
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        COMPOSE_ARCH="x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        COMPOSE_ARCH="aarch64"; \
+    else \
+        COMPOSE_ARCH="x86_64"; \
+    fi && \
+    mkdir -p /usr/local/lib/docker/cli-plugins && \
+    curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-${COMPOSE_ARCH}" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose && \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 # Create non-root user
-RUN useradd -m -u 1001 -s /bin/bash appuser
+RUN useradd -m -u 1001 -s /bin/bash appuser && \
+    # Create docker group and add appuser to it
+    groupadd -f docker || true && \
+    usermod -aG docker appuser || true
+
+# Note: User bichkhe is a host user, not created in container
+# We'll use the host user's UID/GID at runtime for git operations
 
 WORKDIR /app
 
@@ -84,6 +122,13 @@ RUN mkdir -p /app/html_reports && \
     chown -R appuser:appuser /app && \
     chmod -R 755 /app/shared/templates && \
     chmod +x /app/api
+
+# Configure sudo to allow appuser to run commands as any user without password
+# This is needed to run git pull as host user bichkhe (which may have different UID)
+# We'll use sudo with numeric UID (sudo -u #UID) from host
+RUN echo "appuser ALL=(ALL) NOPASSWD: /usr/bin/git, /usr/bin/git *" >> /etc/sudoers.d/appuser && \
+    echo "appuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/appuser && \
+    chmod 0440 /etc/sudoers.d/appuser
 
 # Switch to non-root user
 USER appuser

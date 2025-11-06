@@ -86,12 +86,19 @@ services:
       - "9999:9999"
     volumes:
       - ./html_reports:/app/html_reports
+      # Mount Docker socket to allow API to execute docker compose commands
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount project directory to access docker-compose.yml and git repo
+      # Read-write access needed for git pull
+      # Adjust this path to match your actual deployment directory on host
+      - ${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}:/opt/wisetrader/wisetrader
     environment:
       - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
       - REDIS_URL=redis://redis:6379
       - HTML_REPORTS_DIR=/app/html_reports
       - API_BASE_URL=http://localhost:9999
       - RUST_LOG=${RUST_LOG:-info}
+      - DEPLOY_WORK_DIR=${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}
     depends_on:
       db:
         condition: service_healthy

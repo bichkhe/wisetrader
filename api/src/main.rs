@@ -365,76 +365,204 @@ async fn deploy_bot(
 
     info!("TOTP validated successfully, proceeding with deploy");
 
-    let work_dir = "/opt/wisetrader/wisetrader";
-    let user = "bichkhe";
+    // Get work directory from environment variable or use default
+    let work_dir = std::env::var("DEPLOY_WORK_DIR")
+        .unwrap_or_else(|_| "/opt/wisetrader/wisetrader".to_string());
 
-    // Execute commands as user bichkhe
-    // We'll use a shell script approach to chain commands
-    let script = format!(
-        r#"
-        cd {} || exit 1
-        git pull origin || exit 1
-        docker compose up -d bot --build || exit 1
-        "#,
-        work_dir
+    info!("Using work directory: {}", work_dir);
+
+    // Check if work directory exists (it should be mounted as volume)
+    if !std::path::Path::new(&work_dir).exists() {
+        error!("Work directory does not exist: {}", work_dir);
+        return Json(DeployResponse {
+            success: false,
+            message: format!("Work directory does not exist: {}. Make sure it's mounted as a volume.", work_dir),
+            output: None,
+            error: Some(format!("Directory {} not found. Check docker-compose.yml volumes configuration.", work_dir)),
+        });
+    }
+
+    // Check if docker-compose.yml exists in work directory
+    let compose_file = format!("{}/docker-compose.yml", work_dir);
+    if !std::path::Path::new(&compose_file).exists() {
+        error!("docker-compose.yml not found in: {}", work_dir);
+        return Json(DeployResponse {
+            success: false,
+            message: format!("docker-compose.yml not found in {}", work_dir),
+            output: None,
+            error: Some(format!("File {} not found", compose_file)),
+        });
+    }
+
+    // Execute commands: git pull and docker compose
+    // Git pull needs to run as user 'bichkhe' on host to have proper git credentials
+    // Docker compose can run from container using docker socket
+    
+    // Step 1: Git pull as user bichkhe (host user)
+    // We need to get the UID of user bichkhe on host and run git with that UID
+    // The mounted directory has permissions for host user bichkhe
+    info!("Executing git pull as user bichkhe (host user) in {}", work_dir);
+    
+    // First, get UID of user bichkhe on host
+    // Since we're in a container, we need to check the mounted directory's ownership
+    // or use a stat command on a file in the mounted directory
+    // Alternative: use getent or check file ownership in mounted directory
+    let get_uid_script = format!(
+        r#"stat -c '%u' {}/.git 2>/dev/null || stat -c '%u' {} 2>/dev/null || id -u bichkhe 2>/dev/null || echo '1000'"#,
+        work_dir, work_dir
     );
-
-    // Run commands with sudo -u bichkhe
-    let output = Command::new("sudo")
-        .arg("-u")
-        .arg(user)
-        .arg("sh")
+    let uid_output = Command::new("sh")
         .arg("-c")
-        .arg(&script)
-        .current_dir("/")
+        .arg(&get_uid_script)
+        .output()
+        .await;
+    
+    let bichkhe_uid = match uid_output {
+        Ok(output) => {
+            let uid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            uid_str.parse::<u32>().unwrap_or(1000)
+        }
+        Err(_) => {
+            warn!("Failed to get UID, using default 1000");
+            1000
+        }
+    };
+    
+    info!("Detected UID {} for git operations (from mounted directory ownership)", bichkhe_uid);
+    
+    // Use sudo with numeric UID to run git pull as host user
+    // sudo -u \#UID format allows running as a user by UID without the user existing in container
+    // The backslash escapes the # so it's treated as numeric UID
+    let git_script = format!(
+        r#"cd {} && sudo -u \#{} git pull origin"#,
+        work_dir, bichkhe_uid
+    );
+    
+    let git_output = Command::new("sh")
+        .arg("-c")
+        .arg(&git_script)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
         .await;
 
-    match output {
+    let mut all_stdout = String::new();
+    let mut all_stderr = String::new();
+
+    match git_output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-
-            if output.status.success() {
-                info!("Deploy bot completed successfully");
-                info!("Output: {}", stdout);
-                
-                Json(DeployResponse {
-                    success: true,
-                    message: "Bot deployed successfully".to_string(),
-                    output: Some(stdout.to_string()),
-                    error: if stderr.is_empty() {
-                        None
-                    } else {
-                        warn!("Deploy warnings: {}", stderr);
-                        Some(stderr.to_string())
-                    },
-                })
-            } else {
-                error!("Deploy bot failed with status: {:?}", output.status);
-                error!("Stdout: {}", stdout);
-                error!("Stderr: {}", stderr);
-                
-                Json(DeployResponse {
-                    success: false,
-                    message: format!("Deploy failed with exit code: {:?}", output.status.code()),
-                    output: Some(stdout.to_string()),
-                    error: Some(stderr.to_string()),
-                })
+            all_stdout.push_str(&format!("=== Git Pull (as user bichkhe) ===\n{}\n", stdout));
+            if !stderr.is_empty() {
+                all_stderr.push_str(&format!("=== Git Pull (stderr) ===\n{}\n", stderr));
             }
+            if !output.status.success() {
+                error!("Git pull failed with exit code: {:?}", output.status.code());
+                error!("Git pull stderr: {}", stderr);
+                return Json(DeployResponse {
+                    success: false,
+                    message: format!("Git pull failed with exit code: {:?}. Error: {}", 
+                        output.status.code(),
+                        if stderr.is_empty() { &stdout } else { &stderr }
+                    ),
+                    output: Some(all_stdout),
+                    error: Some(all_stderr),
+                });
+            }
+            info!("Git pull completed successfully as user bichkhe");
         }
         Err(e) => {
-            error!("Failed to execute deploy command: {}", e);
-            
-            Json(DeployResponse {
+            error!("Failed to execute git pull as user bichkhe: {}", e);
+            return Json(DeployResponse {
                 success: false,
-                message: format!("Failed to execute deploy command: {}", e),
-                output: None,
-                error: Some(e.to_string()),
-            })
+                message: format!("Failed to execute git pull: {}. Make sure user 'bichkhe' exists and appuser has sudo permissions.", e),
+                output: Some(all_stdout),
+                error: Some(format!("Git pull error: {}\n{}", e, all_stderr)),
+            });
         }
+    }
+
+    // Step 2: Docker compose up
+    // Use docker compose from the mounted directory
+    // The docker socket is mounted, so we can control host Docker daemon
+    info!("Executing docker compose up -d bot --build in {}", work_dir);
+    let docker_output = Command::new("docker")
+        .arg("compose")
+        .arg("-f")
+        .arg(&compose_file)
+        .arg("--project-directory")
+        .arg(&work_dir)
+        .arg("up")
+        .arg("-d")
+        .arg("bot")
+        .arg("--build")
+        .current_dir(&work_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await;
+
+    let output = match docker_output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            all_stdout.push_str(&format!("\n=== Docker Compose ===\n{}\n", stdout));
+            if !stderr.is_empty() {
+                all_stderr.push_str(&format!("\n=== Docker Compose (stderr) ===\n{}\n", stderr));
+            }
+            output
+        }
+        Err(e) => {
+            error!("Failed to execute docker compose: {}", e);
+            return Json(DeployResponse {
+                success: false,
+                message: format!("Failed to execute docker compose: {}", e),
+                output: Some(all_stdout),
+                error: Some(format!("Docker compose error: {}\n{}", e, all_stderr)),
+            });
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    info!("Deploy command exit status: {:?}", output.status.code());
+    info!("Deploy stdout: {}", stdout);
+    if !stderr.is_empty() {
+        warn!("Deploy stderr: {}", stderr);
+    }
+
+    if output.status.success() {
+        info!("Deploy bot completed successfully");
+        
+        Json(DeployResponse {
+            success: true,
+            message: "Bot deployed successfully".to_string(),
+            output: Some(stdout.to_string()),
+            error: if stderr.is_empty() {
+                None
+            } else {
+                warn!("Deploy warnings: {}", stderr);
+                Some(stderr.to_string())
+            },
+        })
+    } else {
+        error!("Deploy bot failed with status: {:?}", output.status);
+        error!("Exit code: {:?}", output.status.code());
+        error!("Stdout: {}", stdout);
+        error!("Stderr: {}", stderr);
+        
+        Json(DeployResponse {
+            success: false,
+            message: format!(
+                "Deploy failed with exit code: {:?}. Error: {}", 
+                output.status.code(),
+                if stderr.is_empty() { &stdout } else { &stderr }
+            ),
+            output: Some(stdout.to_string()),
+            error: Some(stderr.to_string()),
+        })
     }
 }
 
