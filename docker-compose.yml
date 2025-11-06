@@ -155,6 +155,25 @@ services:
     networks:
       - wisetrader
 
+  bot-updater:
+    image: alpine/git:latest
+    container_name: wisetrader_bot_updater
+    volumes:
+      # Mount project directory to access git repo and docker-compose.yml
+      - ${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}:/opt/wisetrader/wisetrader
+      # Mount Docker socket to allow docker compose commands
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the watch script
+      - ./docker/bot-updater.sh:/usr/local/bin/bot-updater.sh:ro
+    environment:
+      - DEPLOY_WORK_DIR=${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+    entrypoint: /bin/sh
+    command: -c "apk add --no-cache wget ca-certificates >/dev/null 2>&1; chmod +x /usr/local/bin/bot-updater.sh && /usr/local/bin/bot-updater.sh"
+    restart: unless-stopped
+    networks:
+      - wisetrader
+
 networks:
   wisetrader:
     driver: bridge
