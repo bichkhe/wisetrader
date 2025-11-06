@@ -516,19 +516,112 @@ async fn deploy_bot(
         });
     }
 
-    // Execute commands: git pull and docker compose
-    // Git pull needs to run as user 'bichkhe' on host to have proper git credentials
-    // Docker compose can run from container using docker socket
+    // Check if custom deploy.sh script exists
+    let deploy_script = format!("{}/deploy.sh", work_dir);
+    let use_custom_script = std::path::Path::new(&deploy_script).exists();
     
-    // Step 1: Git pull as user bichkhe (host user)
-    // We need to get the UID of user bichkhe on host and run git with that UID
-    // The mounted directory has permissions for host user bichkhe
-    info!("Executing git pull as user bichkhe (host user) in {}", work_dir);
+    if use_custom_script {
+        info!("Found custom deploy script: {}", deploy_script);
+        
+        // Get host user UID
+        let get_uid_script = format!(
+            r#"stat -c '%u' {}/.git 2>/dev/null || stat -c '%u' {} 2>/dev/null || id -u bichkhe 2>/dev/null || echo '1000'"#,
+            work_dir, work_dir
+        );
+        let uid_output = Command::new("sh")
+            .arg("-c")
+            .arg(&get_uid_script)
+            .output()
+            .await;
+        
+        let bichkhe_uid = match uid_output {
+            Ok(output) => {
+                let uid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                uid_str.parse::<u32>().unwrap_or(1000)
+            }
+            Err(_) => {
+                warn!("Failed to get UID, using default 1000");
+                1000
+            }
+        };
+        
+        info!("Running deploy.sh as host user (UID: {})", bichkhe_uid);
+        
+        // Run deploy.sh with host user permissions
+        let hash_uid_str = format!("#{}", bichkhe_uid);
+        let run_script = format!(
+            r#"EXISTING_USER=$(getent passwd {} | cut -d: -f1 2>/dev/null || echo "")
+if [ -n "$EXISTING_USER" ]; then
+    sudo -u "$EXISTING_USER" bash {}
+elif command -v runuser >/dev/null 2>&1; then
+    runuser -u "{}" -- bash {} 2>/dev/null
+else
+    sudo -u "{}" bash {} 2>/dev/null || sudo -u {} bash {} 2>/dev/null || bash {}
+fi"#,
+            bichkhe_uid, deploy_script,
+            hash_uid_str, deploy_script,
+            hash_uid_str, deploy_script,
+            bichkhe_uid, deploy_script,
+            deploy_script
+        );
+        
+        let deploy_output = Command::new("sh")
+            .arg("-c")
+            .arg(&run_script)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await;
+        
+        let mut all_stdout = String::new();
+        let mut all_stderr = String::new();
+        
+        match deploy_output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                all_stdout.push_str(&format!("=== Deploy Script Output ===\n{}\n", stdout));
+                if !stderr.is_empty() {
+                    all_stderr.push_str(&format!("=== Deploy Script (stderr) ===\n{}\n", stderr));
+                }
+                
+                if !output.status.success() {
+                    error!("Deploy script failed with exit code: {:?}", output.status.code());
+                    return Json(DeployResponse {
+                        success: false,
+                        message: format!("Deploy script failed with exit code: {:?}. Error: {}", 
+                            output.status.code(),
+                            if stderr.is_empty() { &stdout } else { &stderr }
+                        ),
+                        output: Some(all_stdout),
+                        error: Some(all_stderr),
+                    });
+                }
+                
+                info!("Deploy script completed successfully");
+                return Json(DeployResponse {
+                    success: true,
+                    message: "Bot deployed successfully using deploy.sh".to_string(),
+                    output: Some(all_stdout),
+                    error: if all_stderr.is_empty() { None } else { Some(all_stderr) },
+                });
+            }
+            Err(e) => {
+                error!("Failed to execute deploy script: {}", e);
+                return Json(DeployResponse {
+                    success: false,
+                    message: format!("Failed to execute deploy script: {}. Make sure user 'bichkhe' exists and appuser has sudo permissions.", e),
+                    output: Some(all_stdout),
+                    error: Some(format!("Deploy script error: {}\n{}", e, all_stderr)),
+                });
+            }
+        }
+    }
     
-    // First, get UID of user bichkhe on host
-    // Since we're in a container, we need to check the mounted directory's ownership
-    // or use a stat command on a file in the mounted directory
-    // Alternative: use getent or check file ownership in mounted directory
+    // Default deployment logic (if deploy.sh doesn't exist)
+    info!("Using default deployment logic (deploy.sh not found)");
+    
+    // Get host user UID for git operations
     let get_uid_script = format!(
         r#"stat -c '%u' {}/.git 2>/dev/null || stat -c '%u' {} 2>/dev/null || id -u bichkhe 2>/dev/null || echo '1000'"#,
         work_dir, work_dir
@@ -550,21 +643,24 @@ async fn deploy_bot(
         }
     };
     
-    info!("Detected UID {} for git operations (from mounted directory ownership)", bichkhe_uid);
+    info!("Detected UID {} for git operations", bichkhe_uid);
     
-    // Create a bash script in the work directory (mounted from host)
-    // This script will have the host user's permissions since it's in the mounted directory
-    // Then execute it with sudo using the host user's UID
+    let mut all_stdout = String::new();
+    let mut all_stderr = String::new();
+    
+    // Step 1: Git pull as host user
+    info!("Executing git pull as host user in {}", work_dir);
+    
+    // Create temporary script for git pull
     let script_content = format!(
         r#"#!/bin/bash
 cd {}
-git config --global --add safe.directory {} 2>/dev/null || true
+git config --local --add safe.directory {} 2>/dev/null || git config --global --add safe.directory {} 2>/dev/null || true
 git pull origin
 "#,
-        work_dir, work_dir
+        work_dir, work_dir, work_dir
     );
     
-    // Create script file in work directory (mounted from host, so it will have host user permissions)
     let script_path = format!("{}/.git_pull_temp_{}.sh", work_dir, std::process::id());
     if let Err(e) = std::fs::write(&script_path, script_content) {
         error!("Failed to create git pull script: {}", e);
@@ -586,19 +682,20 @@ git pull origin
         warn!("Failed to set script permissions: {}", e);
     }
     
-    // Run the script with sudo using the host user's UID
-    // Find existing user with this UID, or use the UID directly with sudo
-    let hash_uid = format!("#{}", bichkhe_uid);
+    // Run git pull script with host user
+    let hash_uid_str = format!("#{}", bichkhe_uid);
     let git_script = format!(
         r#"EXISTING_USER=$(getent passwd {} | cut -d: -f1 2>/dev/null || echo "")
 if [ -n "$EXISTING_USER" ]; then
     sudo -u "$EXISTING_USER" bash {}
+elif command -v runuser >/dev/null 2>&1; then
+    runuser -u "{}" -- bash {} 2>/dev/null
 else
-    # Try to run with UID directly (some sudo versions support this)
     sudo -u "{}" bash {} 2>/dev/null || sudo -u {} bash {} 2>/dev/null || bash {}
 fi"#,
         bichkhe_uid, script_path,
-        hash_uid, script_path,
+        hash_uid_str, script_path,
+        hash_uid_str, script_path,
         bichkhe_uid, script_path,
         script_path
     );
@@ -610,55 +707,43 @@ fi"#,
         .stderr(Stdio::piped())
         .output()
         .await;
-
-    let mut all_stdout = String::new();
-    let mut all_stderr = String::new();
-
-    // Process git output
-    let result = match git_output {
+    
+    // Clean up temporary script
+    let _ = std::fs::remove_file(&script_path);
+    
+    match git_output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            all_stdout.push_str(&format!("=== Git Pull (as user bichkhe) ===\n{}\n", stdout));
+            all_stdout.push_str(&format!("=== Git Pull ===\n{}\n", stdout));
             if !stderr.is_empty() {
                 all_stderr.push_str(&format!("=== Git Pull (stderr) ===\n{}\n", stderr));
             }
             if !output.status.success() {
                 error!("Git pull failed with exit code: {:?}", output.status.code());
-                error!("Git pull stderr: {}", stderr);
-                Err(Json(DeployResponse {
+                return Json(DeployResponse {
                     success: false,
                     message: format!("Git pull failed with exit code: {:?}. Error: {}", 
                         output.status.code(),
                         if stderr.is_empty() { &stdout } else { &stderr }
                     ),
-                    output: Some(all_stdout.clone()),
-                    error: Some(all_stderr.clone()),
-                }))
-            } else {
-                info!("Git pull completed successfully as user bichkhe");
-                Ok(())
+                    output: Some(all_stdout),
+                    error: Some(all_stderr),
+                });
             }
+            info!("Git pull completed successfully");
         }
         Err(e) => {
-            error!("Failed to execute git pull as user bichkhe: {}", e);
-            Err(Json(DeployResponse {
+            error!("Failed to execute git pull: {}", e);
+            return Json(DeployResponse {
                 success: false,
-                message: format!("Failed to execute git pull: {}. Make sure user 'bichkhe' exists and appuser has sudo permissions.", e),
-                output: Some(all_stdout.clone()),
-                error: Some(format!("Git pull error: {}\n{}", e, all_stderr.clone())),
-            }))
+                message: format!("Failed to execute git pull: {}", e),
+                output: Some(all_stdout),
+                error: Some(format!("Git pull error: {}\n{}", e, all_stderr)),
+            });
         }
-    };
-    
-    // Clean up temporary script (always, even on error)
-    let _ = std::fs::remove_file(&script_path);
-    
-    // Return error if git pull failed
-    if let Err(response) = result {
-        return response;
     }
-
+    
     // Step 2: Docker compose up
     // Use docker compose from the mounted directory
     // The docker socket is mounted, so we can control host Docker daemon

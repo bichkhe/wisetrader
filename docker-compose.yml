@@ -169,7 +169,7 @@ services:
       - DEPLOY_WORK_DIR=${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}
       - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
     entrypoint: /bin/sh
-    command: -c "apk add --no-cache wget ca-certificates >/dev/null 2>&1 || true; chmod +x /usr/local/bin/bot-updater.sh 2>/dev/null || true; /usr/local/bin/bot-updater.sh"
+    command: -c "apk add --no-cache wget ca-certificates sudo >/dev/null 2>&1 || true; chmod +x /usr/local/bin/bot-updater.sh 2>/dev/null || true; /usr/local/bin/bot-updater.sh"
     restart: unless-stopped
     networks:
       - wisetrader
