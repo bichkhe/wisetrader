@@ -648,10 +648,10 @@ fi"#,
     let mut all_stdout = String::new();
     let mut all_stderr = String::new();
     
-    // Step 1: Git pull as host user
+    // Step 1: Git pull as host user - run directly with sudo, no script needed
     info!("Executing git pull as host user in {}", work_dir);
     
-    // Create temporary script for git pull
+    // Create script in /tmp (writable location) instead of work_dir
     let script_content = format!(
         r#"#!/bin/bash
 cd {}
@@ -661,9 +661,9 @@ git pull origin
         work_dir, work_dir, work_dir
     );
     
-    let script_path = format!("{}/.git_pull_temp_{}.sh", work_dir, std::process::id());
+    let script_path = format!("/tmp/git_pull_{}.sh", std::process::id());
     if let Err(e) = std::fs::write(&script_path, script_content) {
-        error!("Failed to create git pull script: {}", e);
+        error!("Failed to create git pull script in /tmp: {}", e);
         return Json(DeployResponse {
             success: false,
             message: format!("Failed to create git pull script: {}", e),
