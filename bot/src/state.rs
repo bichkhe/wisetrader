@@ -1,6 +1,6 @@
 use shared::{Config, get_pool, get_db_connection};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, prelude::*, sqlx::MySqlPool};
+use sea_orm::{DatabaseConnection, sqlx::MySqlPool};
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::Dialogue};
 use crate::services::user_service::UserService;
 use crate::services::strategy_engine::StrategyExecutor;
@@ -114,6 +114,12 @@ pub enum CreateStrategyState {
     Start,
     WaitingForStrategyType, // Choose between Custom or Preset
     WaitingForPresetSelection, // Waiting for user to select a preset strategy
+    WaitingForPresetName {
+        algorithm: String,
+        buy_condition: String,
+        sell_condition: String,
+        timeframe: String,
+    },
     WaitingForName,
     WaitingForAlgorithm,
     WaitingForBuyCondition {
@@ -133,6 +139,7 @@ pub enum CreateStrategyState {
         buy_condition: String,
         sell_condition: String,
         timeframe: String,
+        strategy_name: String,
     },
     WaitingForConfirmation {
         algorithm: String,

@@ -1,5 +1,36 @@
 use askama::Template;
 use chrono::Utc;
+use base64::{Engine as _, engine::general_purpose};
+
+/// Load logo and convert to base64 data URI
+fn load_logo_base64() -> String {
+    // Try multiple possible paths for logo (relative to workspace root or current directory)
+    let possible_paths = vec![
+        "shared/templates/logo.png",
+        "./shared/templates/logo.png",
+        "../shared/templates/logo.png",
+        "../../shared/templates/logo.png",
+        "templates/logo.png",
+        "./templates/logo.png",
+        // For Docker/build environments
+        "/app/shared/templates/logo.png",
+        "/app/templates/logo.png",
+    ];
+    
+    for path_str in possible_paths {
+        if let Ok(bytes) = std::fs::read(path_str) {
+            if !bytes.is_empty() {
+                let base64 = general_purpose::STANDARD.encode(&bytes);
+                tracing::info!("Logo loaded successfully from: {}", path_str);
+                return format!("data:image/png;base64,{}", base64);
+            }
+        }
+    }
+    
+    tracing::warn!("Logo file not found in any of the expected paths");
+    // Return empty string if logo not found
+    String::new()
+}
 
 #[derive(Template)]
 #[template(path = "strategy_template.py", escape = "none")]
@@ -49,6 +80,7 @@ pub struct BacktestReportTemplate {
     pub timeframe: String,
     pub timerange: String,
     pub created_at: String,
+    pub user_fullname: Option<String>,
     pub trades: i32,
     pub profit_pct: f64,
     pub win_rate: Option<f64>,
@@ -59,6 +91,7 @@ pub struct BacktestReportTemplate {
     pub backtest_time_secs: u64,
     pub tables: Vec<(String, String)>,
     pub raw_output: Option<String>,
+    pub logo_base64: String,
 }
 
 impl BacktestReportTemplate {
@@ -68,6 +101,7 @@ impl BacktestReportTemplate {
         pair: String,
         timeframe: String,
         timerange: String,
+        user_fullname: Option<String>,
         trades: i32,
         profit_pct: f64,
         win_rate: Option<f64>,
@@ -86,6 +120,7 @@ impl BacktestReportTemplate {
             timeframe,
             timerange,
             created_at: Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            user_fullname,
             trades,
             profit_pct,
             win_rate,
@@ -96,6 +131,7 @@ impl BacktestReportTemplate {
             backtest_time_secs,
             tables,
             raw_output,
+            logo_base64: load_logo_base64(),
         }
     }
 }

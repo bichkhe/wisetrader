@@ -40,6 +40,59 @@ fn split_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
 
 /// Convert table with box-drawing characters to mobile-friendly format
 /// Parses table rows and converts to simple list format
+/// Get icon for metric based on its name
+fn get_metric_icon(metric_name: &str) -> &'static str {
+    let lower = metric_name.to_lowercase();
+    if lower.contains("profit") || lower.contains("pnl") {
+        "💰"
+    } else if lower.contains("return") || lower.contains("roi") {
+        "📈"
+    } else if lower.contains("win") || lower.contains("winrate") {
+        "✅"
+    } else if lower.contains("loss") {
+        "❌"
+    } else if lower.contains("trade") || lower.contains("trades") {
+        "🔄"
+    } else if lower.contains("duration") || lower.contains("time") {
+        "⏱️"
+    } else if lower.contains("drawdown") || lower.contains("dd") {
+        "📉"
+    } else if lower.contains("sharpe") {
+        "📊"
+    } else if lower.contains("expectancy") {
+        "🎯"
+    } else if lower.contains("avg") || lower.contains("average") {
+        "📊"
+    } else if lower.contains("total") {
+        "📦"
+    } else if lower.contains("max") {
+        "⬆️"
+    } else if lower.contains("min") {
+        "⬇️"
+    } else if lower.contains("best") {
+        "🏆"
+    } else if lower.contains("worst") {
+        "⚠️"
+    } else if lower.contains("count") || lower.contains("number") {
+        "🔢"
+    } else if lower.contains("ratio") || lower.contains("percent") || lower.contains("%") {
+        "📊"
+    } else {
+        "📌"
+    }
+}
+
+// All box-drawing characters to skip
+const BOX_CHARS: &[char] = &[
+    '┃', '│', '┼', '━', '═', '─', '┡', '┏', '┗', '┳', '┻', '┣', '┫',
+    '┨', '┧', '┠', '┯', '┷', '┿', '╂', '╋', '╁', '╀', '╇', '╈', '╉',
+    '╊', '╃', '╄', '╅', '╆', '┩', '┪', '┬', '┭', '┮',
+    '┯', '┰', '┱', '┲', '┴', '┵', '┶', '┸', '┹', '┺',
+    '┽', '┾', '╌', '╍', '╎', '╏', '║', '╒', '╓', '╔', '╕',
+    '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡', '╢',
+    '╣', '╤', '╥', '╦', '╧', '╨', '╩', '╪', '╫', '╬'
+];
+
 fn format_table_mobile_friendly(table_content: &str) -> String {
     let lines: Vec<&str> = table_content.lines().collect();
     let mut formatted = String::new();
@@ -55,10 +108,8 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
         }
         
         // Skip lines that are only separators (dashes, underscores, box-drawing chars, pipes)
-        if trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || c == '━' || 
-                                  c == '═' || c == '┡' || c == '┏' || c == '┗' || 
-                                  c == '┳' || c == '┻' || c == '┣' || c == '┫' ||
-                                  c == ' ' || c == '─' || c == '-' || c == '_' ||
+        if trimmed.chars().all(|c| BOX_CHARS.contains(&c) || 
+                                  c == ' ' || c == '-' || c == '_' ||
                                   c == '=' || c == '|') {
             continue;
         }
@@ -69,17 +120,31 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
         }
         
         // Skip lines that are mostly dashes/separators (e.g., "------", "━━━━━━")
-        let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
-                                                           *c == '━' || *c == '═' || *c == '─' ||
+        let separator_chars = trimmed.chars().filter(|c| BOX_CHARS.contains(&c) ||
+                                                           *c == '-' || *c == '_' || *c == '=' ||
                                                            *c == '|').count();
         if separator_chars as f64 / trimmed.len() as f64 > 0.7 {
             continue;
         }
         
-        // Parse table row - split by box-drawing characters
-        let cells: Vec<String> = trimmed
-            .split(|c| c == '┃' || c == '│' || c == '┼')
-            .map(|s| s.trim().to_string())
+        // Parse table row - split by box-drawing characters and clean them
+        let mut cleaned_line = trimmed.to_string();
+        // Remove all box-drawing characters
+        for &box_char in BOX_CHARS {
+            cleaned_line = cleaned_line.replace(box_char, "|");
+        }
+        
+        let cells: Vec<String> = cleaned_line
+            .split('|')
+            .map(|s| {
+                // Remove any remaining box-drawing chars and clean
+                s.trim()
+                    .chars()
+                    .filter(|c| !BOX_CHARS.contains(c))
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
+            })
             .filter(|s| !s.is_empty())
             .collect();
         
@@ -117,20 +182,22 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
         
         for row in data_rows.iter().take(rows_to_show) {
             if is_summary_table && row.len() == 2 {
-                // Simple format for summary: "Key: Value"
+                // Simple format for summary: "Icon Key: Value"
                 let key = row[0].trim();
                 let value = row[1].trim();
                 if !key.is_empty() && !value.is_empty() {
-                    formatted.push_str(&format!("{}: {}\n", 
-                        escape_html(key), escape_html(value)));
+                    let icon = get_metric_icon(key);
+                    formatted.push_str(&format!("{} {}: {}\n", 
+                        icon, escape_html(key), escape_html(value)));
                 }
             } else {
-                // For other tables, use simple format: "Key: Value" for each column
+                // For other tables, use simple format: "Icon Key: Value" for each column
                 for (col_idx, cell) in row.iter().enumerate() {
                     if col_idx < headers.len() && !cell.trim().is_empty() {
                         let header = &headers[col_idx];
-                        formatted.push_str(&format!("{}: {}\n", 
-                            escape_html(header), escape_html(cell)));
+                        let icon = get_metric_icon(header);
+                        formatted.push_str(&format!("{} {}: {}\n", 
+                            icon, escape_html(header), escape_html(cell)));
                     }
                 }
             }
@@ -160,23 +227,27 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
                 continue;
             }
             
-            if !trimmed.chars().all(|c| c == '┃' || c == '│' || c == '┼' || 
-                                       c == '━' || c == '═' || c == ' ' || c == '─' ||
-                                       c == '-' || c == '_' || c == '=') {
-                // Remove box-drawing chars, keep content
+            // Check if line contains any non-separator content
+            let has_content = trimmed.chars().any(|c| !BOX_CHARS.contains(&c) && 
+                                                   c != ' ' && c != '-' && 
+                                                   c != '_' && c != '=' && c != '|');
+            
+            if has_content {
+                // Remove all box-drawing chars, keep content
                 let mut cleaned = trimmed
                     .chars()
-                    .filter(|c| *c != '┃' && *c != '│' && *c != '┼' && 
-                               *c != '┡' && *c != '┏' && *c != '┗')
+                    .filter(|c| !BOX_CHARS.contains(c))
                     .collect::<String>()
                     .trim()
                     .to_string();
                 
                 // Remove leading/trailing dashes and separators
                 cleaned = cleaned.trim_start_matches(|c| c == '-' || c == '_' || c == '=' || 
-                                                              c == '━' || c == '═' || c == '─')
+                                                              c == '━' || c == '═' || c == '─' ||
+                                                              c == '|')
                                      .trim_end_matches(|c| c == '-' || c == '_' || c == '=' || 
-                                                            c == '━' || c == '═' || c == '─')
+                                                            c == '━' || c == '═' || c == '─' ||
+                                                            c == '|')
                                      .trim()
                                      .to_string();
                 
@@ -201,11 +272,16 @@ fn format_table_mobile_friendly(table_content: &str) -> String {
                 return false;
             }
             
-            let separator_chars = trimmed.chars().filter(|c| *c == '-' || *c == '_' || *c == '=' || 
+            // Check for box-drawing characters
+            let box_char_count = trimmed.chars().filter(|c| BOX_CHARS.contains(c)).count();
+            let separator_chars = trimmed.chars().filter(|c| BOX_CHARS.contains(c) ||
+                                                               *c == '-' || *c == '_' || *c == '=' ||
                                                                *c == '━' || *c == '═' || *c == '─' ||
                                                                *c == '|').count();
             let ratio = separator_chars as f64 / trimmed.len() as f64;
-            ratio < 0.7
+            let box_ratio = box_char_count as f64 / trimmed.len() as f64;
+            // Skip if mostly separators or if it's mostly box-drawing chars
+            ratio < 0.7 && box_ratio < 0.8
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -365,6 +441,7 @@ async fn generate_html_report(
     pair: &str,
     timeframe: &str,
     timerange: &str,
+    user_fullname: Option<String>,
     result: &shared::BacktestResult,
     tables: &[(String, String)],
 ) -> Result<Option<String>, anyhow::Error> {
@@ -386,6 +463,7 @@ async fn generate_html_report(
         pair.to_string(),
         timeframe.to_string(),
         timerange.to_string(),
+        user_fullname,
         result.trades,
         result.profit_pct,
         result.win_rate,
@@ -1212,6 +1290,9 @@ pub async fn handle_backtest_callback(
                                         // Generate HTML report if enabled - use config from AppState
                                         let config = state.config.as_ref();
                                         
+                                        // Get user fullname for HTML report
+                                        let user_fullname = user.as_ref().and_then(|u| u.fullname.clone());
+                                        
                                         let html_report_url = if config.generate_html_reports {
                                             match generate_html_report(
                                                 &config,
@@ -1220,6 +1301,7 @@ pub async fn handle_backtest_callback(
                                                 &freqtrade_pair,
                                                 &timeframe,
                                                 &timerange,
+                                                user_fullname,
                                                 &result,
                                                 &tables,
                                             ).await {

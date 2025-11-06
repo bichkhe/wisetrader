@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 use teloxide::{prelude::*, types::InlineKeyboardButton};
 use sea_orm::{EntityTrait, ActiveValue};
 use shared::entity::{users, strategies};
@@ -139,13 +138,13 @@ pub async fn handle_strategy_callback(
                     // Fetch preset strategy from local filesystem
                     match preset_strategies::load_strategy_from_local(&strategy_name).await {
                         Ok(preset) => {
-                            // Auto-fill strategy details and jump to pair selection
+                            // Auto-fill strategy details and ask for strategy name
                             let algorithm = preset.indicators.first().unwrap_or(&"RSI".to_string()).clone();
                             let buy_condition = preset.buy_condition.clone();
                             let sell_condition = preset.sell_condition.clone();
                             let timeframe = preset.timeframe.unwrap_or_else(|| "1h".to_string());
                             
-                            // Show summary and ask for pair
+                            // Show summary and ask for strategy name
                             // Escape HTML in conditions before passing to translate
                             let buy_condition_escaped = escape_html(&buy_condition);
                             let sell_condition_escaped = escape_html(&sell_condition);
@@ -156,34 +155,14 @@ pub async fn handle_strategy_callback(
                                 ("sell_condition", &sell_condition_escaped),
                                 ("timeframe", &escape_html(&timeframe)),
                             ]));
+                            let name_msg = i18n::translate(&locale, "strategy_enter_name", None);
+                            let full_msg = format!("{}\n\n{}", summary_msg, name_msg);
                             
-                            let mut pair_buttons = vec![
-                                vec![
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_btc_usdt"), "pair_BTCUSDT"),
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_eth_usdt"), "pair_ETHUSDT"),
-                                ],
-                                vec![
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_bnb_usdt"), "pair_BNBUSDT"),
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_ada_usdt"), "pair_ADAUSDT"),
-                                ],
-                                vec![
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_sol_usdt"), "pair_SOLUSDT"),
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_dot_usdt"), "pair_DOTUSDT"),
-                                ],
-                                vec![
-                                    InlineKeyboardButton::callback(i18n::get_button_text(&locale, "pair_manual"), "pair_manual"),
-                                ],
-                            ];
-                            pair_buttons.push(vec![
-                                InlineKeyboardButton::callback(i18n::get_button_text(&locale, "strategy_cancel_button"), "cancel_strategy"),
-                            ]);
-                            
-                            bot.edit_message_text(chat_id, message_id, summary_msg)
+                            bot.edit_message_text(chat_id, message_id, full_msg)
                                 .parse_mode(teloxide::types::ParseMode::Html)
-                                .reply_markup(teloxide::types::InlineKeyboardMarkup::new(pair_buttons))
                                 .await?;
                             
-                            dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPair {
+                            dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPresetName {
                                 algorithm,
                                 buy_condition,
                                 sell_condition,
@@ -330,6 +309,7 @@ pub async fn handle_strategy_callback(
                             buy_condition,
                             sell_condition,
                             timeframe,
+                            strategy_name: String::new(), // Empty for custom flow
                         })).await?;
                     }
                 }
@@ -341,10 +321,15 @@ pub async fn handle_strategy_callback(
                     } else {
                         let pair = data.replace("pair_", "");
                         // Get current state to extract all data and save strategy
-                        if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe }))) = dialogue.get().await {
+                        if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe, strategy_name }))) = dialogue.get().await {
                             // Get telegram_id from callback query
                             let telegram_id = q.from.id.0.to_string();
-                            let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
+                            // Use strategy_name from state if provided, otherwise generate from algorithm, timeframe, pair
+                            let final_strategy_name = if strategy_name.is_empty() {
+                                format!("{}_{}_{}", algorithm, timeframe, pair)
+                            } else {
+                                strategy_name.clone()
+                            };
                             
                             // Create StrategyConfig for content field
                             use crate::services::strategy_engine::StrategyConfig;
@@ -363,7 +348,7 @@ pub async fn handle_strategy_callback(
                             
                             let new_strategy = strategies::ActiveModel {
                                 telegram_id: ActiveValue::Set(telegram_id.clone()),
-                                name: ActiveValue::Set(Some(strategy_name.clone())),
+                                name: ActiveValue::Set(Some(final_strategy_name.clone())),
                                 description: ActiveValue::Set(Some(format!(
                                     "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
                                     algorithm, buy_condition, sell_condition, timeframe, pair
@@ -380,7 +365,7 @@ pub async fn handle_strategy_callback(
                                     // translate() will handle HTML escaping automatically
                                     // locale is already available from callback handler scope
                                     let success_msg = i18n::translate(&locale, "strategy_created_success", Some(&[
-                                        ("strategy_name", &strategy_name),
+                                        ("strategy_name", &final_strategy_name),
                                         ("algorithm", &algorithm),
                                         ("buy_condition", &buy_condition),
                                         ("sell_condition", &sell_condition),
@@ -429,7 +414,6 @@ pub async fn handle_create_strategy(
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
     dialogue.update(BotState::CreateStrategy(CreateStrategyState::Start)).await?;
-    let start_time = Instant::now();
     
     let from = msg.from.unwrap();
     let telegram_id = from.id.0 as i64;
@@ -530,6 +514,61 @@ pub async fn handle_strategy_input_callback(
                     })).await?;
                 }
             }
+            BotState::CreateStrategy(CreateStrategyState::WaitingForPresetName { algorithm, buy_condition, sell_condition, timeframe }) => {
+                if let Some(text) = msg.text() {
+                    let strategy_name = text.trim().to_string();
+                    
+                    // Validate strategy name is not empty
+                    if strategy_name.is_empty() {
+                        let error_msg = i18n::translate(locale, "strategy_name_empty", None);
+                        bot.send_message(msg.chat.id, error_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await?;
+                        return Ok(());
+                    }
+                    
+                    // Show pair selection buttons
+                    let mut pair_buttons = vec![
+                        vec![
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_btc_usdt"), "pair_BTCUSDT"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_eth_usdt"), "pair_ETHUSDT"),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_bnb_usdt"), "pair_BNBUSDT"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_ada_usdt"), "pair_ADAUSDT"),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_sol_usdt"), "pair_SOLUSDT"),
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_dot_usdt"), "pair_DOTUSDT"),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(i18n::get_button_text(locale, "pair_manual"), "pair_manual"),
+                        ],
+                    ];
+                    pair_buttons.push(vec![
+                        InlineKeyboardButton::callback(i18n::get_button_text(locale, "strategy_cancel_button"), "cancel_strategy"),
+                    ]);
+                    
+                    let name_confirm_msg = i18n::translate(locale, "strategy_name_set", Some(&[
+                        ("name", &escape_html(&strategy_name)),
+                    ]));
+                    let pair_msg = i18n::translate(locale, "strategy_step5_choose_pair", None);
+                    let instruction = format!("{}\n\n{}", name_confirm_msg, pair_msg);
+                    
+                    bot.send_message(msg.chat.id, instruction)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(pair_buttons))
+                        .await?;
+                    
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPair {
+                        algorithm,
+                        buy_condition,
+                        sell_condition,
+                        timeframe,
+                        strategy_name,
+                    })).await?;
+                }
+            }
             BotState::CreateStrategy(CreateStrategyState::WaitingForSellCondition { algorithm, buy_condition }) => {
                 if let Some(text) = msg.text() {
                     let sell_condition = text.trim().to_string();
@@ -575,12 +614,17 @@ pub async fn handle_strategy_input_callback(
                     })).await?;
                 }
             }
-            BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe }) => {
+            BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe, strategy_name }) => {
                 if let Some(text) = msg.text() {
                     let pair = text.trim().to_uppercase();
                     // Save strategy to database
                     let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
-                    let strategy_name = format!("{}_{}_{}", algorithm, timeframe, pair);
+                    // Use strategy_name from state if provided, otherwise generate from algorithm, timeframe, pair
+                    let final_strategy_name = if strategy_name.is_empty() {
+                        format!("{}_{}_{}", algorithm, timeframe, pair)
+                    } else {
+                        strategy_name.clone()
+                    };
                     
                     // Create StrategyConfig for content field
                     use crate::services::strategy_engine::StrategyConfig;
@@ -599,7 +643,7 @@ pub async fn handle_strategy_input_callback(
                     
                     let new_strategy = strategies::ActiveModel {
                         telegram_id: ActiveValue::Set(telegram_id.clone()),
-                        name: ActiveValue::Set(Some(strategy_name.clone())),
+                        name: ActiveValue::Set(Some(final_strategy_name.clone())),
                         description: ActiveValue::Set(Some(format!(
                             "Algorithm: {}\nBuy: {}\nSell: {}\nTimeframe: {}\nPair: {}",
                             algorithm, buy_condition, sell_condition, timeframe, pair

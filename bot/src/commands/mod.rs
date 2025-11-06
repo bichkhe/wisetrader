@@ -171,7 +171,7 @@ pub async fn handle_invalid(
                 BotState::CreateStrategy(CreateStrategyState::WaitingForTimeframe { algorithm, buy_condition, sell_condition }) => {
                     i18n::translate(locale, "error_state_strategy_waiting_timeframe", None)
                 }
-                BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe }) => {
+                BotState::CreateStrategy(CreateStrategyState::WaitingForPair { algorithm, buy_condition, sell_condition, timeframe, strategy_name }) => {
                     i18n::translate(locale, "error_state_strategy_waiting_pair", None)
                 }
                 BotState::Backtest(BacktestState::WaitingForStrategy) => {
