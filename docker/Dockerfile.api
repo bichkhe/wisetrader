@@ -55,8 +55,8 @@ COPY . .
 # Build the API
 RUN cargo build --release --package api
 
-# Runtime stage
-FROM debian:bookworm-slim
+# Runtime stage - use same base as builder to match GLIBC version
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
