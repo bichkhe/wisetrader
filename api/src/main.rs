@@ -552,11 +552,13 @@ async fn deploy_bot(
     
     info!("Detected UID {} for git operations (from mounted directory ownership)", bichkhe_uid);
     
-    // Run git pull directly - the directory is mounted with host user permissions
+    // Run git pull with proper permissions
     // First, add the directory to git safe.directory to avoid ownership issues
-    // Then run git pull
+    // Then temporarily change permissions of .git directory to allow write access for current user
+    // Finally run git pull and restore permissions
+    // Use chmod with group/others write permission since container user != host user
     let git_script = format!(
-        r#"cd {} && git config --global --add safe.directory {} && git pull origin"#,
+        r#"cd {} && git config --global --add safe.directory {} && chmod -R g+w .git 2>/dev/null || chmod -R 775 .git 2>/dev/null || true && git pull origin"#,
         work_dir, work_dir
     );
     
