@@ -12,32 +12,34 @@ echo "Check interval: ${CHECK_INTERVAL} seconds"
 echo ""
 
 # Install docker compose if not available
+# Use /tmp for installation to avoid read-only filesystem issues
 if ! command -v docker >/dev/null 2>&1; then
     echo "Installing Docker CLI..."
-    apk add --no-cache docker-cli docker-compose >/dev/null 2>&1 || {
-        # Try alternative installation method
-        ARCH=$(uname -m)
-        if [ "$ARCH" = "x86_64" ]; then
-            DOCKER_ARCH="x86_64"
-        elif [ "$ARCH" = "aarch64" ]; then
-            DOCKER_ARCH="aarch64"
-        else
-            DOCKER_ARCH="x86_64"
-        fi
-        
-        # Install docker CLI
-        wget -q -O /tmp/docker.tgz "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-24.0.7.tgz" && \
-        tar -xzC /tmp -f /tmp/docker.tgz && \
-        mv /tmp/docker/docker /usr/local/bin/docker && \
-        chmod +x /usr/local/bin/docker && \
-        rm -rf /tmp/docker /tmp/docker.tgz
-        
-        # Install docker compose
-        mkdir -p /usr/local/lib/docker/cli-plugins
-        wget -q -O /usr/local/lib/docker/cli-plugins/docker-compose \
-            "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-${DOCKER_ARCH}" && \
-        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+        DOCKER_ARCH="x86_64"
+    elif [ "$ARCH" = "aarch64" ]; then
+        DOCKER_ARCH="aarch64"
+    else
+        DOCKER_ARCH="x86_64"
     fi
+    
+    # Install docker CLI to /tmp (writable location)
+    mkdir -p /tmp/docker-bin
+    wget -q -O /tmp/docker.tgz "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-24.0.7.tgz" && \
+    tar -xzC /tmp/docker-bin -f /tmp/docker.tgz && \
+    chmod +x /tmp/docker-bin/docker/docker && \
+    rm -f /tmp/docker.tgz
+    
+    # Install docker compose to /tmp
+    mkdir -p /tmp/docker-bin/docker/cli-plugins
+    wget -q -O /tmp/docker-bin/docker/cli-plugins/docker-compose \
+        "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-${DOCKER_ARCH}" && \
+    chmod +x /tmp/docker-bin/docker/cli-plugins/docker-compose
+    
+    # Add to PATH
+    export PATH="/tmp/docker-bin/docker:${PATH}"
+    export DOCKER_CONFIG="/tmp/docker-bin"
 fi
 
 # Function to check and deploy
@@ -47,7 +49,9 @@ deploy_bot() {
     cd "${WORK_DIR}"
     
     # Configure git safe.directory to avoid ownership issues
+    # Use local config instead of global to avoid read-only filesystem issues
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Configuring git safe.directory..."
+    git config --local --add safe.directory "${WORK_DIR}" 2>/dev/null || \
     git config --global --add safe.directory "${WORK_DIR}" 2>/dev/null || true
     
     # Git pull
@@ -59,10 +63,18 @@ deploy_bot() {
     
     # Docker compose up
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running docker compose up -d bot --build..."
-    docker compose -f "${WORK_DIR}/docker-compose.yml" --project-directory "${WORK_DIR}" up -d bot --build || {
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Docker compose failed"
-        return 1
-    }
+    # Use full path to docker if installed in /tmp
+    if [ -f "/tmp/docker-bin/docker/docker" ]; then
+        /tmp/docker-bin/docker/docker compose -f "${WORK_DIR}/docker-compose.yml" --project-directory "${WORK_DIR}" up -d bot --build || {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Docker compose failed"
+            return 1
+        }
+    else
+        docker compose -f "${WORK_DIR}/docker-compose.yml" --project-directory "${WORK_DIR}" up -d bot --build || {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Docker compose failed"
+            return 1
+        }
+    fi
     
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Bot deployed successfully!"
 }
