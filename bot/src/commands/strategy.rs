@@ -420,7 +420,7 @@ pub async fn handle_create_strategy(
     let username = from.username.unwrap_or("Unknown".to_string());
 
     tracing::info!(
-        "Handling /create_strategy command from user: {} (id: {})",
+        "Handling /createstrategy command from user: {} (id: {})",
         username,
         telegram_id
     );
