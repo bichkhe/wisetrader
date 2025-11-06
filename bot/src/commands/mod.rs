@@ -23,6 +23,10 @@ pub use me::handle_profile_callback;
 pub use payment::{handle_deposit, handle_balance, handle_deposit_callback};
 pub mod start_trading;
 pub use start_trading::{handle_start_trading, handle_start_trading_callback};
+pub mod live_trading;
+pub use live_trading::{handle_live_trading, handle_live_trading_callback, handle_live_trading_input};
+pub mod tokens;
+pub use tokens::{handle_tokens, handle_tokens_callback};
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -63,8 +67,12 @@ pub enum Command {
    Deposit,
    /// Xem số dư hiện tại
    Balance,
-   /// Bắt đầu giao dịch với chiến lược đã chọn
+   /// Bắt đầu giao dịch với chiến lược đã chọn (deprecated, use LiveTrading)
    StartTrading,
+   /// Bắt đầu giao dịch trực tiếp với exchange (Binance/OKX)
+   LiveTrading,
+   /// Quản lý OAuth tokens cho exchanges
+   Tokens,
 }
 
 
@@ -112,6 +120,8 @@ pub async fn handle_help(
     help_text.push_str(&format!("/createstrategy - {}\n", i18n::translate(locale, "cmd_help_create_strategy", None)));
     help_text.push_str(&format!("/mystrategies - {}\n", i18n::translate(locale, "cmd_help_mystrategies", None)));
     help_text.push_str(&format!("/starttrading - {}\n", i18n::translate(locale, "cmd_help_start_trading", None)));
+    help_text.push_str(&format!("/livetrading - {}\n", i18n::translate(locale, "cmd_help_live_trading", None)));
+    help_text.push_str(&format!("/tokens - {}\n", i18n::translate(locale, "cmd_help_tokens", None)));
     help_text.push_str(&format!("/backtest - {}\n", i18n::translate(locale, "cmd_help_backtest", None)));
     help_text.push_str(&format!("/back - {}\n", i18n::translate(locale, "cmd_help_back", None)));
     help_text.push_str(&format!("/deposit - {}\n", i18n::translate(locale, "cmd_help_deposit", None)));

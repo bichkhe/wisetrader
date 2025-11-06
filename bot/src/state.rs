@@ -105,6 +105,7 @@ pub enum BotState {
     CreateStrategy(CreateStrategyState),
     Trading(TradingState),
     Backtest(BacktestState),
+    LiveTrading(LiveTradingState),
 }
 
 
@@ -172,5 +173,23 @@ pub enum BacktestState {
         strategy_id: u64,
         strategy_name: String,
         exchange: String,
+    },
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum LiveTradingState {
+    #[default]
+    Idle,
+    WaitingForExchangeSetup,
+    WaitingForApiKey {
+        exchange: String,
+    },
+    WaitingForApiSecret {
+        exchange: String,
+        api_key: String,
+    },
+    WaitingForStrategy,
+    WaitingForExchange {
+        strategy_id: u64,
     },
 }

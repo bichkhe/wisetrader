@@ -2,5 +2,6 @@
 
 pub mod prelude;
 
+pub mod exchange_tokens;
 pub mod strategies;
 pub mod users;

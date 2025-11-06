@@ -197,6 +197,23 @@ backtest_exchange_okx: "🟢 OKX"
 button_cancel: "❌ Hủy"
 button_confirm: "✅ Xác nhận"
 button_next: "➡️ Tiếp theo"
+
+# Live Trading
+live_trading_no_tokens: "⚠️ <b>Chưa có Token Exchange</b>\n\nBạn cần thiết lập OAuth tokens cho ít nhất một sàn giao dịch (Binance hoặc OKX) trước khi bắt đầu live trading.\n\nVui lòng thiết lập thông tin API của bạn:"
+live_trading_tokens_configured: "✅ <b>Trạng thái Token Exchange</b>\n\n🔐 <b>Các sàn đã thiết lập:</b> {exchanges}\n📊 <b>Tổng số token active:</b> {count}\n\nBạn có thể:\n• Thiết lập thêm sàn giao dịch\n• Cập nhật token hiện có\n• Bắt đầu live trading với chiến lược của bạn"
+live_trading_setup_binance: "🔵 Thiết lập Binance"
+live_trading_setup_okx: "🟢 Thiết lập OKX"
+live_trading_start_trading: "🚀 Bắt đầu giao dịch"
+live_trading_update_token: "🔄 <b>Cập nhật Token cho {exchange}</b>\n\nBạn đã có token cho sàn này. Nhập thông tin mới sẽ thay thế token cũ.\n\nVui lòng nhập API Key mới:"
+live_trading_select_strategy: "📊 <b>Chọn Chiến lược cho Live Trading</b>\n\nVui lòng chọn một chiến lược từ danh sách:"
+live_trading_select_exchange: "🔐 <b>Chọn Sàn giao dịch</b>\n\nChọn sàn giao dịch để sử dụng cho live trading:"
+live_trading_enter_api_key: "📝 <b>Nhập API Key cho {exchange}</b>\n\nVui lòng nhập API Key của bạn:\n\n⚠️ <i>API key của bạn sẽ được lưu trữ an toàn và mã hóa.</i>"
+live_trading_enter_api_secret: "📝 <b>Nhập API Secret cho {exchange}</b>\n\nVui lòng nhập API Secret của bạn:\n\n⚠️ <i>API secret của bạn sẽ được lưu trữ an toàn và mã hóa.</i>"
+live_trading_invalid_api_key: "❌ <b>API Key không hợp lệ</b>\n\nAPI Key không được để trống. Vui lòng thử lại."
+live_trading_invalid_api_secret: "❌ <b>API Secret không hợp lệ</b>\n\nAPI Secret không được để trống. Vui lòng thử lại."
+live_trading_token_saved: "✅ <b>Token đã được lưu!</b>\n\n🔐 <b>Sàn giao dịch:</b> {exchange}\n\nThông tin API của bạn đã được lưu và mã hóa.\n\nBây giờ bạn có thể sử dụng /livetrading để bắt đầu live trading."
+live_trading_started: "✅ <b>Live Trading đã bắt đầu!</b>\n\n🔐 <b>Sàn giao dịch:</b> {exchange}\n📊 <b>Chiến lược:</b> {strategy}\n\n⚠️ <b>Cảnh báo:</b> Điều này sẽ thực hiện giao dịch thực bằng tài khoản exchange của bạn. Hãy đảm bảo bạn hiểu rõ rủi ro."
+live_trading_start_error: "❌ <b>Lỗi khi bắt đầu Live Trading</b>\n\n<b>Lỗi:</b> {error}\n\nVui lòng kiểm tra thông tin API của bạn và thử lại."
 button_back: "⬅️ Quay lại"
 
 # Time periods

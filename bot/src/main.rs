@@ -23,6 +23,8 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_delete_strategy_callback,
     handle_start, handle_language_selection, handle_language_callback, handle_profile_callback,
     handle_start_trading, handle_start_trading_callback,
+    handle_live_trading, handle_live_trading_callback, handle_live_trading_input,
+    handle_tokens, handle_tokens_callback,
     handle_back, handle_deposit, handle_balance, handle_deposit_callback,
     Command},  state::AppState};
 use state::{BotState, BacktestState};
@@ -44,6 +46,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::Deposit].endpoint(handle_deposit))
                 .branch(case![Command::Balance].endpoint(handle_balance))
                 .branch(case![Command::StartTrading].endpoint(handle_start_trading))
+                .branch(case![Command::LiveTrading].endpoint(handle_live_trading))
+                .branch(case![Command::Tokens].endpoint(handle_tokens))
         );
 
     let message_handler = Update::filter_message()
@@ -51,6 +55,10 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(
             case![BotState::CreateStrategy(pk)]
                 .endpoint(handle_strategy_input_callback)
+        )
+        .branch(
+            case![BotState::LiveTrading(pk)]
+                .endpoint(handle_live_trading_input)
         )
         .branch(case![BotState::Normal].endpoint(handle_invalid))
         .branch(dptree::endpoint(handle_invalid));
@@ -101,6 +109,29 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 q.data.as_ref().map(|d| d.starts_with("start_trading_") || d == "cancel_start_trading").unwrap_or(false)
             })
             .endpoint(handle_start_trading_callback)
+        )
+        .branch(
+            // Handle live trading callbacks from any state
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| 
+                    d.starts_with("live_trading_") || 
+                    d.starts_with("live_trading_setup_") || 
+                    d.starts_with("live_trading_exchange_") ||
+                    d == "cancel_live_trading"
+                ).unwrap_or(false)
+            })
+            .endpoint(handle_live_trading_callback)
+        )
+        .branch(
+            // Handle tokens callbacks from any state
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| 
+                    d.starts_with("tokens_") || 
+                    d.starts_with("revoke_token_") ||
+                    d == "tokens_cancel"
+                ).unwrap_or(false)
+            })
+            .endpoint(handle_tokens_callback)
         );
         
 

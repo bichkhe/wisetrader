@@ -306,6 +306,16 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "strategy_delete_confirm_yes") => "✅ Confirm".to_string(),
         ("vi", "strategy_delete_confirm_no") => "❌ Hủy".to_string(),
         ("en", "strategy_delete_confirm_no") => "❌ Cancel".to_string(),
+        
+        // Live trading buttons
+        ("vi", "live_trading_setup_binance") => "🔵 Thiết lập Binance".to_string(),
+        ("en", "live_trading_setup_binance") => "🔵 Setup Binance".to_string(),
+        ("vi", "live_trading_setup_okx") => "🟢 Thiết lập OKX".to_string(),
+        ("en", "live_trading_setup_okx") => "🟢 Setup OKX".to_string(),
+        ("vi", "live_trading_start_trading") => "🚀 Bắt đầu giao dịch".to_string(),
+        ("en", "live_trading_start_trading") => "🚀 Start Trading".to_string(),
+        
+        // Trading buttons
         ("vi", "trading_cancel") => "❌ Hủy".to_string(),
         ("en", "trading_cancel") => "❌ Cancel".to_string(),
         
