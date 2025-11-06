@@ -3,31 +3,45 @@ use chrono::Utc;
 use base64::{Engine as _, engine::general_purpose};
 
 /// Load logo and convert to base64 data URI
+/// Tries to load from filesystem first, falls back to embedded logo if available
 fn load_logo_base64() -> String {
-    // Try multiple possible paths for logo (relative to workspace root or current directory)
+    // Try multiple possible paths for logo (relative to workspace root, current directory, or Docker paths)
     let possible_paths = vec![
+        // Docker container paths (first priority)
+        "/app/shared/templates/logo.png",
+        "/app/templates/logo.png",
+        // Local development paths
         "shared/templates/logo.png",
         "./shared/templates/logo.png",
         "../shared/templates/logo.png",
         "../../shared/templates/logo.png",
+        "../../../shared/templates/logo.png",
         "templates/logo.png",
         "./templates/logo.png",
-        // For Docker/build environments
-        "/app/shared/templates/logo.png",
-        "/app/templates/logo.png",
+        // Relative to current working directory
+        "./logo.png",
     ];
     
-    for path_str in possible_paths {
-        if let Ok(bytes) = std::fs::read(path_str) {
-            if !bytes.is_empty() {
+    for path_str in &possible_paths {
+        match std::fs::read(path_str) {
+            Ok(bytes) if !bytes.is_empty() => {
                 let base64 = general_purpose::STANDARD.encode(&bytes);
-                tracing::info!("Logo loaded successfully from: {}", path_str);
+                tracing::info!("✅ Logo loaded successfully from: {}", path_str);
                 return format!("data:image/png;base64,{}", base64);
+            }
+            Ok(_) => {
+                tracing::warn!("Logo file exists but is empty: {}", path_str);
+            }
+            Err(e) => {
+                tracing::debug!("Could not read logo from {}: {}", path_str, e);
             }
         }
     }
     
-    tracing::warn!("Logo file not found in any of the expected paths");
+    // Try embedded logo as fallback (if we compile with include_bytes!)
+    // For now, we'll just log a warning
+    tracing::warn!("⚠️ Logo file not found in any of the expected paths. Searched: {:?}", possible_paths);
+    
     // Return empty string if logo not found
     String::new()
 }

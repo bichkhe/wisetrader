@@ -113,17 +113,22 @@ COPY --from=builder /app/target/release/migration /app/migration
 # Copy bot assets
 COPY --from=builder /app/bot/locales ./locales
 
+# Copy templates directory (contains logo.png and template files)
+COPY --from=builder /app/shared/templates ./shared/templates
+
 # Copy entrypoint and permission fix script
 COPY docker/entrypoint-bot.sh /entrypoint.sh
 COPY docker/fix-permissions.sh /fix-permissions.sh
 RUN mkdir -p /app/html_reports && \
+    mkdir -p /app/shared/templates && \
     chmod +x /entrypoint.sh && \
     chmod +x /fix-permissions.sh && \
     chmod +x /app/bot && \
     chmod +x /app/migration
 
-# Set permissions
+# Set permissions (including templates directory)
 RUN chown -R appuser:appuser /app && \
+    chmod -R 755 /app/shared/templates && \
     # Allow appuser to run fix-permissions.sh with sudo without password
     echo "appuser ALL=(ALL) NOPASSWD: /fix-permissions.sh" >> /etc/sudoers.d/appuser
 

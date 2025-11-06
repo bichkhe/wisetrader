@@ -72,12 +72,17 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/target/release/api /app/api
 
+# Copy templates directory (contains logo.png and template files)
+COPY --from=builder /app/shared/templates ./shared/templates
+
 # Copy .env file (will be overridden by docker-compose env vars)
 COPY .env /app/.env
 
 # Create html_reports directory and set ownership
 RUN mkdir -p /app/html_reports && \
+    mkdir -p /app/shared/templates && \
     chown -R appuser:appuser /app && \
+    chmod -R 755 /app/shared/templates && \
     chmod +x /app/api
 
 # Switch to non-root user
