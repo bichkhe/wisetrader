@@ -13,7 +13,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot2025"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot2025" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,8 +51,8 @@ services:
       - "--strategy-path"
       - "/freqtrade/user_data/strategies"
     ports:
-      - "9080:8080"  # Web UI (optional)
-      - "9081:8081"  # API
+      - "9080:8080" # Web UI (optional)
+      - "9081:8081" # API
     volumes:
       - freqtrade_data:/freqtrade/user_data
       - ./docker/freqtrade/config.json:/freqtrade/user_data/config.json:ro
@@ -62,7 +62,7 @@ services:
     environment:
       - FT_ENFORCE_ENV=false
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/api/v1/ping || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/api/v1/ping || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -175,7 +175,33 @@ services:
       - wisetrader
     # Run as root to allow installation to /tmp (if needed)
     # The script will handle permissions properly
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:v3
+    ports:
+      - 8000:8000
+    volumes:
+      - woodpecker-server-data:/var/lib/woodpecker/
+    environment:
+      - WOODPECKER_OPEN=true
+      - WOODPECKER_HOST=${WOODPECKER_HOST:-https://ci.yaziztorm.xyz}
+      - WOODPECKER_GITHUB=true
+      - WOODPECKER_GITHUB=${WOODPECKER_GITHUB}
+      - WOODPECKER_GITHUB_CLIENT=${WOODPECKER_GITHUB_CLIENT:-Ov23liSZbma5ybhFqIwW}
+      - WOODPECKER_GITHUB_SECRET=${WOODPECKER_GITHUB_SECRET:-8d7133dff70dc322a13daf5cc6559b62fdbfe506}
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
 
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:v3
+    command: agent
+    restart: always
+    depends_on:
+      - woodpecker-server
+    volumes:
+      - woodpecker-agent-config:/etc/woodpecker
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WOODPECKER_SERVER=woodpecker-server:9000
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
 networks:
   wisetrader:
     driver: bridge
@@ -189,4 +215,7 @@ volumes:
     driver: local
   strategies_data:
     driver: local
-
+  woodpecker-server-data:
+    driver: local
+  woodpecker-agent-config:
+    driver: local
