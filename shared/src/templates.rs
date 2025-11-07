@@ -72,6 +72,12 @@ pub struct StrategyTemplate {
     pub ema_slow: i32,
     pub use_bb: bool,
     pub bb_period: i32,
+    pub use_stochastic: bool,
+    pub stochastic_period: i32,
+    pub stochastic_smooth_k: i32,
+    pub stochastic_smooth_d: i32,
+    pub use_adx: bool,
+    pub adx_period: i32,
     
     // Entry conditions
     pub entry_condition_rsi: bool,
@@ -79,10 +85,16 @@ pub struct StrategyTemplate {
     pub entry_condition_macd: bool,
     pub entry_condition_ema: bool,
     pub entry_condition_bb: bool,
+    pub entry_condition_stochastic: bool,
+    pub stochastic_oversold: i32,
+    pub entry_condition_adx: bool,
+    pub adx_threshold: i32,
     
     // Exit conditions
     pub exit_condition_rsi: bool,
     pub rsi_overbought: i32,
+    pub exit_condition_stochastic: bool,
+    pub stochastic_overbought: i32,
 }
 
 #[derive(Template)]
@@ -106,6 +118,7 @@ pub struct BacktestReportTemplate {
     pub tables: Vec<(String, String)>,
     pub raw_output: Option<String>,
     pub logo_base64: String,
+    pub ai_analysis: Option<String>,
 }
 
 impl BacktestReportTemplate {
@@ -126,6 +139,7 @@ impl BacktestReportTemplate {
         backtest_time_secs: u64,
         tables: Vec<(String, String)>,
         raw_output: Option<String>,
+        ai_analysis: Option<String>,
     ) -> Self {
         Self {
             strategy_name,
@@ -146,6 +160,7 @@ impl BacktestReportTemplate {
             tables,
             raw_output,
             logo_base64: load_logo_base64(),
+            ai_analysis,
         }
     }
 }

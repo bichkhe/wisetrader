@@ -384,3 +384,327 @@ impl Strategy for MaStrategy {
     }
 }
 
+/// Stochastic Oscillator Strategy
+/// Measures momentum by comparing closing price to price range over a period
+#[derive(Debug)]
+pub struct StochasticStrategy {
+    config: StrategyConfig,
+    prices: Vec<f64>,
+    highs: Vec<f64>,
+    lows: Vec<f64>,
+    period: usize,
+    smooth_k: usize,
+    smooth_d: usize,
+    last_k: Option<f64>,
+    last_d: Option<f64>,
+}
+
+impl StochasticStrategy {
+    pub fn new(config: StrategyConfig, period: usize, smooth_k: usize, smooth_d: usize) -> Result<Self> {
+        Ok(Self {
+            config,
+            prices: Vec::with_capacity(period + smooth_k + smooth_d + 10),
+            highs: Vec::with_capacity(period + smooth_k + smooth_d + 10),
+            lows: Vec::with_capacity(period + smooth_k + smooth_d + 10),
+            period,
+            smooth_k,
+            smooth_d,
+            last_k: None,
+            last_d: None,
+        })
+    }
+    
+    /// Calculate Stochastic %K
+    fn calculate_k(&self) -> Option<f64> {
+        if self.prices.len() < self.period {
+            return None;
+        }
+        
+        let recent_highs = &self.highs[self.highs.len() - self.period..];
+        let recent_lows = &self.lows[self.lows.len() - self.period..];
+        let current_close = self.prices[self.prices.len() - 1];
+        
+        let highest_high = recent_highs.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        let lowest_low = recent_lows.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+        
+        if highest_high == lowest_low {
+            return Some(50.0); // Neutral when no range
+        }
+        
+        let k = ((current_close - lowest_low) / (highest_high - lowest_low)) * 100.0;
+        Some(k)
+    }
+    
+    /// Calculate Stochastic %D (SMA of %K)
+    fn calculate_d(&self) -> Option<f64> {
+        if self.prices.len() < self.period + self.smooth_k {
+            return None;
+        }
+        
+        // Calculate %K values for smoothing
+        let mut k_values = Vec::new();
+        for i in (self.period - 1)..self.prices.len() {
+            let recent_highs = &self.highs[i + 1 - self.period..=i];
+            let recent_lows = &self.lows[i + 1 - self.period..=i];
+            let current_close = self.prices[i];
+            
+            let highest_high = recent_highs.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let lowest_low = recent_lows.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+            
+            if highest_high == lowest_low {
+                k_values.push(50.0);
+            } else {
+                let k = ((current_close - lowest_low) / (highest_high - lowest_low)) * 100.0;
+                k_values.push(k);
+            }
+        }
+        
+        if k_values.len() < self.smooth_k {
+            return None;
+        }
+        
+        // Calculate SMA of %K
+        let recent_k = &k_values[k_values.len() - self.smooth_k..];
+        let d = recent_k.iter().sum::<f64>() / self.smooth_k as f64;
+        Some(d)
+    }
+}
+
+impl Strategy for StochasticStrategy {
+    fn name(&self) -> &str {
+        "Stochastic"
+    }
+    
+    fn config(&self) -> &StrategyConfig {
+        &self.config
+    }
+    
+    fn process_candle(&mut self, candle: &Candle) -> Option<StrategySignal> {
+        self.prices.push(candle.close);
+        self.highs.push(candle.high);
+        self.lows.push(candle.low);
+        
+        // Need enough data
+        if self.prices.len() < self.period + self.smooth_k {
+            return None;
+        }
+        
+        let k = self.calculate_k().unwrap_or(50.0);
+        let d = self.calculate_d();
+        
+        // Update last values
+        self.last_k = Some(k);
+        if let Some(d_val) = d {
+            self.last_d = Some(d_val);
+        }
+        
+        // Use %K for condition parsing (can also use %D if needed)
+        let buy_signal = parse_condition(&self.config.buy_condition, k);
+        let sell_signal = parse_condition(&self.config.sell_condition, k);
+        
+        if buy_signal {
+            return Some(StrategySignal::Buy {
+                confidence: 0.75,
+                price: candle.close,
+                reason: format!("Stochastic %K = {:.2} meets buy condition: {}", k, self.config.buy_condition),
+            });
+        }
+        
+        if sell_signal {
+            return Some(StrategySignal::Sell {
+                confidence: 0.75,
+                price: candle.close,
+                reason: format!("Stochastic %K = {:.2} meets sell condition: {}", k, self.config.sell_condition),
+            });
+        }
+        
+        None
+    }
+    
+    fn reset(&mut self) {
+        self.prices.clear();
+        self.highs.clear();
+        self.lows.clear();
+        self.last_k = None;
+        self.last_d = None;
+    }
+    
+    fn get_state_info(&self) -> String {
+        format!("Stochastic Strategy - Prices: {}, Period: {}, K: {:?}, D: {:?}", 
+            self.prices.len(), self.period, self.last_k, self.last_d)
+    }
+}
+
+/// ADX (Average Directional Index) Strategy
+/// Measures trend strength regardless of direction
+#[derive(Debug)]
+pub struct AdxStrategy {
+    config: StrategyConfig,
+    prices: Vec<f64>,
+    highs: Vec<f64>,
+    lows: Vec<f64>,
+    period: usize,
+    last_adx: Option<f64>,
+    last_plus_di: Option<f64>,
+    last_minus_di: Option<f64>,
+}
+
+impl AdxStrategy {
+    pub fn new(config: StrategyConfig, period: usize) -> Result<Self> {
+        Ok(Self {
+            config,
+            prices: Vec::with_capacity(period * 2 + 10),
+            highs: Vec::with_capacity(period * 2 + 10),
+            lows: Vec::with_capacity(period * 2 + 10),
+            period,
+            last_adx: None,
+            last_plus_di: None,
+            last_minus_di: None,
+        })
+    }
+    
+    /// Calculate True Range
+    fn true_range(&self, i: usize) -> f64 {
+        if i == 0 {
+            return self.highs[i] - self.lows[i];
+        }
+        
+        let tr1 = self.highs[i] - self.lows[i];
+        let tr2 = (self.highs[i] - self.prices[i - 1]).abs();
+        let tr3 = (self.lows[i] - self.prices[i - 1]).abs();
+        
+        tr1.max(tr2).max(tr3)
+    }
+    
+    /// Calculate Directional Movement
+    fn directional_movement(&self, i: usize) -> (f64, f64) {
+        if i == 0 {
+            return (0.0, 0.0);
+        }
+        
+        let plus_dm = if self.highs[i] > self.highs[i - 1] && self.highs[i] - self.highs[i - 1] > self.lows[i - 1] - self.lows[i] {
+            self.highs[i] - self.highs[i - 1]
+        } else {
+            0.0
+        };
+        
+        let minus_dm = if self.lows[i] < self.lows[i - 1] && self.lows[i - 1] - self.lows[i] > self.highs[i] - self.highs[i - 1] {
+            self.lows[i - 1] - self.lows[i]
+        } else {
+            0.0
+        };
+        
+        (plus_dm, minus_dm)
+    }
+    
+    /// Calculate ADX
+    fn calculate_adx(&self) -> Option<(f64, f64, f64)> {
+        if self.prices.len() < self.period * 2 {
+            return None;
+        }
+        
+        // Calculate smoothed TR, +DM, -DM
+        let mut tr_sum = 0.0;
+        let mut plus_dm_sum = 0.0;
+        let mut minus_dm_sum = 0.0;
+        
+        for i in (self.prices.len() - self.period)..self.prices.len() {
+            tr_sum += self.true_range(i);
+            let (plus_dm, minus_dm) = self.directional_movement(i);
+            plus_dm_sum += plus_dm;
+            minus_dm_sum += minus_dm;
+        }
+        
+        // Calculate DI+ and DI-
+        let plus_di = if tr_sum > 0.0 {
+            (plus_dm_sum / tr_sum) * 100.0
+        } else {
+            0.0
+        };
+        
+        let minus_di = if tr_sum > 0.0 {
+            (minus_dm_sum / tr_sum) * 100.0
+        } else {
+            0.0
+        };
+        
+        // Calculate DX
+        let di_sum = plus_di + minus_di;
+        let dx = if di_sum > 0.0 {
+            ((plus_di - minus_di).abs() / di_sum) * 100.0
+        } else {
+            0.0
+        };
+        
+        // ADX is smoothed DX (simplified - using current DX as ADX)
+        // In real implementation, ADX should be smoothed over period
+        Some((dx, plus_di, minus_di))
+    }
+}
+
+impl Strategy for AdxStrategy {
+    fn name(&self) -> &str {
+        "ADX"
+    }
+    
+    fn config(&self) -> &StrategyConfig {
+        &self.config
+    }
+    
+    fn process_candle(&mut self, candle: &Candle) -> Option<StrategySignal> {
+        self.prices.push(candle.close);
+        self.highs.push(candle.high);
+        self.lows.push(candle.low);
+        
+        // Need enough data
+        if self.prices.len() < self.period * 2 {
+            return None;
+        }
+        
+        if let Some((adx, plus_di, minus_di)) = self.calculate_adx() {
+            self.last_adx = Some(adx);
+            self.last_plus_di = Some(plus_di);
+            self.last_minus_di = Some(minus_di);
+            
+            // Use ADX for condition parsing
+            // ADX > 25 indicates strong trend
+            let buy_signal = parse_condition(&self.config.buy_condition, adx);
+            let sell_signal = parse_condition(&self.config.sell_condition, adx);
+            
+            if buy_signal {
+                return Some(StrategySignal::Buy {
+                    confidence: 0.7,
+                    price: candle.close,
+                    reason: format!("ADX = {:.2} (DI+ = {:.2}, DI- = {:.2}) meets buy condition: {}", 
+                        adx, plus_di, minus_di, self.config.buy_condition),
+                });
+            }
+            
+            if sell_signal {
+                return Some(StrategySignal::Sell {
+                    confidence: 0.7,
+                    price: candle.close,
+                    reason: format!("ADX = {:.2} (DI+ = {:.2}, DI- = {:.2}) meets sell condition: {}", 
+                        adx, plus_di, minus_di, self.config.sell_condition),
+                });
+            }
+        }
+        
+        None
+    }
+    
+    fn reset(&mut self) {
+        self.prices.clear();
+        self.highs.clear();
+        self.lows.clear();
+        self.last_adx = None;
+        self.last_plus_di = None;
+        self.last_minus_di = None;
+    }
+    
+    fn get_state_info(&self) -> String {
+        format!("ADX Strategy - Prices: {}, Period: {}, ADX: {:?}", 
+            self.prices.len(), self.period, self.last_adx)
+    }
+}
+

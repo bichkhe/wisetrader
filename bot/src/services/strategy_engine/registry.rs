@@ -8,7 +8,7 @@ use crate::services::strategy_engine::{
     Strategy, StrategyConfig, 
     implementations::{
         RsiStrategy, MacdStrategy, BollingerStrategy, 
-        EmaStrategy, MaStrategy,
+        EmaStrategy, MaStrategy, StochasticStrategy, AdxStrategy,
     },
 };
 
@@ -76,6 +76,30 @@ impl StrategyRegistry {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(20) as usize;
             Ok(Box::new(MaStrategy::new(config, period)?))
+        });
+        
+        registry.register_strategy("STOCHASTIC", |config| {
+            let period = config.parameters
+                .get("period")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(14) as usize;
+            let smooth_k = config.parameters
+                .get("smooth_k")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3) as usize;
+            let smooth_d = config.parameters
+                .get("smooth_d")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3) as usize;
+            Ok(Box::new(StochasticStrategy::new(config, period, smooth_k, smooth_d)?))
+        });
+        
+        registry.register_strategy("ADX", |config| {
+            let period = config.parameters
+                .get("period")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(14) as usize;
+            Ok(Box::new(AdxStrategy::new(config, period)?))
         });
         
         registry

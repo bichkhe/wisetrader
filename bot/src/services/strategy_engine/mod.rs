@@ -9,8 +9,10 @@ pub mod strategy;
 pub mod registry;
 pub mod executor;
 pub mod implementations;
+pub mod indicator_configs;
 
 pub use strategy::{Strategy, StrategyConfig, StrategySignal, Candle, parse_condition};
 pub use registry::StrategyRegistry;
 pub use executor::StrategyExecutor;
+pub use indicator_configs::{IndicatorConfigRegistry, IndicatorConfig};
 

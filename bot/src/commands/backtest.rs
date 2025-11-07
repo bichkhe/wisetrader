@@ -5,7 +5,7 @@ use teloxide::types::InlineKeyboardButton;
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use shared::entity::strategies;
 use shared::FreqtradeApiClient;
-use shared::{StrategyTemplate, BacktestReportTemplate, Config};
+use shared::{BacktestReportTemplate, Config};
 use std::fs;
 use askama::Template;
 use chrono::{Utc, Duration};
@@ -444,6 +444,7 @@ async fn generate_html_report(
     user_fullname: Option<String>,
     result: &shared::BacktestResult,
     tables: &[(String, String)],
+    ai_analysis: Option<String>,
 ) -> Result<Option<String>, anyhow::Error> {
     // Create reports directory if it doesn't exist
     fs::create_dir_all(&config.html_reports_dir)?;
@@ -474,6 +475,7 @@ async fn generate_html_report(
         result.backtest_time_secs,
         tables.to_vec(),
         result.stdout.clone(),
+        ai_analysis,
     );
     
     // Render template
@@ -553,32 +555,51 @@ fn extract_threshold(condition: &str, indicator: &str) -> Option<i32> {
 
 /// Map StrategyConfig to Freqtrade template parameters
 /// This ensures consistency between backtest (Freqtrade) and live trading
+#[allow(dead_code)]
 fn map_config_to_freqtrade_template(
     algorithm: &str,
     buy_condition: &str,
     sell_condition: &str,
-    timeframe: &str,
+    _timeframe: &str,
     parameters: &serde_json::Value,
-) -> (bool, i32, bool, i32, i32, i32, bool, i32, i32, bool, i32, bool, i32, bool, bool, bool, bool, i32) {
+) -> (
+    bool, i32,  // use_rsi, rsi_period
+    bool, i32, i32, i32,  // use_macd, macd_fast, macd_slow, macd_signal
+    bool, i32, i32,  // use_ema, ema_fast, ema_slow
+    bool, i32,  // use_bb, bb_period
+    bool, i32, i32, i32,  // use_stochastic, stochastic_period, stochastic_smooth_k, stochastic_smooth_d
+    bool, i32,  // use_adx, adx_period
+    bool, i32,  // entry_condition_rsi, rsi_oversold
+    bool, bool, bool,  // entry_condition_macd, entry_condition_ema, entry_condition_bb
+    bool, i32,  // entry_condition_stochastic, stochastic_oversold
+    bool, i32,  // entry_condition_adx, adx_threshold
+    bool, i32,  // exit_condition_rsi, rsi_overbought
+    bool, i32,  // exit_condition_stochastic, stochastic_overbought
+) {
     let empty_map = serde_json::Map::new();
     let params = parameters.as_object().unwrap_or(&empty_map);
     
     // Determine indicators based on algorithm
-    let (use_rsi, use_macd, use_ema, use_bb) = match algorithm.to_uppercase().as_str() {
-        "RSI" => (true, false, false, false),
-        "MACD" => (false, true, false, false),
-        "EMA" => (false, false, true, false),
-        "BOLLINGER" | "BOLLINGER BANDS" | "BB" => (false, false, false, true),
-        "MA" | "SMA" => (false, false, true, false),
-        _ => (true, false, false, false),
+    let (use_rsi, use_macd, use_ema, use_bb, use_stochastic, use_adx) = match algorithm.to_uppercase().as_str() {
+        "RSI" => (true, false, false, false, false, false),
+        "MACD" => (false, true, false, false, false, false),
+        "EMA" => (false, false, true, false, false, false),
+        "BOLLINGER" | "BOLLINGER BANDS" | "BB" => (false, false, false, true, false, false),
+        "MA" | "SMA" => (false, false, true, false, false, false),
+        "STOCHASTIC" => (false, false, false, false, true, false),
+        "ADX" => (false, false, false, false, false, true),
+        _ => (true, false, false, false, false, false),
     };
 
     // Parse buy/sell conditions to determine entry/exit conditions
-    let entry_condition_rsi = buy_condition.contains("RSI") && buy_condition.contains("<");
-    let exit_condition_rsi = sell_condition.contains("RSI") && sell_condition.contains(">");
-    let entry_condition_macd = buy_condition.contains("MACD");
-    let entry_condition_ema = buy_condition.contains("EMA");
-    let entry_condition_bb = buy_condition.contains("Bollinger") || buy_condition.contains("LowerBand");
+    let entry_condition_rsi = buy_condition.to_uppercase().contains("RSI") && buy_condition.contains("<");
+    let exit_condition_rsi = sell_condition.to_uppercase().contains("RSI") && sell_condition.contains(">");
+    let entry_condition_macd = buy_condition.to_uppercase().contains("MACD");
+    let entry_condition_ema = buy_condition.to_uppercase().contains("EMA");
+    let entry_condition_bb = buy_condition.to_uppercase().contains("BOLLINGER") || buy_condition.to_uppercase().contains("LOWERBAND");
+    let entry_condition_stochastic = buy_condition.to_uppercase().contains("STOCHASTIC") && buy_condition.contains("<");
+    let exit_condition_stochastic = sell_condition.to_uppercase().contains("STOCHASTIC") && sell_condition.contains(">");
+    let entry_condition_adx = buy_condition.to_uppercase().contains("ADX") && buy_condition.contains(">");
 
     // Extract RSI parameters from config
     let rsi_period = params
@@ -631,14 +652,46 @@ fn map_config_to_freqtrade_template(
         .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
         .unwrap_or(20) as i32;
 
+    // Extract Stochastic parameters from config
+    let stochastic_period = params
+        .get("period")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(14) as i32;
+    let stochastic_smooth_k = params
+        .get("smooth_k")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(3) as i32;
+    let stochastic_smooth_d = params
+        .get("smooth_d")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(3) as i32;
+    
+    // Extract Stochastic thresholds from conditions
+    let stochastic_oversold = extract_threshold(buy_condition, "Stochastic").unwrap_or(20);
+    let stochastic_overbought = extract_threshold(sell_condition, "Stochastic").unwrap_or(80);
+
+    // Extract ADX parameters from config
+    let adx_period = params
+        .get("period")
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|v| v as u64)))
+        .unwrap_or(14) as i32;
+    
+    // Extract ADX threshold from conditions
+    let adx_threshold = extract_threshold(buy_condition, "ADX").unwrap_or(25);
+
     (
         use_rsi, rsi_period,
         use_macd, macd_fast, macd_slow, macd_signal,
         use_ema, ema_fast_final, ema_slow_final,
         use_bb, bb_period,
+        use_stochastic, stochastic_period, stochastic_smooth_k, stochastic_smooth_d,
+        use_adx, adx_period,
         entry_condition_rsi, rsi_oversold,
         entry_condition_macd, entry_condition_ema, entry_condition_bb,
+        entry_condition_stochastic, stochastic_oversold,
+        entry_condition_adx, adx_threshold,
         exit_condition_rsi, rsi_overbought,
+        exit_condition_stochastic, stochastic_overbought,
     )
 }
 
@@ -758,17 +811,6 @@ fn generate_strategy_file(
         serde_json::json!({})
     };
 
-    // Map config to Freqtrade template parameters
-    let (
-        use_rsi, rsi_period,
-        use_macd, macd_fast, macd_slow, macd_signal,
-        use_ema, ema_fast, ema_slow,
-        use_bb, bb_period,
-        entry_condition_rsi, rsi_oversold,
-        entry_condition_macd, entry_condition_ema, entry_condition_bb,
-        exit_condition_rsi, rsi_overbought,
-    ) = map_config_to_freqtrade_template(algorithm, buy_condition, sell_condition, timeframe, &parameters);
-
     // Generate filename first to use for class name
     let safe_name = strategy_name
         .chars()
@@ -782,43 +824,19 @@ fn generate_strategy_file(
         .trim_end_matches(".py")
         .to_string();
     
-    // Create template data with class name matching filename (Freqtrade requires exact match)
-    let template = StrategyTemplate {
-        strategy_name: class_name,
-        minimal_roi_60: "0.05".to_string(),
-        minimal_roi_30: "0.03".to_string(),
-        minimal_roi_0: "0.01".to_string(),
-        stoploss: "-0.10".to_string(),
-        trailing_stop: false, // Will be converted to True/False in template
-        trailing_stop_positive: "0.02".to_string(),
-        trailing_stop_offset: "0.01".to_string(),
-        timeframe: timeframe.to_string(),
-        startup_candle_count: 200,
-        
-        use_rsi,
-        rsi_period,
-        use_macd,
-        macd_fast,
-        macd_slow,
-        macd_signal,
-        use_ema,
-        ema_fast,
-        ema_slow,
-        use_bb,
-        bb_period,
-        
-        entry_condition_rsi,
-        rsi_oversold,
-        entry_condition_macd,
-        entry_condition_ema,
-        entry_condition_bb,
-        
-        exit_condition_rsi,
-        rsi_overbought,
-    };
+    // Use new modular template generation system
+    use crate::commands::backtest_template::StrategyTemplateData;
+    let template_data = StrategyTemplateData::from_config(
+        algorithm,
+        buy_condition,
+        sell_condition,
+        timeframe,
+        &parameters,
+        &class_name,
+    );
 
-    // Render template (class name already matches filename)
-    let code = template.render()?;
+    // Generate Python code directly (no need for Askama template)
+    let code = template_data.generate_python_code();
 
     // Write file
     let filepath = strategies_path.join(&filename);
@@ -1293,6 +1311,70 @@ pub async fn handle_backtest_callback(
                                         // Get user fullname for HTML report
                                         let user_fullname = user.as_ref().and_then(|u| u.fullname.clone());
                                         
+                                        // Generate AI analysis if enabled
+                                        let ai_analysis = if config.enable_gemini_analysis {
+                                            if let Some(ref api_key) = config.gemini_api_key {
+                                                use crate::services::gemini::GeminiService;
+                                                let gemini = GeminiService::new(api_key.clone());
+                                                
+                                                // Determine language based on user locale
+                                                let locale = user.as_ref()
+                                                    .and_then(|u| u.language.as_ref())
+                                                    .map(|l| l.as_str())
+                                                    .unwrap_or("en");
+                                                
+                                                let analysis_result = if locale == "vi" {
+                                                    gemini.analyze_backtest(
+                                                        &strategy_name,
+                                                        &exchange,
+                                                        &freqtrade_pair,
+                                                        &timeframe,
+                                                        &timerange,
+                                                        result.trades,
+                                                        result.profit_pct,
+                                                        result.win_rate,
+                                                        result.max_drawdown,
+                                                        result.starting_balance,
+                                                        result.final_balance,
+                                                        &tables,
+                                                        result.stdout.as_deref(),
+                                                    ).await
+                                                } else {
+                                                    gemini.analyze_backtest_en(
+                                                        &strategy_name,
+                                                        &exchange,
+                                                        &freqtrade_pair,
+                                                        &timeframe,
+                                                        &timerange,
+                                                        result.trades,
+                                                        result.profit_pct,
+                                                        result.win_rate,
+                                                        result.max_drawdown,
+                                                        result.starting_balance,
+                                                        result.final_balance,
+                                                        &tables,
+                                                        result.stdout.as_deref(),
+                                                    ).await
+                                                };
+                                                
+                                                match analysis_result {
+                                                    Ok(analysis) => {
+                                                        tracing::info!("✅ Gemini AI analysis generated successfully");
+                                                        Some(analysis)
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::warn!("⚠️ Failed to generate Gemini AI analysis: {}", e);
+                                                        None
+                                                    }
+                                                }
+                                            } else {
+                                                tracing::debug!("Gemini API key not configured, skipping AI analysis");
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        };
+                                        
                                         let html_report_url = if config.generate_html_reports {
                                             match generate_html_report(
                                                 &config,
@@ -1304,6 +1386,7 @@ pub async fn handle_backtest_callback(
                                                 user_fullname,
                                                 &result,
                                                 &tables,
+                                                ai_analysis.clone(),
                                             ).await {
                                                 Ok(Some(url)) => {
                                                     tracing::info!("HTML report generated: {}", url);

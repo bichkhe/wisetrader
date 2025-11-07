@@ -113,13 +113,19 @@ pub enum BotState {
 pub enum CreateStrategyState {
     #[default]
     Start,
-    WaitingForStrategyType, // Choose between Custom or Preset
+    WaitingForStrategyType, // Choose between Custom, Preset, or Custom Mix
     WaitingForPresetSelection, // Waiting for user to select a preset strategy
     WaitingForPresetName {
         algorithm: String,
         buy_condition: String,
         sell_condition: String,
         timeframe: String,
+    },
+    WaitingForMixStrategySelection {
+        selected_strategy_ids: Vec<u64>, // Track selected strategies
+    },
+    WaitingForMixStrategyName {
+        selected_strategy_ids: Vec<u64>, // IDs of strategies to mix
     },
     WaitingForName,
     WaitingForAlgorithm,

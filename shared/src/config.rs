@@ -13,6 +13,8 @@ pub struct Config {
     pub webhook_path: String,
     pub webhook_port: u16,
     pub mobile_friendly_tables: bool,
+    pub gemini_api_key: Option<String>,
+    pub enable_gemini_analysis: bool,
 }
 
 impl Config {
@@ -43,6 +45,11 @@ impl Config {
                 .parse()
                 .unwrap_or(8443),
             mobile_friendly_tables: std::env::var("MOBILE_FRIENDLY_TABLES")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
+            gemini_api_key: std::env::var("GEMINI_API_KEY").ok(),
+            enable_gemini_analysis: std::env::var("ENABLE_GEMINI_ANALYSIS")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),

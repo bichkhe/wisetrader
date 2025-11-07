@@ -52,6 +52,16 @@ class {{ strategy_name }}(IStrategy):
         dataframe['bb_percent'] = (dataframe['close'] - dataframe['bb_lower']) / (dataframe['bb_upper'] - dataframe['bb_lower'])
 {% endif %}
 
+{% if use_stochastic %}
+        stochastic = ta.STOCH(dataframe, fastk_period={{ stochastic_period }}, slowk_period={{ stochastic_smooth_k }}, slowd_period={{ stochastic_smooth_d }})
+        dataframe['stoch_k'] = stochastic['slowk']
+        dataframe['stoch_d'] = stochastic['slowd']
+{% endif %}
+
+{% if use_adx %}
+        dataframe['adx'] = ta.ADX(dataframe, timeperiod={{ adx_period }})
+{% endif %}
+
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -73,6 +83,14 @@ class {{ strategy_name }}(IStrategy):
         conditions.append(dataframe['bb_percent'] < 0.2)
 {% endif %}
 
+{% if entry_condition_stochastic %}
+        conditions.append(dataframe['stoch_k'] < {{ stochastic_oversold }})
+{% endif %}
+
+{% if entry_condition_adx %}
+        conditions.append(dataframe['adx'] > {{ adx_threshold }})
+{% endif %}
+
         if conditions:
             dataframe.loc[
                 reduce(lambda x, y: x & y, conditions),
@@ -88,5 +106,13 @@ class {{ strategy_name }}(IStrategy):
             'exit_long'
         ] = 1
 {% endif %}
+
+{% if exit_condition_stochastic %}
+        dataframe.loc[
+            (dataframe['stoch_k'] > {{ stochastic_overbought }}),
+            'exit_long'
+        ] = 1
+{% endif %}
+
         return dataframe
 

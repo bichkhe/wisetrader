@@ -11,6 +11,7 @@ pub mod me;
 pub mod trading;
 pub mod strategy;
 pub mod backtest;
+pub mod backtest_template;
 pub mod start;
 pub mod payment;
 

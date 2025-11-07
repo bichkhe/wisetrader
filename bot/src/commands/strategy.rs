@@ -78,6 +78,16 @@ pub async fn handle_strategy_callback(
                                 "algorithm_ma"
                             ),
                             InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_stochastic"),
+                                "algorithm_stochastic"
+                            ),
+                        ],
+                        vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "algorithm_adx"),
+                                "algorithm_adx"
+                            ),
+                            InlineKeyboardButton::callback(
                                 i18n::get_button_text(&locale, "strategy_cancel_button"),
                                 "cancel_strategy"
                             ),
@@ -124,6 +134,76 @@ pub async fn handle_strategy_callback(
                         .reply_markup(teloxide::types::InlineKeyboardMarkup::new(preset_buttons))
                         .await?;
                     dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPresetSelection)).await?;
+                }
+                "strategy_type_custom_mix" => {
+                    bot.answer_callback_query(q.id).await?;
+                    
+                    // Get user's strategies
+                    let telegram_id = q.from.id.0.to_string();
+                    use sea_orm::ColumnTrait;
+                    let user_strategies = strategies::Entity::find()
+                        .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
+                        .order_by_desc(strategies::Column::CreatedAt)
+                        .all(state.db.as_ref())
+                        .await?;
+                    
+                    if user_strategies.is_empty() {
+                        let error_msg = i18n::translate(&locale, "strategy_mix_no_strategies", None);
+                        bot.edit_message_text(chat_id, message_id, error_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await?;
+                        dialogue.exit().await?;
+                        return Ok(());
+                    }
+                    
+                    // Create buttons for each strategy (with toggle functionality)
+                    let mut strategy_buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                    
+                    // Create buttons in pairs (2 per row)
+                    for chunk in user_strategies.chunks(2) {
+                        let row: Vec<InlineKeyboardButton> = chunk
+                            .iter()
+                            .map(|strategy| {
+                                let name = strategy.name.as_ref()
+                                    .map(|n| n.as_str())
+                                    .unwrap_or("Unnamed");
+                                let display = if name.len() > 20 {
+                                    format!("{}...", &name[..20])
+                                } else {
+                                    name.to_string()
+                                };
+                                InlineKeyboardButton::callback(
+                                    format!("☐ {}", display),
+                                    format!("mix_select_{}", strategy.id)
+                                )
+                            })
+                            .collect();
+                        strategy_buttons.push(row);
+                    }
+                    
+                    // Add "Done" and "Cancel" buttons
+                    strategy_buttons.push(vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(&locale, "strategy_mix_done"),
+                            "mix_done"
+                        ),
+                    ]);
+                    strategy_buttons.push(vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(&locale, "strategy_cancel_button"),
+                            "cancel_strategy"
+                        ),
+                    ]);
+                    
+                    let mix_msg = i18n::translate(&locale, "strategy_choose_mix", None);
+                    bot.edit_message_text(chat_id, message_id, mix_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
+                        .await?;
+                    
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategySelection {
+                        selected_strategy_ids: Vec::new(),
+                    })).await?;
                 }
                 _ if data.starts_with("preset_") => {
                     bot.answer_callback_query(q.id).await?;
@@ -256,6 +336,158 @@ pub async fn handle_strategy_callback(
                     dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition {
                         algorithm: "MA".to_string(),
                     })).await?;
+                }
+                "algorithm_stochastic" => {
+                    bot.answer_callback_query(q.id).await?;
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "Stochastic")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_stochastic_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "Stochastic < 20")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
+                    
+                    bot.edit_message_text(chat_id, message_id, instruction)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                    
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition {
+                        algorithm: "Stochastic".to_string(),
+                    })).await?;
+                }
+                "algorithm_adx" => {
+                    bot.answer_callback_query(q.id).await?;
+                    let algorithm_msg = i18n::translate(&locale, "strategy_algorithm_selected", Some(&[("algorithm", "ADX")]));
+                    let info_msg = i18n::translate(&locale, "strategy_algorithm_adx_info", None);
+                    let step2_msg = i18n::translate(&locale, "strategy_step2_enter_buy", Some(&[("example", "ADX > 25")]));
+                    let instruction = format!("{}\n\n{}\n\n{}", algorithm_msg, info_msg, step2_msg);
+                    
+                    bot.edit_message_text(chat_id, message_id, instruction)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                    
+                    dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForBuyCondition {
+                        algorithm: "ADX".to_string(),
+                    })).await?;
+                }
+                _ if data.starts_with("mix_select_") => {
+                    let callback_query_id = q.id.clone();
+                    bot.answer_callback_query(callback_query_id).await?;
+                    
+                    // Extract strategy ID from callback data
+                    let strategy_id_str = data.replace("mix_select_", "");
+                    let strategy_id: u64 = match strategy_id_str.parse() {
+                        Ok(id) => id,
+                        Err(_) => {
+                            let error_msg = i18n::translate(&locale, "error_invalid_selection", None);
+                            bot.answer_callback_query(q.id)
+                                .text(&error_msg)
+                                .await?;
+                            return Ok(());
+                        }
+                    };
+                    
+                    // Get current state
+                    if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategySelection { selected_strategy_ids }))) = dialogue.get().await {
+                        let mut new_selected = selected_strategy_ids.clone();
+                        
+                        // Toggle selection
+                        if new_selected.contains(&strategy_id) {
+                            new_selected.retain(|&id| id != strategy_id);
+                        } else {
+                            new_selected.push(strategy_id);
+                        }
+                        
+                        // Get user's strategies to rebuild buttons
+                        let telegram_id = q.from.id.0.to_string();
+                        use sea_orm::ColumnTrait;
+                        let user_strategies = strategies::Entity::find()
+                            .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
+                            .order_by_desc(strategies::Column::CreatedAt)
+                            .all(state.db.as_ref())
+                            .await?;
+                        
+                        // Rebuild buttons with updated selection
+                        let mut strategy_buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+                        
+                        for chunk in user_strategies.chunks(2) {
+                            let row: Vec<InlineKeyboardButton> = chunk
+                                .iter()
+                                .map(|strategy| {
+                                    let name = strategy.name.as_ref()
+                                        .map(|n| n.as_str())
+                                        .unwrap_or("Unnamed");
+                                    let display = if name.len() > 20 {
+                                        format!("{}...", &name[..20])
+                                    } else {
+                                        name.to_string()
+                                    };
+                                    let is_selected = new_selected.contains(&strategy.id);
+                                    let prefix = if is_selected { "☑" } else { "☐" };
+                                    InlineKeyboardButton::callback(
+                                        format!("{} {}", prefix, display),
+                                        format!("mix_select_{}", strategy.id)
+                                    )
+                                })
+                                .collect();
+                            strategy_buttons.push(row);
+                        }
+                        
+                        // Add "Done" and "Cancel" buttons
+                        strategy_buttons.push(vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "strategy_mix_done"),
+                                "mix_done"
+                            ),
+                        ]);
+                        strategy_buttons.push(vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(&locale, "strategy_cancel_button"),
+                                "cancel_strategy"
+                            ),
+                        ]);
+                        
+                        // Update message with new selection count
+                        let count_msg = if new_selected.is_empty() {
+                            i18n::translate(&locale, "strategy_choose_mix", None)
+                        } else {
+                            i18n::translate(&locale, "strategy_mix_selected", Some(&[("count", &new_selected.len().to_string())]))
+                        };
+                        
+                        bot.edit_message_text(chat_id, message_id, count_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
+                            .await?;
+                        
+                        // Update state with new selection
+                        dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategySelection {
+                            selected_strategy_ids: new_selected,
+                        })).await?;
+                    }
+                }
+                "mix_done" => {
+                    let callback_query_id = q.id.clone();
+                    bot.answer_callback_query(callback_query_id).await?;
+                    
+                    // Get current state
+                    if let Ok(Some(BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategySelection { selected_strategy_ids }))) = dialogue.get().await {
+                        if selected_strategy_ids.is_empty() {
+                            let error_msg = i18n::translate(&locale, "strategy_mix_no_selection", None);
+                            bot.answer_callback_query(q.id)
+                                .text(&error_msg)
+                                .show_alert(true)
+                                .await?;
+                            return Ok(());
+                        }
+                        
+                        // Ask for strategy name
+                        let name_msg = i18n::translate(&locale, "strategy_enter_name", None);
+                        bot.edit_message_text(chat_id, message_id, name_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await?;
+                        
+                        // Update state to wait for name
+                        dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategyName {
+                            selected_strategy_ids: selected_strategy_ids.clone(),
+                        })).await?;
+                    }
                 }
                 "cancel_strategy" => {
                     bot.answer_callback_query(q.id).await?;
@@ -442,7 +674,7 @@ pub async fn handle_create_strategy(
         return Ok(());
     }
 
-    // First, ask user to choose between Custom or Preset strategy
+    // First, ask user to choose between Custom, Preset, or Custom Mix strategy
     let strategy_type_buttons = vec![
         vec![
             InlineKeyboardButton::callback(
@@ -452,6 +684,12 @@ pub async fn handle_create_strategy(
             InlineKeyboardButton::callback(
                 i18n::get_button_text(locale, "strategy_type_preset"),
                 "strategy_type_preset"
+            ),
+        ],
+        vec![
+            InlineKeyboardButton::callback(
+                i18n::get_button_text(locale, "strategy_type_custom_mix"),
+                "strategy_type_custom_mix"
             ),
         ],
         vec![
@@ -567,6 +805,115 @@ pub async fn handle_strategy_input_callback(
                         timeframe,
                         strategy_name,
                     })).await?;
+                }
+            }
+            BotState::CreateStrategy(CreateStrategyState::WaitingForMixStrategyName { selected_strategy_ids }) => {
+                if let Some(text) = msg.text() {
+                    let strategy_name = text.trim().to_string();
+                    
+                    // Validate strategy name is not empty
+                    if strategy_name.is_empty() {
+                        let error_msg = i18n::translate(locale, "strategy_name_empty", None);
+                        bot.send_message(msg.chat.id, error_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await?;
+                        return Ok(());
+                    }
+                    
+                    // Load selected strategies from database
+                    let mut mixed_strategies: Vec<serde_json::Value> = Vec::new();
+                    let mut strategy_summary = String::new();
+                    
+                    for strategy_id in &selected_strategy_ids {
+                        if let Ok(Some(strategy)) = strategies::Entity::find_by_id(*strategy_id)
+                            .one(state.db.as_ref())
+                            .await
+                        {
+                            // Try to parse strategy config from content field
+                            let strategy_service = crate::services::strategy_service::StrategyService::new(state.db.clone());
+                            if let Ok(config) = strategy_service.strategy_to_config(&strategy) {
+                                let strategy_json = serde_json::json!({
+                                    "id": strategy.id,
+                                    "name": strategy.name,
+                                    "algorithm": config.strategy_type,
+                                    "buy_condition": config.buy_condition,
+                                    "sell_condition": config.sell_condition,
+                                    "timeframe": config.timeframe,
+                                    "pair": config.pair,
+                                    "parameters": config.parameters,
+                                });
+                                mixed_strategies.push(strategy_json);
+                                
+                                // Build summary
+                                let name = strategy.name.as_ref()
+                                    .map(|n| n.as_str())
+                                    .unwrap_or("Unnamed");
+                                strategy_summary.push_str(&format!("\n• {} ({})", escape_html(name), config.strategy_type));
+                            }
+                        }
+                    }
+                    
+                    if mixed_strategies.is_empty() {
+                        let error_msg = i18n::translate(locale, "strategy_mix_load_error", None);
+                        bot.send_message(msg.chat.id, error_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await?;
+                        dialogue.exit().await?;
+                        return Ok(());
+                    }
+                    
+                    // Create mixed strategy config
+                    use serde_json::json;
+                    
+                    // For mixed strategy, we'll store all strategies in the content field
+                    let mixed_config = json!({
+                        "type": "mixed",
+                        "strategies": mixed_strategies,
+                        "mix_mode": "all" // Could be "all", "any", "majority" etc.
+                    });
+                    
+                    // Create a combined description
+                    let description = format!(
+                        "Mixed Strategy combining {} strategies:{}",
+                        mixed_strategies.len(),
+                        strategy_summary
+                    );
+                    
+                    // Save mixed strategy to database
+                    let telegram_id = msg.from.as_ref().unwrap().id.0 as i64;
+                    let new_strategy = strategies::ActiveModel {
+                        name: ActiveValue::Set(Some(strategy_name.clone())),
+                        description: ActiveValue::Set(Some(description)),
+                        content: ActiveValue::Set(Some(serde_json::to_string(&mixed_config).unwrap_or_default())),
+                        telegram_id: ActiveValue::Set(telegram_id.to_string()),
+                        created_at: ActiveValue::Set(Some(chrono::Utc::now())),
+                        ..Default::default()
+                    };
+                    
+                    match strategies::Entity::insert(new_strategy)
+                        .exec(state.db.as_ref())
+                        .await
+                    {
+                        Ok(_) => {
+                            let success_msg = i18n::translate(locale, "strategy_mix_saved", Some(&[
+                                ("name", &escape_html(&strategy_name)),
+                                ("count", &mixed_strategies.len().to_string()),
+                            ]));
+                            bot.send_message(msg.chat.id, success_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await?;
+                            dialogue.exit().await?;
+                        }
+                        Err(e) => {
+                            let error_msg = i18n::translate(locale, "strategy_saved_error", Some(&[
+                                ("error", &e.to_string())
+                            ]));
+                            bot.send_message(msg.chat.id, error_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await?;
+                            dialogue.exit().await?;
+                        }
+                    }
                 }
             }
             BotState::CreateStrategy(CreateStrategyState::WaitingForSellCondition { algorithm, buy_condition }) => {

@@ -120,6 +120,8 @@ strategy_algorithm_bb_info: "• <b>Dải dưới:</b> Tín hiệu mua (giá ch�
 strategy_algorithm_ema_info: "• <b>Mua:</b> EMA nhanh vượt trên EMA chậm\n• <b>Bán:</b> EMA nhanh vượt dưới EMA chậm"
 strategy_algorithm_macd_info: "• <b>Mua:</b> Đường MACD vượt trên đường tín hiệu\n• <b>Bán:</b> Đường MACD vượt dưới đường tín hiệu"
 strategy_algorithm_ma_info: "• <b>Mua:</b> MA nhanh vượt trên MA chậm\n• <b>Bán:</b> MA nhanh vượt dưới MA chậm"
+strategy_algorithm_stochastic_info: "📊 <b>Stochastic Oscillator</b>\n\nĐo lường momentum bằng cách so sánh giá đóng cửa với phạm vi giá trong một khoảng thời gian.\n\n• <b>Giá trị:</b> 0-100\n• <b>Quá bán:</b> Stochastic < 20 (tín hiệu mua)\n• <b>Quá mua:</b> Stochastic > 80 (tín hiệu bán)\n\n<b>Tham số mặc định:</b>\n• Period: 14\n• Smooth K: 3\n• Smooth D: 3"
+strategy_algorithm_adx_info: "📊 <b>ADX (Average Directional Index)</b>\n\nĐo lường sức mạnh xu hướng bất kể hướng.\n\n• <b>Giá trị:</b> 0-100\n• <b>Xu hướng yếu:</b> ADX < 20\n• <b>Xu hướng mạnh:</b> ADX > 25\n• <b>Xu hướng rất mạnh:</b> ADX > 50\n\n<b>Tham số mặc định:</b>\n• Period: 14"
 strategy_step2_enter_buy: "<b>Bước 2:</b> Nhập điều kiện mua:\nVí dụ: <code>{example}</code>"
 strategy_step1_complete: "✅ <b>Bước 1 Hoàn Tất!</b>\n\n📋 <b>Tóm tắt:</b>\n• <b>Thuật toán:</b> {algorithm}\n• <b>Điều kiện Mua:</b> {buy_condition}\n\n"
 strategy_step2_complete: "✅ <b>Bước 2 Hoàn Tất!</b>\n\n📋 <b>Tóm tắt:</b>\n• <b>Thuật toán:</b> {algorithm}\n• <b>Điều kiện Mua:</b> {buy_condition}\n• <b>Điều kiện Bán:</b> {sell_condition}\n\n"
@@ -156,6 +158,14 @@ strategy_name_set: "✅ <b>Đã Đặt Tên Chiến Lược!</b>\n\n📛 <b>Tên
 strategy_name_empty: "❌ <b>Tên chiến lược không thể để trống!</b>\n\nVui lòng nhập tên hợp lệ cho chiến lược của bạn."
 strategy_delete_with_name: "🗑️ Xóa"
 strategy_delete_list_title: "🗑️ <b>Xóa Chiến Lược</b>\n\nChọn chiến lược để xóa:"
+strategy_type_custom_mix: "🔀 Mix Chiến Lược"
+strategy_choose_mix: "🔀 <b>Chọn Chiến Lược Để Mix</b>\n\nChọn một hoặc nhiều chiến lược từ danh sách của bạn để tạo chiến lược mix:\n\n💡 <i>Nhấn vào các chiến lược để chọn/bỏ chọn, sau đó nhấn \"Hoàn thành\"</i>"
+strategy_mix_no_strategies: "❌ <b>Bạn chưa có chiến lược nào!</b>\n\nVui lòng tạo ít nhất một chiến lược trước khi mix. Sử dụng <code>/createstrategy</code> để tạo chiến lược mới."
+strategy_mix_done: "✅ Hoàn thành"
+strategy_mix_selected: "🔀 <b>Chọn Chiến Lược Để Mix</b>\n\nĐã chọn <b>{count}</b> chiến lược. Nhấn \"Hoàn thành\" để tiếp tục."
+strategy_mix_no_selection: "⚠️ Vui lòng chọn ít nhất một chiến lược!"
+strategy_mix_load_error: "❌ <b>Lỗi khi tải chiến lược!</b>\n\nKhông thể tải một hoặc nhiều chiến lược đã chọn. Vui lòng thử lại."
+strategy_mix_saved: "✅ <b>Chiến Lược Mix Đã Được Lưu!</b>\n\n📛 <b>Tên:</b> {name}\n🔀 <b>Số chiến lược:</b> {count}\n\nChiến lược mix của bạn đã được lưu thành công!"
 
 # Trading pairs
 pair_btc_usdt: "₿ BTC/USDT"
