@@ -487,141 +487,31 @@ async fn deploy_bot(
 
     info!("TOTP validated successfully, proceeding with deploy");
 
-    // Get work directory from environment variable or use default
+    // Get deploy script path from environment variable or use default
+    let deploy_script = std::env::var("DEPLOY_SCRIPT")
+        .unwrap_or_else(|_| {
+            let work_dir = std::env::var("DEPLOY_WORK_DIR")
+                .unwrap_or_else(|_| "/opt/wisetrader/wisetrader".to_string());
+            format!("{}/deploy.sh", work_dir)
+        });
+
+    info!("Using deploy script: {}", deploy_script);
+
+    // Check if deploy script exists
+    if !std::path::Path::new(&deploy_script).exists() {
+        error!("Deploy script not found: {}", deploy_script);
+        return Json(DeployResponse {
+            success: false,
+            message: format!("Deploy script not found: {}. Please create the script or set DEPLOY_SCRIPT environment variable.", deploy_script),
+            output: None,
+            error: Some(format!("File {} not found", deploy_script)),
+        });
+    }
+
+    // Get host user UID from work directory ownership
     let work_dir = std::env::var("DEPLOY_WORK_DIR")
         .unwrap_or_else(|_| "/opt/wisetrader/wisetrader".to_string());
-
-    info!("Using work directory: {}", work_dir);
-
-    // Check if work directory exists (it should be mounted as volume)
-    if !std::path::Path::new(&work_dir).exists() {
-        error!("Work directory does not exist: {}", work_dir);
-        return Json(DeployResponse {
-            success: false,
-            message: format!("Work directory does not exist: {}. Make sure it's mounted as a volume.", work_dir),
-            output: None,
-            error: Some(format!("Directory {} not found. Check docker-compose.yml volumes configuration.", work_dir)),
-        });
-    }
-
-    // Check if docker-compose.yml exists in work directory
-    let compose_file = format!("{}/docker-compose.yml", work_dir);
-    if !std::path::Path::new(&compose_file).exists() {
-        error!("docker-compose.yml not found in: {}", work_dir);
-        return Json(DeployResponse {
-            success: false,
-            message: format!("docker-compose.yml not found in {}", work_dir),
-            output: None,
-            error: Some(format!("File {} not found", compose_file)),
-        });
-    }
-
-    // Check if custom deploy.sh script exists
-    let deploy_script = format!("{}/deploy.sh", work_dir);
-    let use_custom_script = std::path::Path::new(&deploy_script).exists();
     
-    if use_custom_script {
-        info!("Found custom deploy script: {}", deploy_script);
-        
-        // Get host user UID
-        let get_uid_script = format!(
-            r#"stat -c '%u' {}/.git 2>/dev/null || stat -c '%u' {} 2>/dev/null || id -u bichkhe 2>/dev/null || echo '1000'"#,
-            work_dir, work_dir
-        );
-        let uid_output = Command::new("sh")
-            .arg("-c")
-            .arg(&get_uid_script)
-            .output()
-            .await;
-        
-        let bichkhe_uid = match uid_output {
-            Ok(output) => {
-                let uid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                uid_str.parse::<u32>().unwrap_or(1000)
-            }
-            Err(_) => {
-                warn!("Failed to get UID, using default 1000");
-                1000
-            }
-        };
-        
-        info!("Running deploy.sh as host user (UID: {})", bichkhe_uid);
-        
-        // Run deploy.sh with host user permissions
-        let hash_uid_str = format!("#{}", bichkhe_uid);
-        let run_script = format!(
-            r#"EXISTING_USER=$(getent passwd {} | cut -d: -f1 2>/dev/null || echo "")
-if [ -n "$EXISTING_USER" ]; then
-    sudo -u "$EXISTING_USER" bash {}
-elif command -v runuser >/dev/null 2>&1; then
-    runuser -u "{}" -- bash {} 2>/dev/null
-else
-    sudo -u "{}" bash {} 2>/dev/null || sudo -u {} bash {} 2>/dev/null || bash {}
-fi"#,
-            bichkhe_uid, deploy_script,
-            hash_uid_str, deploy_script,
-            hash_uid_str, deploy_script,
-            bichkhe_uid, deploy_script,
-            deploy_script
-        );
-        
-        let deploy_output = Command::new("sh")
-            .arg("-c")
-            .arg(&run_script)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await;
-        
-        let mut all_stdout = String::new();
-        let mut all_stderr = String::new();
-        
-        match deploy_output {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                all_stdout.push_str(&format!("=== Deploy Script Output ===\n{}\n", stdout));
-                if !stderr.is_empty() {
-                    all_stderr.push_str(&format!("=== Deploy Script (stderr) ===\n{}\n", stderr));
-                }
-                
-                if !output.status.success() {
-                    error!("Deploy script failed with exit code: {:?}", output.status.code());
-                    return Json(DeployResponse {
-                        success: false,
-                        message: format!("Deploy script failed with exit code: {:?}. Error: {}", 
-                            output.status.code(),
-                            if stderr.is_empty() { &stdout } else { &stderr }
-                        ),
-                        output: Some(all_stdout),
-                        error: Some(all_stderr),
-                    });
-                }
-                
-                info!("Deploy script completed successfully");
-                return Json(DeployResponse {
-                    success: true,
-                    message: "Bot deployed successfully using deploy.sh".to_string(),
-                    output: Some(all_stdout),
-                    error: if all_stderr.is_empty() { None } else { Some(all_stderr) },
-                });
-            }
-            Err(e) => {
-                error!("Failed to execute deploy script: {}", e);
-                return Json(DeployResponse {
-                    success: false,
-                    message: format!("Failed to execute deploy script: {}. Make sure user 'bichkhe' exists and appuser has sudo permissions.", e),
-                    output: Some(all_stdout),
-                    error: Some(format!("Deploy script error: {}\n{}", e, all_stderr)),
-                });
-            }
-        }
-    }
-    
-    // Default deployment logic (if deploy.sh doesn't exist)
-    info!("Using default deployment logic (deploy.sh not found)");
-    
-    // Get host user UID for git operations
     let get_uid_script = format!(
         r#"stat -c '%u' {}/.git 2>/dev/null || stat -c '%u' {} 2>/dev/null || id -u bichkhe 2>/dev/null || echo '1000'"#,
         work_dir, work_dir
@@ -632,7 +522,7 @@ fi"#,
         .output()
         .await;
     
-    let bichkhe_uid = match uid_output {
+    let host_uid = match uid_output {
         Ok(output) => {
             let uid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             uid_str.parse::<u32>().unwrap_or(1000)
@@ -643,48 +533,11 @@ fi"#,
         }
     };
     
-    info!("Detected UID {} for git operations", bichkhe_uid);
+    info!("Running deploy.sh as host user (UID: {})", host_uid);
     
-    let mut all_stdout = String::new();
-    let mut all_stderr = String::new();
-    
-    // Step 1: Git pull as host user - run directly with sudo, no script needed
-    info!("Executing git pull as host user in {}", work_dir);
-    
-    // Create script in /tmp (writable location) instead of work_dir
-    let script_content = format!(
-        r#"#!/bin/bash
-cd {}
-git config --local --add safe.directory {} 2>/dev/null || git config --global --add safe.directory {} 2>/dev/null || true
-git pull origin
-"#,
-        work_dir, work_dir, work_dir
-    );
-    
-    let script_path = format!("/tmp/git_pull_{}.sh", std::process::id());
-    if let Err(e) = std::fs::write(&script_path, script_content) {
-        error!("Failed to create git pull script in /tmp: {}", e);
-        return Json(DeployResponse {
-            success: false,
-            message: format!("Failed to create git pull script: {}", e),
-            output: None,
-            error: Some(format!("Script creation error: {}", e)),
-        });
-    }
-    
-    // Make script executable
-    if let Err(e) = std::fs::metadata(&script_path).and_then(|m| {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = m.permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&script_path, perms)
-    }) {
-        warn!("Failed to set script permissions: {}", e);
-    }
-    
-    // Run git pull script with host user
-    let hash_uid_str = format!("#{}", bichkhe_uid);
-    let git_script = format!(
+    // Run deploy.sh with host user permissions
+    let hash_uid_str = format!("#{}", host_uid);
+    let run_script = format!(
         r#"EXISTING_USER=$(getent passwd {} | cut -d: -f1 2>/dev/null || echo "")
 if [ -n "$EXISTING_USER" ]; then
     sudo -u "$EXISTING_USER" bash {}
@@ -693,137 +546,56 @@ elif command -v runuser >/dev/null 2>&1; then
 else
     sudo -u "{}" bash {} 2>/dev/null || sudo -u {} bash {} 2>/dev/null || bash {}
 fi"#,
-        bichkhe_uid, script_path,
-        hash_uid_str, script_path,
-        hash_uid_str, script_path,
-        bichkhe_uid, script_path,
-        script_path
+        host_uid, deploy_script,
+        hash_uid_str, deploy_script,
+        hash_uid_str, deploy_script,
+        host_uid, deploy_script,
+        deploy_script
     );
     
-    let git_output = Command::new("sh")
+    let deploy_output = Command::new("sh")
         .arg("-c")
-        .arg(&git_script)
+        .arg(&run_script)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
         .await;
     
-    // Clean up temporary script
-    let _ = std::fs::remove_file(&script_path);
-    
-    match git_output {
+    match deploy_output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            all_stdout.push_str(&format!("=== Git Pull ===\n{}\n", stdout));
-            if !stderr.is_empty() {
-                all_stderr.push_str(&format!("=== Git Pull (stderr) ===\n{}\n", stderr));
-            }
+            
             if !output.status.success() {
-                error!("Git pull failed with exit code: {:?}", output.status.code());
+                error!("Deploy script failed with exit code: {:?}", output.status.code());
                 return Json(DeployResponse {
                     success: false,
-                    message: format!("Git pull failed with exit code: {:?}. Error: {}", 
+                    message: format!("Deploy script failed with exit code: {:?}. Error: {}", 
                         output.status.code(),
                         if stderr.is_empty() { &stdout } else { &stderr }
                     ),
-                    output: Some(all_stdout),
-                    error: Some(all_stderr),
+                    output: Some(stdout.to_string()),
+                    error: if stderr.is_empty() { None } else { Some(stderr.to_string()) },
                 });
             }
-            info!("Git pull completed successfully");
+            
+            info!("Deploy script completed successfully");
+            Json(DeployResponse {
+                success: true,
+                message: "Bot deployed successfully".to_string(),
+                output: Some(stdout.to_string()),
+                error: if stderr.is_empty() { None } else { Some(stderr.to_string()) },
+            })
         }
         Err(e) => {
-            error!("Failed to execute git pull: {}", e);
-            return Json(DeployResponse {
+            error!("Failed to execute deploy script: {}", e);
+            Json(DeployResponse {
                 success: false,
-                message: format!("Failed to execute git pull: {}", e),
-                output: Some(all_stdout),
-                error: Some(format!("Git pull error: {}\n{}", e, all_stderr)),
-            });
+                message: format!("Failed to execute deploy script: {}. Make sure user 'bichkhe' exists and appuser has sudo permissions.", e),
+                output: None,
+                error: Some(format!("Deploy script error: {}", e)),
+            })
         }
-    }
-    
-    // Step 2: Docker compose up
-    // Use docker compose from the mounted directory
-    // The docker socket is mounted, so we can control host Docker daemon
-    info!("Executing docker compose up -d bot --build in {}", work_dir);
-    let docker_output = Command::new("docker")
-        .arg("compose")
-        .arg("-f")
-        .arg(&compose_file)
-        .arg("--project-directory")
-        .arg(&work_dir)
-        .arg("up")
-        .arg("-d")
-        .arg("bot")
-        .arg("--build")
-        .current_dir(&work_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await;
-
-    let output = match docker_output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            all_stdout.push_str(&format!("\n=== Docker Compose ===\n{}\n", stdout));
-            if !stderr.is_empty() {
-                all_stderr.push_str(&format!("\n=== Docker Compose (stderr) ===\n{}\n", stderr));
-            }
-            output
-        }
-        Err(e) => {
-            error!("Failed to execute docker compose: {}", e);
-            return Json(DeployResponse {
-                success: false,
-                message: format!("Failed to execute docker compose: {}", e),
-                output: Some(all_stdout),
-                error: Some(format!("Docker compose error: {}\n{}", e, all_stderr)),
-            });
-        }
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    info!("Deploy command exit status: {:?}", output.status.code());
-    info!("Deploy stdout: {}", stdout);
-    if !stderr.is_empty() {
-        warn!("Deploy stderr: {}", stderr);
-    }
-
-    if output.status.success() {
-        info!("Deploy bot completed successfully");
-        
-        Json(DeployResponse {
-            success: true,
-            message: "Bot deployed successfully".to_string(),
-            output: Some(stdout.to_string()),
-            error: if stderr.is_empty() {
-                None
-            } else {
-                warn!("Deploy warnings: {}", stderr);
-                Some(stderr.to_string())
-            },
-        })
-    } else {
-        error!("Deploy bot failed with status: {:?}", output.status);
-        error!("Exit code: {:?}", output.status.code());
-        error!("Stdout: {}", stdout);
-        error!("Stderr: {}", stderr);
-        
-        Json(DeployResponse {
-            success: false,
-            message: format!(
-                "Deploy failed with exit code: {:?}. Error: {}", 
-                output.status.code(),
-                if stderr.is_empty() { &stdout } else { &stderr }
-            ),
-            output: Some(stdout.to_string()),
-            error: Some(stderr.to_string()),
-        })
     }
 }
 

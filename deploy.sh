@@ -1,0 +1,34 @@
+#!/bin/bash
+# Simple deploy script for bot
+# This script will be executed by the API endpoint /api/deploy/bot
+
+set -e
+
+WORK_DIR="${DEPLOY_WORK_DIR:-/opt/wisetrader/wisetrader}"
+cd "${WORK_DIR}"
+
+echo "=== Starting deployment ==="
+echo "Work directory: ${WORK_DIR}"
+echo "Running as user: $(whoami) (UID: $(id -u))"
+echo ""
+
+# Configure git safe.directory
+echo "Configuring git..."
+git config --local --add safe.directory "${WORK_DIR}" 2>/dev/null || true
+
+# Git pull
+echo "Pulling latest changes..."
+git pull origin || {
+    echo "ERROR: Git pull failed"
+    exit 1
+}
+
+# Docker compose up
+echo "Building and starting bot container..."
+docker compose up -d bot --build || {
+    echo "ERROR: Docker compose failed"
+    exit 1
+}
+
+echo "=== Deployment completed successfully ==="
+
