@@ -1,6 +1,7 @@
 use anyhow::{Result, Context};
 use shared::{Config, get_pool};
 use tracing::{info, error, warn};
+use dotenv;
 use axum::{
     routing::{get, post},
     Router,
@@ -86,6 +87,14 @@ struct DeployQuery {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Load .env.api file if it exists
+    if let Err(e) = dotenv::from_filename(".env.api") {
+        // Try loading from parent directory
+        if dotenv::from_filename("../.env.api").is_err() {
+            warn!("Could not load .env.api file: {}. Using environment variables and defaults.", e);
+        }
+    }
+    
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
@@ -179,9 +188,21 @@ async fn main() -> Result<()> {
         )
         .with_state(totp_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:9999").await?;
-    info!("API server listening on http://0.0.0.0:9999");
-    info!("HTML reports available at: http://localhost:9999/reports/");
+    // Get server configuration from environment
+    let api_host = std::env::var("API_HOST")
+        .unwrap_or_else(|_| "0.0.0.0".to_string());
+    let api_port = std::env::var("API_PORT")
+        .unwrap_or_else(|_| "9999".to_string())
+        .parse::<u16>()
+        .unwrap_or(9999);
+    
+    let bind_address = format!("{}:{}", api_host, api_port);
+    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
+    info!("API server listening on http://{}", bind_address);
+    info!("HTML reports available at: http://{}:{}/reports/", 
+        if api_host == "0.0.0.0" { "localhost" } else { &api_host },
+        api_port
+    );
 
     axum::serve(listener, app).await?;
 
