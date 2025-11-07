@@ -160,6 +160,12 @@ pub async fn handle_profile_callback(
                             "lang_select_en"
                         ),
                     ],
+                    vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(locale, "button_cancel"),
+                            "cancel_language"
+                        ),
+                    ],
                 ];
                 
                 let selection_msg = i18n::translate(locale, "lang_selection_title", None);

@@ -69,6 +69,12 @@ pub async fn handle_start(
                 "lang_select_en"
             ),
         ],
+        vec![
+            InlineKeyboardButton::callback(
+                i18n::get_button_text("en", "button_cancel"),
+                "cancel_language"
+            ),
+        ],
     ];
 
     let selection_msg = i18n::translate("en", "lang_selection_title", None);
@@ -113,6 +119,37 @@ async fn handle_language_callback_internal(
     is_new_user: bool,
 ) -> Result<(), anyhow::Error> {
     if let Some(data) = q.data {
+        // Handle cancel language selection
+        if data == "cancel_language" {
+            bot.answer_callback_query(q.id).await?;
+            
+            // Get user locale for cancel message
+            let user_id = q.from.id.0 as i64;
+            let user = users::Entity::find_by_id(user_id)
+                .one(state.db.as_ref())
+                .await
+                .ok()
+                .flatten();
+            let locale = user
+                .as_ref()
+                .and_then(|u| u.language.as_ref())
+                .map(|l| i18n::get_user_language(Some(l)))
+                .unwrap_or("en");
+            
+            let cancel_msg = i18n::translate(locale, "lang_selection_cancelled", None);
+            
+            // Edit message to remove buttons
+            if let Some(msg) = q.message {
+                bot.edit_message_text(msg.chat().id, msg.id(), cancel_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+            }
+            
+            // Reset to Normal state
+            dialogue.update(BotState::Normal).await?;
+            return Ok(());
+        }
+        
         let user_id = q.from.id.0 as i64;
         
         // Extract language from callback data

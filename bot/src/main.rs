@@ -67,7 +67,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         // Handle delete strategy callbacks from any state FIRST (before other handlers)
         .branch(
             dptree::filter(|q: CallbackQuery| {
-                q.data.as_ref().map(|d| d.starts_with("delete_strategy_") || d.starts_with("delete_confirm_") || d == "delete_cancel").unwrap_or(false)
+                q.data.as_ref().map(|d| {
+                    d.starts_with("delete_strategy_") || 
+                    d.starts_with("delete_confirm_") || 
+                    d == "delete_cancel" ||
+                    d == "show_delete_strategies" ||
+                    d == "back_to_my_strategies"
+                }).unwrap_or(false)
             })
             .endpoint(handle_delete_strategy_callback)
         )
@@ -77,9 +83,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .endpoint(handle_language_selection)
         )
         .branch(
-            // Handle language selection callbacks (lang_select_vi, lang_select_en) from any state
+            // Handle language selection callbacks (lang_select_vi, lang_select_en, cancel_language) from any state
             dptree::filter(|q: CallbackQuery| {
-                q.data.as_ref().map(|d| d == "lang_select_vi" || d == "lang_select_en").unwrap_or(false)
+                q.data.as_ref().map(|d| 
+                    d == "lang_select_vi" || 
+                    d == "lang_select_en" || 
+                    d == "cancel_language"
+                ).unwrap_or(false)
             })
             .endpoint(handle_language_callback)
         )

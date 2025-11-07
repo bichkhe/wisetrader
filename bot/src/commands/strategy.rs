@@ -797,38 +797,25 @@ pub async fn handle_my_strategies(
 
     msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
 
-    // Build inline keyboard buttons for each strategy
-    let mut buttons = Vec::new();
-    for strategy in &user_strategies {
-        let strategy_name = strategy.name.as_ref().unwrap_or(&unnamed_str);
-        // Truncate name if too long (Telegram button text limit is ~64 chars)
-        // Use character-based truncation to avoid UTF-8 boundary errors
-        let display_name = if strategy_name.chars().count() > 30 {
-            let truncated: String = strategy_name.chars().take(27).collect();
-            format!("{}...", truncated)
-        } else {
-            strategy_name.clone()
-        };
-        
-        // Create button text with strategy name
-        let delete_prefix = i18n::get_button_text(locale, "strategy_delete_with_name");
-        let delete_text = format!("{}: {}", delete_prefix, display_name);
-        
-        buttons.push(vec![
+    // Build inline keyboard with only "Delete Strategy" and "Back" buttons
+    let buttons = vec![
+        vec![
             InlineKeyboardButton::callback(
-                delete_text,
-                format!("delete_strategy_{}", strategy.id)
+                i18n::get_button_text(locale, "strategy_delete_button"),
+                "show_delete_strategies"
             )
-        ]);
-    }
+        ],
+        vec![
+            InlineKeyboardButton::callback(
+                i18n::get_button_text(locale, "button_back"),
+                "back_to_my_strategies"
+            )
+        ],
+    ];
 
-    let mut send_msg = bot.send_message(msg.chat.id, msg_text)
-        .parse_mode(teloxide::types::ParseMode::Html);
-    
-    // Add inline keyboard if there are strategies
-    if !buttons.is_empty() {
-        send_msg = send_msg.reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons));
-    }
+    let send_msg = bot.send_message(msg.chat.id, msg_text)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons));
     
     send_msg.await?;
 
@@ -1032,6 +1019,224 @@ pub async fn handle_delete_strategy_callback(
                 let refresh_msg = i18n::translate(locale, "strategy_delete_cancelled", None);
                 bot.edit_message_text(msg.chat().id, msg.id(), refresh_msg)
                     .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+            }
+        }
+        // Handle show delete strategies list (show_delete_strategies)
+        else if data == "show_delete_strategies" {
+            bot.answer_callback_query(q.id).await?;
+            
+            if let Some(msg) = q.message {
+                let user_id = q.from.id.0.to_string();
+                let db = state.db.clone();
+                
+                // Get user locale
+                let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                    .one(db.as_ref())
+                    .await?;
+                let locale = user
+                    .as_ref()
+                    .and_then(|u| u.language.as_ref())
+                    .map(|l| i18n::get_user_language(Some(l)))
+                    .unwrap_or("en");
+                
+                // Query strategies filtered by telegram_id
+                use sea_orm::ColumnTrait;
+                let user_strategies = strategies::Entity::find()
+                    .filter(strategies::Column::TelegramId.eq(user_id.clone()))
+                    .order_by_desc(strategies::Column::CreatedAt)
+                    .all(db.as_ref())
+                    .await?;
+                
+                if user_strategies.is_empty() {
+                    let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
+                    bot.edit_message_text(msg.chat().id, msg.id(), empty_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                    return Ok(());
+                }
+                
+                // Build message with delete instructions
+                let delete_title = i18n::translate(locale, "strategy_delete_list_title", None);
+                let delete_msg = delete_title + "\n\n";
+                
+                let unnamed_str = "Unnamed".to_string();
+                
+                // Build inline keyboard buttons for each strategy to delete
+                let mut buttons = Vec::new();
+                for strategy in &user_strategies {
+                    let strategy_name = strategy.name.as_ref().unwrap_or(&unnamed_str);
+                    // Truncate name if too long
+                    let display_name = if strategy_name.chars().count() > 30 {
+                        let truncated: String = strategy_name.chars().take(27).collect();
+                        format!("{}...", truncated)
+                    } else {
+                        strategy_name.clone()
+                    };
+                    
+                    // Create button text with strategy name
+                    let delete_prefix = i18n::get_button_text(locale, "strategy_delete_with_name");
+                    let delete_text = format!("{}: {}", delete_prefix, display_name);
+                    
+                    buttons.push(vec![
+                        InlineKeyboardButton::callback(
+                            delete_text,
+                            format!("delete_strategy_{}", strategy.id)
+                        )
+                    ]);
+                }
+                
+                // Add Back button
+                buttons.push(vec![
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "button_back"),
+                        "back_to_my_strategies"
+                    )
+                ]);
+                
+                bot.edit_message_text(msg.chat().id, msg.id(), delete_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
+                    .await?;
+            }
+        }
+        // Handle back to my strategies (back_to_my_strategies)
+        else if data == "back_to_my_strategies" {
+            bot.answer_callback_query(q.id).await?;
+            
+            if let Some(msg) = q.message {
+                let user_id = q.from.id.0.to_string();
+                let db = state.db.clone();
+                
+                // Get user locale
+                let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                    .one(db.as_ref())
+                    .await?;
+                let locale = user
+                    .as_ref()
+                    .and_then(|u| u.language.as_ref())
+                    .map(|l| i18n::get_user_language(Some(l)))
+                    .unwrap_or("en");
+                
+                // Query strategies filtered by telegram_id
+                use sea_orm::ColumnTrait;
+                let user_strategies = strategies::Entity::find()
+                    .filter(strategies::Column::TelegramId.eq(user_id.clone()))
+                    .order_by_desc(strategies::Column::CreatedAt)
+                    .all(db.as_ref())
+                    .await?;
+                
+                if user_strategies.is_empty() {
+                    let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
+                    bot.edit_message_text(msg.chat().id, msg.id(), empty_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                    return Ok(());
+                }
+                
+                // Rebuild the original my strategies message
+                let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &user_strategies.len().to_string())]));
+                let mut msg_text = title + "\n\n";
+                
+                let unnamed_str = "Unnamed".to_string();
+                let no_desc_str = "No description".to_string();
+                
+                for (idx, strategy) in user_strategies.iter().enumerate() {
+                    let name = strategy.name.as_ref().unwrap_or(&unnamed_str);
+                    let desc_str = strategy.description.as_ref().unwrap_or(&no_desc_str);
+                    
+                    // Parse description to extract fields
+                    let mut algorithm = "N/A".to_string();
+                    let mut buy_condition = "N/A".to_string();
+                    let mut sell_condition = "N/A".to_string();
+                    let mut timeframe = "N/A".to_string();
+                    let mut pair = "N/A".to_string();
+                    
+                    for line in desc_str.lines() {
+                        if line.starts_with("Algorithm: ") {
+                            algorithm = line[11..].to_string();
+                        } else if line.starts_with("Buy: ") {
+                            buy_condition = line[5..].to_string();
+                        } else if line.starts_with("Sell: ") {
+                            sell_condition = line[6..].to_string();
+                        } else if line.starts_with("Timeframe: ") {
+                            timeframe = line[11..].to_string();
+                        } else if line.starts_with("Pair: ") {
+                            pair = line[6..].to_string();
+                        }
+                    }
+                    
+                    // HTML escape all user data
+                    let escaped_name = escape_html(name);
+                    let escaped_algorithm = escape_html(&algorithm);
+                    let escaped_buy = escape_html(&buy_condition);
+                    let escaped_sell = escape_html(&sell_condition);
+                    let escaped_timeframe = escape_html(&timeframe);
+                    let escaped_pair = escape_html(&pair);
+                    
+                    let created = strategy.created_at
+                        .as_ref()
+                        .map(|dt| escape_html(&dt.format("%Y-%m-%d %H:%M").to_string()))
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    // Build message with beautiful icons
+                    msg_text.push_str(if idx == 0 { "⭐ " } else { "📌 " });
+                    msg_text.push_str("<b>");
+                    msg_text.push_str(&(idx + 1).to_string());
+                    msg_text.push_str(". ");
+                    msg_text.push_str(&escaped_name);
+                    msg_text.push_str("</b>\n\n");
+                    
+                    msg_text.push_str("📊 <b>Algorithm:</b> ");
+                    msg_text.push_str(&escaped_algorithm);
+                    msg_text.push_str("\n");
+                    
+                    msg_text.push_str("📈 <b>Buy:</b> <code>");
+                    msg_text.push_str(&escaped_buy);
+                    msg_text.push_str("</code>\n");
+                    
+                    msg_text.push_str("📉 <b>Sell:</b> <code>");
+                    msg_text.push_str(&escaped_sell);
+                    msg_text.push_str("</code>\n");
+                    
+                    msg_text.push_str("⏰ <b>Timeframe:</b> ");
+                    msg_text.push_str(&escaped_timeframe);
+                    msg_text.push_str("\n");
+                    
+                    msg_text.push_str("💱 <b>Pair:</b> ");
+                    msg_text.push_str(&escaped_pair);
+                    msg_text.push_str("\n");
+                    
+                    msg_text.push_str("📅 <b>Created:</b> ");
+                    msg_text.push_str(&created);
+                    msg_text.push_str("\n");
+                    
+                    msg_text.push_str("🆔 <b>ID:</b> <code>");
+                    msg_text.push_str(&strategy.id.to_string());
+                    msg_text.push_str("</code>\n\n");
+                }
+                
+                msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
+                
+                // Build inline keyboard with only "Delete Strategy" and "Back" buttons
+                let buttons = vec![
+                    vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(locale, "strategy_delete_button"),
+                            "show_delete_strategies"
+                        )
+                    ],
+                    vec![
+                        InlineKeyboardButton::callback(
+                            i18n::get_button_text(locale, "button_back"),
+                            "back_to_my_strategies"
+                        )
+                    ],
+                ];
+                
+                bot.edit_message_text(msg.chat().id, msg.id(), msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
                     .await?;
             }
         }

@@ -10,6 +10,7 @@ lang_selection_title: |
 lang_selection_button_vi: "🇻🇳 Tiếng Việt"
 lang_selection_button_en: "🇬🇧 English"
 lang_selected: "✅ Đã chọn ngôn ngữ Tiếng Việt. Chào mừng!"
+lang_selection_cancelled: "❌ Đã hủy chọn ngôn ngữ."
 lang_updated_success: "Đã cập nhật ngôn ngữ thành công!"
 lang_updated_notice: "Tất cả tin nhắn sẽ được hiển thị bằng ngôn ngữ đã chọn. Sử dụng /me để xem hồ sơ của bạn với ngôn ngữ mới."
 
@@ -150,10 +151,11 @@ strategy_choose_preset: "📚 <b>Chiến Lược Có Sẵn</b>\n\nChọn một c
 strategy_loading_preset: "⏳ <b>Đang Tải Chiến Lược Có Sẵn...</b>\n\n<b>Chiến Lược:</b> {name}\n\nVui lòng đợi..."
 strategy_preset_loaded: "✅ <b>Đã Tải Chiến Lược Có Sẵn!</b>\n\n📋 <b>Tóm Tắt Chiến Lược:</b>\n\n📛 <b>Tên:</b> {name}\n📊 <b>Thuật Toán:</b> {algorithm}\n📈 <b>Điều Kiện Mua:</b> <code>{buy_condition}</code>\n📉 <b>Điều Kiện Bán:</b> <code>{sell_condition}</code>\n⏰ <b>Khung Thời Gian:</b> {timeframe}"
 strategy_preset_load_error: "❌ <b>Không Thể Tải Chiến Lược Có Sẵn</b>\n\n<b>Chiến Lược:</b> {name}\n<b>Lỗi:</b> {error}\n\nVui lòng thử lại hoặc chọn chiến lược có sẵn khác."
-strategy_enter_name: "📝 <b>Nhập Tên Chiến Lược</b>\n\nVui lòng nhập tên cho chiến lược của bạn:\n\n💡 <i>Ví dụ: Chiến Lược RSI Của Tôi, BTC Scalping, v.v.</i>"
+strategy_enter_name: "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔴 <b><u>NHẬP TÊN CHO CHIẾN LƯỢC CỦA BẠN</u></b> 🔴\n\n📝 <b>Vui lòng nhập tên cho chiến lược:</b>\n\n💡 <i>Ví dụ: Chiến Lược RSI Của Tôi, BTC Scalping, v.v.</i>\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 strategy_name_set: "✅ <b>Đã Đặt Tên Chiến Lược!</b>\n\n📛 <b>Tên:</b> {name}"
 strategy_name_empty: "❌ <b>Tên chiến lược không thể để trống!</b>\n\nVui lòng nhập tên hợp lệ cho chiến lược của bạn."
 strategy_delete_with_name: "🗑️ Xóa"
+strategy_delete_list_title: "🗑️ <b>Xóa Chiến Lược</b>\n\nChọn chiến lược để xóa:"
 
 # Trading pairs
 pair_btc_usdt: "₿ BTC/USDT"

@@ -10,6 +10,7 @@ lang_selection_title: |
 lang_selection_button_vi: "🇻🇳 Tiếng Việt"
 lang_selection_button_en: "🇬🇧 English"
 lang_selected: "✅ Language set to English. Welcome!"
+lang_selection_cancelled: "❌ Language selection cancelled."
 lang_updated_success: "Language updated successfully!"
 lang_updated_notice: "All messages will now be displayed in the selected language. Use /me to see your profile with the new language."
 
@@ -152,10 +153,11 @@ strategy_choose_preset: "📚 <b>Preset Strategies</b>\n\nSelect a preset strate
 strategy_loading_preset: "⏳ <b>Loading Preset Strategy...</b>\n\n<b>Strategy:</b> {name}\n\nPlease wait..."
 strategy_preset_loaded: "✅ <b>Preset Strategy Loaded!</b>\n\n📋 <b>Strategy Summary:</b>\n\n📛 <b>Name:</b> {name}\n📊 <b>Algorithm:</b> {algorithm}\n📈 <b>Buy Condition:</b> <code>{buy_condition}</code>\n📉 <b>Sell Condition:</b> <code>{sell_condition}</code>\n⏰ <b>Timeframe:</b> {timeframe}"
 strategy_preset_load_error: "❌ <b>Failed to Load Preset Strategy</b>\n\n<b>Strategy:</b> {name}\n<b>Error:</b> {error}\n\nPlease try again or choose a different preset."
-strategy_enter_name: "📝 <b>Enter Strategy Name</b>\n\nPlease enter a name for your strategy:\n\n💡 <i>Example: My RSI Strategy, BTC Scalping, etc.</i>"
+strategy_enter_name: "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔴 <b><u>ENTER A NAME FOR YOUR STRATEGY</u></b> 🔴\n\n📝 <b>Please enter a name for your strategy:</b>\n\n💡 <i>Example: My RSI Strategy, BTC Scalping, etc.</i>\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 strategy_name_set: "✅ <b>Strategy Name Set!</b>\n\n📛 <b>Name:</b> {name}"
 strategy_name_empty: "❌ <b>Strategy name cannot be empty!</b>\n\nPlease enter a valid name for your strategy."
 strategy_delete_with_name: "🗑️ Delete"
+strategy_delete_list_title: "🗑️ <b>Delete Strategy</b>\n\nSelect a strategy to delete:"
 
 # Trading pairs
 pair_btc_usdt: "₿ BTC/USDT"
