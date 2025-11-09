@@ -212,7 +212,6 @@ services:
     volumes:
       - ./drone:/data
     environment:
-      - DRONE_GITEA_SERVER=${DRONE_GITEA_SERVER:-https://gitea.com}
       - DRONE_GITHUB_SERVER=${DRONE_GITHUB_SERVER:-https://github.com}
       - DRONE_GITHUB_CLIENT=${DRONE_GITHUB_CLIENT:-Ov23liSZbma5ybhFqIwW}
       - DRONE_GITHUB_SECRET=${DRONE_GITHUB_SECRET:-8d7133dff70dc322a13daf5cc6559b62fdbfe506}
