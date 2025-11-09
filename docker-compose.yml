@@ -204,7 +204,7 @@ services:
       - WOODPECKER_SERVER=woodpecker-server:9000
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
   drone-server:
-    image: drone/drone:2
+    image: drone/drone:latest
     container_name: drone-server
     ports:
       - "8080:80" # Web UI
@@ -221,7 +221,7 @@ services:
     restart: always
 
   drone-agent:
-    image: drone/agent:2
+    image: drone/agent:latest
     container_name: drone-agent
     depends_on:
       - drone-server
