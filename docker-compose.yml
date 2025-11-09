@@ -207,12 +207,12 @@ services:
     image: drone/drone:latest
     container_name: drone-server
     ports:
-      - "8000:8000" # Web UI
+      - "8000:80" # Web UI
       - "443:443" # HTTPS nếu muốn
     volumes:
       - ./drone:/data
     environment:
-      - DRONE_GITHUB_SERVER=https://github.com # Hoặc GitHub: DRONE_GITHUB_SERVER=https://github.com
+      - DRONE_GITHUB_SERVER=https://github.com
       - DRONE_GITHUB_CLIENT=Ov23liSZbma5ybhFqIwW
       - DRONE_GITHUB_SECRET=8d7133dff70dc322a13daf5cc6559b62fdbfe506
       - DRONE_RPC_SECRET=supersecretrpc
