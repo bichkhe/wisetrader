@@ -185,6 +185,7 @@ services:
       - WOODPECKER_OPEN=true
       - WOODPECKER_HOST=${WOODPECKER_HOST:-https://ci.yazistorm.xyz}
       - WOODPECKER_GITHUB=true
+      - WOODPECKER_ADMIN=${WOODPECKER_ADMIN:-bichkhe}
       - WOODPECKER_GITHUB=${WOODPECKER_GITHUB:-true}
       - WOODPECKER_GITHUB_CLIENT=${WOODPECKER_GITHUB_CLIENT:-Ov23liSZbma5ybhFqIwW}
       - WOODPECKER_GITHUB_SECRET=${WOODPECKER_GITHUB_SECRET:-8d7133dff70dc322a13daf5cc6559b62fdbfe506}
@@ -202,6 +203,34 @@ services:
     environment:
       - WOODPECKER_SERVER=woodpecker-server:9000
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
+  drone-server:
+    image: drone/drone:2
+    container_name: drone-server
+    ports:
+      - "8080:80" # Web UI
+      - "443:443" # HTTPS nếu muốn
+    volumes:
+      - ./drone:/data
+    environment:
+      - DRONE_GITEA_SERVER=https://gitea.yazistorm.xyz # Hoặc GitHub: DRONE_GITHUB_SERVER=https://github.com
+      - DRONE_GITHUB_CLIENT=Ov23liSZbma5ybhFqIwW
+      - DRONE_GITHUB_SECRET=8d7133dff70dc322a13daf5cc6559b62fdbfe506
+      - DRONE_RPC_SECRET=supersecretrpc
+      - DRONE_SERVER_HOST=ci.yazistorm.xyz
+      - DRONE_SERVER_PROTO=https
+    restart: always
+
+  drone-agent:
+    image: drone/agent:2
+    container_name: drone-agent
+    depends_on:
+      - drone-server
+    environment:
+      - DRONE_RPC_HOST=drone-server
+      - DRONE_RPC_SECRET=supersecretrpc
+      - DRONE_RUNNER_CAPACITY=2
+      - DRONE_RUNNER_NAME=agent1
+    restart: always
 networks:
   wisetrader:
     driver: bridge
