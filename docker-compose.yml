@@ -207,7 +207,7 @@ services:
     image: drone/drone:latest
     container_name: drone-server
     ports:
-      - "8000:80" # Web UI
+      - "8080:80" # Web UI
       - "443:443" # HTTPS nếu muốn
     volumes:
       - ./drone:/data
