@@ -203,8 +203,7 @@ services:
       - WOODPECKER_SERVER=woodpecker-server:9000
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
 networks:
-  wisetrader:
-    - wisetrader
+  - wisetrader
 
 volumes:
   mysql_data:
