@@ -188,8 +188,8 @@ services:
       - WOODPECKER_GITHUB_CLIENT=${WOODPECKER_GITHUB_CLIENT:-Ov23liSZbma5ybhFqIwW}
       - WOODPECKER_GITHUB_SECRET=${WOODPECKER_GITHUB_SECRET:-8d7133dff70dc322a13daf5cc6559b62fdbfe506}
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
-  networks:
-    - wisetrader
+    networks:
+      - wisetrader
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:v3
     command: agent
