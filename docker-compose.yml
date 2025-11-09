@@ -171,6 +171,8 @@ services:
     entrypoint: /bin/sh
     command: -c "apk add --no-cache wget ca-certificates sudo >/dev/null 2>&1 || true; chmod +x /usr/local/bin/bot-updater.sh 2>/dev/null || true; /usr/local/bin/bot-updater.sh"
     restart: unless-stopped
+    networks:
+      - wisetrader
     # Run as root to allow installation to /tmp (if needed)
     # The script will handle permissions properly
   woodpecker-server:
@@ -182,12 +184,12 @@ services:
     environment:
       - WOODPECKER_OPEN=true
       - WOODPECKER_HOST=${WOODPECKER_HOST:-https://ci.yazistorm.xyz}
+      - WOODPECKER_GITHUB=true
       - WOODPECKER_GITHUB=${WOODPECKER_GITHUB:-true}
       - WOODPECKER_GITHUB_CLIENT=${WOODPECKER_GITHUB_CLIENT:-Ov23liSZbma5ybhFqIwW}
       - WOODPECKER_GITHUB_SECRET=${WOODPECKER_GITHUB_SECRET:-8d7133dff70dc322a13daf5cc6559b62fdbfe506}
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
-    networks:
-      - wisetrader
+
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:v3
     command: agent
@@ -200,8 +202,9 @@ services:
     environment:
       - WOODPECKER_SERVER=woodpecker-server:9000
       - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET:-your_very_secret_agent_secret}
-    networks:
-      - wisetrader
+networks:
+  wisetrader:
+    driver: bridge
 
 volumes:
   mysql_data:
