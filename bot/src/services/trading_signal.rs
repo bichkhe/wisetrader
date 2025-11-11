@@ -21,6 +21,41 @@ use chrono::Utc;
 
 use crate::state::AppState;
 
+/// Normalize pair format to "BASE/QUOTE" (e.g., "BTCUSDT" -> "BTC/USDT", "BTC/USDT" -> "BTC/USDT")
+fn normalize_pair(pair: &str) -> Option<(String, String)> {
+    let pair_upper = pair.to_uppercase();
+    
+    // If already has "/", split it
+    if pair_upper.contains('/') {
+        let parts: Vec<&str> = pair_upper.split('/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+    
+    // Try to detect common quote currencies at the end
+    let common_quotes = vec!["USDT", "BTC", "ETH", "BNB", "BUSD", "USDC", "EUR", "USD"];
+    
+    for quote in common_quotes {
+        if pair_upper.ends_with(quote) && pair_upper.len() > quote.len() {
+            let base = &pair_upper[..pair_upper.len() - quote.len()];
+            if !base.is_empty() {
+                return Some((base.to_string(), quote.to_string()));
+            }
+        }
+    }
+    
+    // If no quote detected, assume USDT (most common)
+    if pair_upper.len() > 4 {
+        let base = &pair_upper[..pair_upper.len() - 4];
+        if base.len() >= 2 {
+            return Some((base.to_string(), "USDT".to_string()));
+        }
+    }
+    
+    None
+}
+
 /// 1-Minute Candle aggregator
 #[derive(Debug, Clone)]
 struct OneMinuteCandle {
@@ -519,14 +554,17 @@ pub fn start_user_trading_service(
     info!("🚀 Starting User Trading Service for user {} with strategy {} on {} ({})", 
         user_id, strategy_config.strategy_type, exchange, pair);
     
-    // Parse pair (e.g., "BTC/USDT" -> base="BTC", quote="USDT")
-    let pair_parts: Vec<&str> = pair.split('/').collect();
-    if pair_parts.len() != 2 {
-        error!("Invalid pair format: {}", pair);
-        return;
-    }
-    let base = pair_parts[0].to_lowercase();
-    let quote = pair_parts[1].to_lowercase();
+    // Normalize pair format (supports both "BTC/USDT" and "BTCUSDT")
+    let (base, quote) = match normalize_pair(&pair) {
+        Some((b, q)) => (b.to_lowercase(), q.to_lowercase()),
+        None => {
+            error!("Invalid pair format: {} (expected format: BTC/USDT or BTCUSDT)", pair);
+            return;
+        }
+    };
+    
+    // Log normalized pair for debugging
+    info!("Normalized pair: {} -> {}/{}", pair, base, quote);
     
     // Create candle aggregator for this user's timeframe
     let state = Arc::new(RwLock::new(TradingState::new(14))); // RSI period
