@@ -445,7 +445,7 @@ async fn generate_html_report(
     result: &shared::BacktestResult,
     tables: &[(String, String)],
     ai_analysis: Option<String>,
-) -> Result<Option<String>, anyhow::Error> {
+) -> Result<Option<(String, std::path::PathBuf)>, anyhow::Error> {
     // Create reports directory if it doesn't exist
     fs::create_dir_all(&config.html_reports_dir)?;
     
@@ -494,7 +494,52 @@ async fn generate_html_report(
         format!("{}/reports/{}", config.api_base_url.trim_end_matches('/'), filename)
     };
     
-    Ok(Some(url))
+    Ok(Some((url, filepath)))
+}
+
+/// Update HTML report with AI analysis
+async fn update_html_report_with_ai_analysis(
+    filepath: &std::path::Path,
+    strategy_name: &str,
+    exchange: &str,
+    pair: &str,
+    timeframe: &str,
+    timerange: &str,
+    user_fullname: Option<String>,
+    result: &shared::BacktestResult,
+    tables: &[(String, String)],
+    ai_analysis: String,
+) -> Result<(), anyhow::Error> {
+    // Re-create template with AI analysis
+    let template = BacktestReportTemplate::new(
+        strategy_name.to_string(),
+        exchange.to_string(),
+        pair.to_string(),
+        timeframe.to_string(),
+        timerange.to_string(),
+        user_fullname,
+        result.trades,
+        result.profit_pct,
+        result.win_rate,
+        result.max_drawdown,
+        result.starting_balance,
+        result.final_balance,
+        result.download_time_secs,
+        result.backtest_time_secs,
+        tables.to_vec(),
+        result.stdout.clone(),
+        Some(ai_analysis),
+    );
+    
+    // Render template
+    let html_content = template.render()?;
+    
+    // Write to file (overwrite)
+    fs::write(filepath, html_content)?;
+    
+    tracing::info!("✅ HTML report updated with AI analysis: {}", filepath.display());
+    
+    Ok(())
 }
 
 /// Calculate timerange string for Freqtrade CLI (format: YYYYMMDD-)
@@ -1311,76 +1356,8 @@ pub async fn handle_backtest_callback(
                                         // Get user fullname for HTML report
                                         let user_fullname = user.as_ref().and_then(|u| u.fullname.clone());
                                         
-                                        // Generate AI analysis if enabled
-                                        let ai_analysis = if config.enable_gemini_analysis {
-                                            if let Some(ref api_key) = config.gemini_api_key {
-                                                use crate::services::gemini::GeminiService;
-                                                let gemini = GeminiService::with_config(
-                                                    api_key.clone(),
-                                                    config.gemini_model_name.clone(),
-                                                    config.gemini_base_url.clone(),
-                                                    config.gemini_timeout_secs,
-                                                );
-                                                
-                                                // Determine language based on user locale
-                                                let locale = user.as_ref()
-                                                    .and_then(|u| u.language.as_ref())
-                                                    .map(|l| l.as_str())
-                                                    .unwrap_or("en");
-                                                
-                                                let analysis_result = if locale == "vi" {
-                                                    gemini.analyze_backtest(
-                                                        &strategy_name,
-                                                        &exchange,
-                                                        &freqtrade_pair,
-                                                        &timeframe,
-                                                        &timerange,
-                                                        result.trades,
-                                                        result.profit_pct,
-                                                        result.win_rate,
-                                                        result.max_drawdown,
-                                                        result.starting_balance,
-                                                        result.final_balance,
-                                                        &tables,
-                                                        result.stdout.as_deref(),
-                                                    ).await
-                                                } else {
-                                                    gemini.analyze_backtest_en(
-                                                        &strategy_name,
-                                                        &exchange,
-                                                        &freqtrade_pair,
-                                                        &timeframe,
-                                                        &timerange,
-                                                        result.trades,
-                                                        result.profit_pct,
-                                                        result.win_rate,
-                                                        result.max_drawdown,
-                                                        result.starting_balance,
-                                                        result.final_balance,
-                                                        &tables,
-                                                        result.stdout.as_deref(),
-                                                    ).await
-                                                };
-                                                
-                                                match analysis_result {
-                                                    Ok(analysis) => {
-                                                        tracing::info!("✅ Gemini AI analysis generated successfully");
-                                                        Some(analysis)
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!("⚠️ Failed to generate Gemini AI analysis: {}", e);
-                                                        None
-                                                    }
-                                                }
-                                            } else {
-                                                tracing::debug!("Gemini API key not configured, skipping AI analysis");
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        };
-                                        
-                                        let html_report_url = if config.generate_html_reports {
+                                        // Generate HTML report immediately (without AI analysis)
+                                        let (html_report_url, html_report_filepath) = if config.generate_html_reports {
                                             match generate_html_report(
                                                 &config,
                                                 &strategy_name,
@@ -1388,24 +1365,122 @@ pub async fn handle_backtest_callback(
                                                 &freqtrade_pair,
                                                 &timeframe,
                                                 &timerange,
-                                                user_fullname,
+                                                user_fullname.clone(),
                                                 &result,
                                                 &tables,
-                                                ai_analysis.clone(),
+                                                None, // No AI analysis initially
                                             ).await {
-                                                Ok(Some(url)) => {
+                                                Ok(Some((url, filepath))) => {
                                                     tracing::info!("HTML report generated: {}", url);
-                                                    Some(url)
+                                                    (Some(url), Some(filepath))
                                                 }
-                                                Ok(None) => None,
+                                                Ok(None) => (None, None),
                                                 Err(e) => {
                                                     tracing::error!("Failed to generate HTML report: {}", e);
-                                                    None
+                                                    (None, None)
                                                 }
                                             }
                                         } else {
-                                            None
+                                            (None, None)
                                         };
+                                        
+                                        // Spawn background task to generate AI analysis and update HTML report
+                                        if config.enable_gemini_analysis && html_report_filepath.is_some() {
+                                            if let Some(ref api_key) = config.gemini_api_key {
+                                                use crate::services::gemini::GeminiService;
+                                                
+                                                // Determine language based on user locale (before moving into task)
+                                                let locale = user.as_ref()
+                                                    .and_then(|u| u.language.as_ref())
+                                                    .map(|l| l.as_str())
+                                                    .unwrap_or("en")
+                                                    .to_string();
+                                                
+                                                // Clone data needed for background task
+                                                let gemini = GeminiService::with_config(
+                                                    api_key.clone(),
+                                                    config.gemini_model_name.clone(),
+                                                    config.gemini_base_url.clone(),
+                                                    config.gemini_timeout_secs,
+                                                );
+                                                
+                                                let filepath = html_report_filepath.clone().unwrap();
+                                                let strategy_name_clone = strategy_name.clone();
+                                                let exchange_clone = exchange.clone();
+                                                let freqtrade_pair_clone = freqtrade_pair.clone();
+                                                let timeframe_clone = timeframe.clone();
+                                                let timerange_clone = timerange.clone();
+                                                let user_fullname_clone = user_fullname.clone();
+                                                let result_clone = result.clone();
+                                                let tables_clone = tables.clone();
+                                                
+                                                // Spawn background task
+                                                tokio::spawn(async move {
+                                                    tracing::info!("🔄 Starting background Gemini AI analysis...");
+                                                    
+                                                    let analysis_result = if locale.as_str() == "vi" {
+                                                        gemini.analyze_backtest(
+                                                            &strategy_name_clone,
+                                                            &exchange_clone,
+                                                            &freqtrade_pair_clone,
+                                                            &timeframe_clone,
+                                                            &timerange_clone,
+                                                            result_clone.trades,
+                                                            result_clone.profit_pct,
+                                                            result_clone.win_rate,
+                                                            result_clone.max_drawdown,
+                                                            result_clone.starting_balance,
+                                                            result_clone.final_balance,
+                                                            &tables_clone,
+                                                            result_clone.stdout.as_deref(),
+                                                        ).await
+                                                    } else {
+                                                        gemini.analyze_backtest_en(
+                                                            &strategy_name_clone,
+                                                            &exchange_clone,
+                                                            &freqtrade_pair_clone,
+                                                            &timeframe_clone,
+                                                            &timerange_clone,
+                                                            result_clone.trades,
+                                                            result_clone.profit_pct,
+                                                            result_clone.win_rate,
+                                                            result_clone.max_drawdown,
+                                                            result_clone.starting_balance,
+                                                            result_clone.final_balance,
+                                                            &tables_clone,
+                                                            result_clone.stdout.as_deref(),
+                                                        ).await
+                                                    };
+                                                    
+                                                    match analysis_result {
+                                                        Ok(analysis) => {
+                                                            tracing::info!("✅ Gemini AI analysis generated successfully");
+                                                            
+                                                            // Update HTML report with AI analysis
+                                                            if let Err(e) = update_html_report_with_ai_analysis(
+                                                                &filepath,
+                                                                &strategy_name_clone,
+                                                                &exchange_clone,
+                                                                &freqtrade_pair_clone,
+                                                                &timeframe_clone,
+                                                                &timerange_clone,
+                                                                user_fullname_clone,
+                                                                &result_clone,
+                                                                &tables_clone,
+                                                                analysis,
+                                                            ).await {
+                                                                tracing::error!("⚠️ Failed to update HTML report with AI analysis: {}", e);
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!("⚠️ Failed to generate Gemini AI analysis: {}", e);
+                                                        }
+                                                    }
+                                                });
+                                            } else {
+                                                tracing::debug!("Gemini API key not configured, skipping AI analysis");
+                                            }
+                                        }
                                         
                                         tracing::info!("html_report_url: {:?}", html_report_url);
                                         // Add HTML report link to summary message if available
