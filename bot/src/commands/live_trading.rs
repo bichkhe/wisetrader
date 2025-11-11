@@ -5,10 +5,10 @@ use anyhow::Result;
 use teloxide::dispatching::dialogue;
 use teloxide::prelude::*;
 use teloxide::types::InlineKeyboardButton;
-use sea_orm::{EntityTrait, ActiveValue, ColumnTrait, QueryFilter};
+use sea_orm::{EntityTrait, ActiveValue, ColumnTrait, QueryFilter, QueryOrder, Order};
 use crate::state::{AppState, MyDialogue, BotState, LiveTradingState};
 use crate::i18n;
-use shared::entity::{users, exchange_tokens};
+use shared::entity::{users, exchange_tokens, live_trading_sessions};
 use chrono::Utc;
 
 /// Handler for /livetrading command
@@ -32,8 +32,14 @@ pub async fn handle_live_trading(
         .map(|l| i18n::get_user_language(Some(l)))
         .unwrap_or("en");
     
-    // Check if user already has a strategy running
-    if state.strategy_executor.is_user_trading(telegram_id).await {
+    // Check if user already has an active live trading session
+    let active_session = live_trading_sessions::Entity::find()
+        .filter(live_trading_sessions::Column::UserId.eq(telegram_id))
+        .filter(live_trading_sessions::Column::Status.eq("active"))
+        .one(state.db.as_ref())
+        .await?;
+    
+    if active_session.is_some() {
         let msg_text = i18n::translate(locale, "trading_already_active", None);
         bot.send_message(msg.chat.id, msg_text).await?;
         return Ok(());
@@ -314,6 +320,7 @@ pub async fn handle_live_trading_callback(
                                         user_chat_id,
                                         &token,
                                         config,
+                                        Some(strategy_id), // Pass strategy_id
                                     ).await {
                                         Ok(_) => {
                                             let success_msg = i18n::translate(locale, "live_trading_started", Some(&[
@@ -583,6 +590,7 @@ async fn start_live_trading_with_exchange(
     user_chat_id: i64, // Telegram chat ID to send signals to
     token: &exchange_tokens::Model,
     strategy_config: crate::services::strategy_engine::StrategyConfig,
+    strategy_id: Option<u64>, // Strategy ID from database
 ) -> Result<()> {
     tracing::info!(
         "Starting live trading for user {} (chat: {}) on {} with strategy {}",
@@ -594,6 +602,30 @@ async fn start_live_trading_with_exchange(
     
     // Start strategy executor (registers user's strategy)
     state.strategy_executor.start_trading(user_id, strategy_config.clone(), Some(token.exchange.clone())).await?;
+    
+    // Save live trading session to database
+    let session = live_trading_sessions::ActiveModel {
+        user_id: ActiveValue::Set(user_id),
+        strategy_id: ActiveValue::Set(strategy_id),
+        strategy_name: ActiveValue::Set(Some(strategy_config.strategy_type.clone())),
+        exchange: ActiveValue::Set(token.exchange.clone()),
+        pair: ActiveValue::Set(strategy_config.pair.clone()),
+        timeframe: ActiveValue::Set(Some(strategy_config.timeframe.clone())),
+        status: ActiveValue::Set("active".to_string()),
+        started_at: ActiveValue::Set(Some(Utc::now())),
+        stopped_at: ActiveValue::NotSet,
+        created_at: ActiveValue::Set(Some(Utc::now())),
+        updated_at: ActiveValue::Set(Some(Utc::now())),
+        ..Default::default()
+    };
+    
+    let session_result = live_trading_sessions::Entity::insert(session)
+        .exec(state.db.as_ref())
+        .await?;
+    
+    tracing::info!("✅ Created live trading session {} for user {} with strategy {}", 
+        session_result.last_insert_id, user_id, 
+        strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string()));
     
     // Start user-specific trading service (monitors market and sends signals)
     use crate::services::trading_signal::start_user_trading_service;
@@ -630,40 +662,33 @@ pub async fn handle_my_trading(
         .map(|l| i18n::get_user_language(Some(l)))
         .unwrap_or("en");
     
-    // Check if user is trading
-    if !state.strategy_executor.is_user_trading(telegram_id).await {
-        let msg_text = if locale == "vi" {
-            "❌ Bạn chưa có live trading nào đang chạy.\n\n\
-            Sử dụng /livetrading để bắt đầu live trading."
-        } else {
-            "❌ You don't have any live trading running.\n\n\
-            Use /livetrading to start live trading."
+    // Get active live trading session from database
+    let active_session = live_trading_sessions::Entity::find()
+        .filter(live_trading_sessions::Column::UserId.eq(telegram_id))
+        .filter(live_trading_sessions::Column::Status.eq("active"))
+        .order_by(live_trading_sessions::Column::StartedAt, Order::Desc)
+        .one(state.db.as_ref())
+        .await?;
+    
+    if let Some(session) = active_session {
+        let exchange_name = match session.exchange.as_str() {
+            "binance" => "🔵 Binance",
+            "okx" => "🟢 OKX",
+            _ => &session.exchange,
         };
         
-        bot.send_message(msg.chat.id, msg_text)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await?;
-        return Ok(());
-    }
-    
-    // Get user's trading details
-    if let Some((strategy_name, pair, timeframe)) = state.strategy_executor
-        .get_user_trading_details(telegram_id).await 
-    {
-        // Get exchange token info
-        let token = exchange_tokens::Entity::find()
-            .filter(exchange_tokens::Column::UserId.eq(telegram_id))
-            .filter(exchange_tokens::Column::IsActive.eq(1))
-            .one(state.db.as_ref())
-            .await?;
+        let strategy_name = session.strategy_name.as_ref()
+            .unwrap_or(&format!("Strategy #{}", session.strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string())))
+            .clone();
         
-        let exchange_name = token.as_ref()
-            .map(|t| match t.exchange.as_str() {
-                "binance" => "🔵 Binance",
-                "okx" => "🟢 OKX",
-                _ => &t.exchange,
-            })
-            .unwrap_or("Unknown");
+        let pair = session.pair.clone();
+        let timeframe = session.timeframe.as_ref()
+            .map(|t| t.clone())
+            .unwrap_or_else(|| "N/A".to_string());
+        
+        let started_at = session.started_at
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| "N/A".to_string());
         
         let status_msg = if locale == "vi" {
             format!(
@@ -672,9 +697,10 @@ pub async fn handle_my_trading(
                 📈 <b>Strategy:</b> {}\n\
                 💱 <b>Pair:</b> {}\n\
                 ⏰ <b>Timeframe:</b> {}\n\
-                🌐 <b>Exchange:</b> {}\n\n\
+                🌐 <b>Exchange:</b> {}\n\
+                🕐 <b>Bắt đầu:</b> {}\n\n\
                 ⚠️ <i>Live trading đang monitor thị trường và sẽ gửi signals khi có tín hiệu.</i>",
-                strategy_name, pair, timeframe, exchange_name
+                strategy_name, pair, timeframe, exchange_name, started_at
             )
         } else {
             format!(
@@ -683,9 +709,10 @@ pub async fn handle_my_trading(
                 📈 <b>Strategy:</b> {}\n\
                 💱 <b>Pair:</b> {}\n\
                 ⏰ <b>Timeframe:</b> {}\n\
-                🌐 <b>Exchange:</b> {}\n\n\
+                🌐 <b>Exchange:</b> {}\n\
+                🕐 <b>Started:</b> {}\n\n\
                 ⚠️ <i>Live trading is monitoring the market and will send signals when detected.</i>",
-                strategy_name, pair, timeframe, exchange_name
+                strategy_name, pair, timeframe, exchange_name, started_at
             )
         };
         
@@ -758,6 +785,28 @@ pub async fn handle_stop_trading_callback(
                     Ok(Some((exchange, pair))) => {
                         // Unsubscribe from stream
                         state.stream_manager.unsubscribe(&exchange, &pair, user_id).await;
+                        
+                        // Update live trading session status to stopped
+                        let active_session = live_trading_sessions::Entity::find()
+                            .filter(live_trading_sessions::Column::UserId.eq(user_id))
+                            .filter(live_trading_sessions::Column::Status.eq("active"))
+                            .order_by(live_trading_sessions::Column::StartedAt, Order::Desc)
+                            .one(state.db.as_ref())
+                            .await?;
+                        
+                        if let Some(session) = active_session {
+                            let mut session_update: live_trading_sessions::ActiveModel = session.into();
+                            session_update.status = ActiveValue::Set("stopped".to_string());
+                            session_update.stopped_at = ActiveValue::Set(Some(Utc::now()));
+                            session_update.updated_at = ActiveValue::Set(Some(Utc::now()));
+                            
+                            live_trading_sessions::Entity::update(session_update)
+                                .exec(state.db.as_ref())
+                                .await?;
+                            
+                            tracing::info!("✅ Updated live trading session status to stopped for user {}", user_id);
+                        }
+                        
                         bot.answer_callback_query(q.id)
                             .text(if locale == "vi" {
                                 "✅ Đã dừng live trading"

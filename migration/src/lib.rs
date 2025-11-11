@@ -7,6 +7,7 @@ mod m20251106_000001_create_exchange_tokens;
 mod m20251107_000001_create_live_trading_orders;
 mod m20251108_000001_create_positions_and_trades;
 mod m20251109_000001_rename_live_trading_orders_to_signals;
+mod m20251110_000001_create_live_trading_sessions;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
                 Box::new(m20251107_000001_create_live_trading_orders::Migration),
                 Box::new(m20251108_000001_create_positions_and_trades::Migration),
                 Box::new(m20251109_000001_rename_live_trading_orders_to_signals::Migration),
+                Box::new(m20251110_000001_create_live_trading_sessions::Migration),
         ]
     }
 }

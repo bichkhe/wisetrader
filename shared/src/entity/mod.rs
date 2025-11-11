@@ -4,6 +4,7 @@ pub mod prelude;
 
 pub mod exchange_tokens;
 pub mod live_trading_signals;
+pub mod live_trading_sessions;
 pub mod positions;
 pub mod strategies;
 pub mod trades;
