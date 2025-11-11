@@ -324,9 +324,14 @@ pub async fn handle_live_trading_callback(
                             match state.strategy_service.strategy_to_config(&_strategy) {
                                 Ok(config) => {
                                     // Start live trading with exchange API
+                                    // Get user chat ID from callback query
+                                    let user_chat_id = q.from.id.0 as i64;
+                                    
                                     match start_live_trading_with_exchange(
-                                        &state,
+                                        state.clone(),
+                                        bot.clone(),
                                         telegram_id,
+                                        user_chat_id,
                                         &token,
                                         config,
                                     ).await {
@@ -572,22 +577,36 @@ pub async fn handle_live_trading_input(
 
 /// Start live trading with exchange API
 async fn start_live_trading_with_exchange(
-    state: &AppState,
+    state: Arc<AppState>,
+    bot: Bot,
     user_id: i64,
+    user_chat_id: i64, // Telegram chat ID to send signals to
     token: &exchange_tokens::Model,
     strategy_config: crate::services::strategy_engine::StrategyConfig,
 ) -> Result<()> {
-    // TODO: Integrate with Binance/OKX API to execute trades
-    // For now, just log and start the strategy executor
     tracing::info!(
-        "Starting live trading for user {} on {} with strategy {}",
+        "Starting live trading for user {} (chat: {}) on {} with strategy {}",
         user_id,
+        user_chat_id,
         token.exchange,
         strategy_config.strategy_type
     );
     
-    // Start strategy executor (will be enhanced to use exchange API)
-    state.strategy_executor.start_trading(user_id, strategy_config).await?;
+    // Start strategy executor (registers user's strategy)
+    state.strategy_executor.start_trading(user_id, strategy_config.clone()).await?;
+    
+    // Start user-specific trading service (monitors market and sends signals)
+    use crate::services::trading_signal::start_user_trading_service;
+    
+    start_user_trading_service(
+        state,
+        bot,
+        user_id,
+        user_chat_id,
+        strategy_config.clone(),
+        token.exchange.clone(),
+        strategy_config.pair.clone(),
+    );
     
     Ok(())
 }

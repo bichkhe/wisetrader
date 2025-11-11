@@ -190,23 +190,23 @@ async fn main() -> Result<(), anyhow::Error> {
         .build();
 
     // Start trading signal service if channel ID is configured
-    if let Ok(channel_id_str) = std::env::var("TRADING_SIGNAL_CHANNEL_ID") {
-        if let Ok(channel_id) = channel_id_str.parse::<i64>() {
-            let app_state_signal = app_state.clone();
-            let bot_signal = bot.clone();
-            trading_signal::start_trading_signal_service(
-                app_state_signal,
-                bot_signal,
-                channel_id,
-                "BNB/USDT".to_string(),
-            );
-            info!("✅ Trading Signal Service started for channel: {}", channel_id);
-        } else {
-            warn!("⚠️  Invalid TRADING_SIGNAL_CHANNEL_ID, trading signals disabled");
-        }
-    } else {
-        info!("ℹ️  TRADING_SIGNAL_CHANNEL_ID not set, trading signals disabled");
-    }
+    // if let Ok(channel_id_str) = std::env::var("TRADING_SIGNAL_CHANNEL_ID") {
+    //     if let Ok(channel_id) = channel_id_str.parse::<i64>() {
+    //         let app_state_signal = app_state.clone();
+    //         let bot_signal = bot.clone();
+    //         trading_signal::start_trading_signal_service(
+    //             app_state_signal,
+    //             bot_signal,
+    //             channel_id,
+    //             "BNB/USDT".to_string(),
+    //         );
+    //         info!("✅ Trading Signal Service started for channel: {}", channel_id);
+    //     } else {
+    //         warn!("⚠️  Invalid TRADING_SIGNAL_CHANNEL_ID, trading signals disabled");
+    //     }
+    // } else {
+    //     info!("ℹ️  TRADING_SIGNAL_CHANNEL_ID not set, trading signals disabled");
+    // }
 
     // Check if webhook mode is enabled
     if let Some(webhook_url) = &app_state.config.webhook_url {

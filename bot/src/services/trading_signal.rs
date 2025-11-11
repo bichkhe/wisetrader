@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use anyhow::Result;
 use barter_data::{
     exchange::binance::spot::BinanceSpot,
     streams::Streams,
@@ -223,12 +222,107 @@ impl TradingState {
             None
         }
     }
+
+    /// Process trade and create candle for user's strategy (returns Candle instead of TradingSignal)
+    fn process_trade_for_user(
+        &mut self,
+        price: f64,
+        timestamp: i64,
+        strategy_config: &crate::services::strategy_engine::StrategyConfig,
+        _app_state: &Arc<crate::state::AppState>,
+        _user_id: i64,
+    ) -> Option<crate::services::strategy_engine::Candle> {
+        // Parse timeframe to seconds
+        let timeframe_secs = parse_timeframe_to_seconds(&strategy_config.timeframe);
+        let current_period = (timestamp / timeframe_secs as i64) * timeframe_secs as i64;
+        
+        // Check if candle exists and if it's expired
+        if let Some(ref mut candle) = self.current_candle {
+            let candle_period = (candle.start_minute / timeframe_secs as i64) * timeframe_secs as i64;
+            if current_period > candle_period {
+                // Candle completed!
+                if candle.processed {
+                    // Already processed, start new candle
+                    self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+                    return None;
+                }
+                
+                let completed_candle = crate::services::strategy_engine::Candle {
+                    open: candle.open,
+                    high: candle.high,
+                    low: candle.low,
+                    close: candle.close,
+                    volume: 0.0,
+                    timestamp: candle.start_minute,
+                };
+                
+                candle.processed = true;
+                self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+                return Some(completed_candle);
+            } else {
+                // Update current candle
+                candle.update(price);
+            }
+        } else {
+            // No candle yet - initialize new one
+            self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
+        }
+        
+        None
+    }
+
+    /// Force process candle for user (timer-based)
+    fn force_process_candle_for_user(
+        &mut self,
+        _strategy_config: &crate::services::strategy_engine::StrategyConfig,
+        _app_state: &Arc<crate::state::AppState>,
+        _user_id: i64,
+    ) -> Option<crate::services::strategy_engine::Candle> {
+        if let Some(ref mut candle) = self.current_candle {
+            if candle.processed {
+                return None;
+            }
+            
+            let completed_candle = crate::services::strategy_engine::Candle {
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close,
+                volume: 0.0,
+                timestamp: candle.start_minute,
+            };
+            
+            candle.processed = true;
+            return Some(completed_candle);
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
 enum TradingSignal {
     Buy { price: f64, rsi: f64 },
     Sell { price: f64, rsi: f64 },
+}
+
+/// Parse timeframe string to seconds
+fn parse_timeframe_to_seconds(timeframe: &str) -> u64 {
+    let timeframe_lower = timeframe.to_lowercase();
+    if timeframe_lower.ends_with('m') {
+        if let Ok(minutes) = timeframe_lower.trim_end_matches('m').parse::<u64>() {
+            return minutes * 60;
+        }
+    } else if timeframe_lower.ends_with('h') {
+        if let Ok(hours) = timeframe_lower.trim_end_matches('h').parse::<u64>() {
+            return hours * 3600;
+        }
+    } else if timeframe_lower.ends_with('d') {
+        if let Ok(days) = timeframe_lower.trim_end_matches('d').parse::<u64>() {
+            return days * 86400;
+        }
+    }
+    // Default to 1 minute if parsing fails
+    60
 }
 
 /// Format trading signal message for Telegram
@@ -406,5 +500,261 @@ pub fn start_trading_signal_service(
     });
 
     info!("✅ Trading Signal Service started successfully");
+}
+
+/// Start user-specific trading service (runs forever in background for a specific user)
+/// This service monitors market data and sends trading signals to the user's chat/channel
+pub fn start_user_trading_service(
+    app_state: Arc<AppState>,
+    bot: Bot,
+    user_id: i64,
+    user_chat_id: i64, // Telegram chat ID to send signals to
+    strategy_config: crate::services::strategy_engine::StrategyConfig,
+    exchange: String,
+    pair: String,
+) {
+    let bot_name = app_state.bot_name.clone();
+    info!("🚀 Starting User Trading Service for user {} with strategy {} on {} ({})", 
+        user_id, strategy_config.strategy_type, exchange, pair);
+    
+    // Parse pair (e.g., "BTC/USDT" -> base="BTC", quote="USDT")
+    let pair_parts: Vec<&str> = pair.split('/').collect();
+    if pair_parts.len() != 2 {
+        error!("Invalid pair format: {}", pair);
+        return;
+    }
+    let base = pair_parts[0].to_lowercase();
+    let quote = pair_parts[1].to_lowercase();
+    
+    // Create candle aggregator for this user's timeframe
+    let state = Arc::new(RwLock::new(TradingState::new(14))); // RSI period
+    
+    // Clone variables for tasks
+    let state_for_stream = state.clone();
+    let bot_for_stream = bot.clone();
+    let pair_for_stream = pair.clone();
+    let user_chat_id_for_stream = user_chat_id;
+    let bot_name_for_stream = bot_name.clone();
+    let app_state_for_stream = app_state.clone();
+    let user_id_for_stream = user_id;
+    let strategy_config_for_stream = strategy_config.clone();
+    let exchange_for_stream = exchange.clone();
+    
+    // Use LocalSet for non-Send futures
+    use tokio::task::LocalSet;
+    
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let local = LocalSet::new();
+            local.spawn_local(async move {
+                // Initialize streams based on exchange
+                let streams_result = match exchange_for_stream.as_str() {
+                    "binance" => {
+                        Streams::<PublicTrades>::builder()
+                            .subscribe([(
+                                BinanceSpot::default(),
+                                base.as_str(),
+                                quote.as_str(),
+                                MarketDataInstrumentKind::Spot,
+                                PublicTrades,
+                            )])
+                            .init()
+                            .await
+                    }
+                    "okx" => {
+                        // TODO: Add OKX support when barter-data supports it
+                        error!("OKX exchange not yet supported in barter-data");
+                        return;
+                    }
+                    _ => {
+                        error!("Unsupported exchange: {}", exchange_for_stream);
+                        return;
+                    }
+                };
+                    
+                let streams = match streams_result {
+                    Ok(streams) => streams,
+                    Err(e) => {
+                        error!("Failed to initialize streams for user {}: {}", user_id_for_stream, e);
+                        return;
+                    }
+                };
+
+                info!("✅ Connected to {}! Monitoring {} for user {} trading signals...", 
+                    exchange_for_stream, pair_for_stream, user_id_for_stream);
+
+                let mut market_stream = streams.select_all();
+                let state_trades = state_for_stream.clone();
+                let bot_trades = bot_for_stream.clone();
+                let pair_trades = pair_for_stream.clone();
+                let strategy_config_trades = strategy_config_for_stream.clone();
+
+                // Process trades
+                while let Some(event) = market_stream.next().await {
+                    match event {
+                        Event::Item(market_event_result) => {
+                            match market_event_result {
+                                Ok(market_event) => {
+                                    let price = market_event.kind.price;
+                                    let timestamp = market_event.time_received.timestamp();
+                                    
+                                    let mut state_guard = state_trades.write().await;
+                                    if let Some(candle) = state_guard.process_trade_for_user(
+                                        price, 
+                                        timestamp, 
+                                        &strategy_config_trades,
+                                        &app_state_for_stream,
+                                        user_id_for_stream
+                                    ) {
+                                        // Process candle through user's strategy
+                                        if let Some(signal) = app_state_for_stream.strategy_executor
+                                            .process_candle(user_id_for_stream, &candle).await 
+                                        {
+                                            // Format and send signal to user
+                                            let message = format_user_signal_message(
+                                                &signal, 
+                                                &pair_trades, 
+                                                &bot_name_for_stream,
+                                                &strategy_config_trades
+                                            );
+                                            
+                                            if let Err(e) = bot_trades.send_message(
+                                                ChatId(user_chat_id_for_stream),
+                                                message
+                                            )
+                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                            .await {
+                                                error!("Failed to send trading signal to user {}: {}", user_id_for_stream, e);
+                                            } else {
+                                                info!("✅ Trading signal sent to user {} (chat: {})", user_id_for_stream, user_chat_id_for_stream);
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Error in market event for user {}: {}", user_id_for_stream, e);
+                                }
+                            }
+                        }
+                        Event::Reconnecting(_origin) => {
+                            warn!("Reconnecting to {} for user {}...", exchange_for_stream, user_id_for_stream);
+                        }
+                    }
+                }
+            });
+            local.await;
+        });
+    });
+
+    // Start timer to force process candle based on strategy timeframe
+    let state_timer = state.clone();
+    let bot_timer = bot.clone();
+    let pair_timer = pair.clone();
+    let bot_name_timer = bot_name.clone();
+    let strategy_config_timer = strategy_config.clone();
+    let user_id_timer = user_id;
+    let user_chat_id_timer = user_chat_id;
+    let app_state_timer = app_state.clone();
+    
+    // Parse timeframe to seconds (e.g., "1m" -> 60, "5m" -> 300, "1h" -> 3600)
+    let timeframe_secs = parse_timeframe_to_seconds(&strategy_config.timeframe);
+    
+    // Spawn task for timer-based processing
+    tokio::spawn(async move {
+        let mut timer = interval(Duration::from_secs(timeframe_secs));
+        timer.tick().await; // Skip first tick
+        info!("⏰ Timer started for user {}: will process candles every {} seconds", user_id_timer, timeframe_secs);
+        
+        loop {
+            timer.tick().await;
+            let mut state_guard = state_timer.write().await;
+            
+            if state_guard.current_candle.is_some() {
+                if let Some(candle) = state_guard.force_process_candle_for_user(
+                    &strategy_config_timer,
+                    &app_state_timer,
+                    user_id_timer
+                ) {
+                    // Process candle through user's strategy
+                    if let Some(signal) = app_state_timer.strategy_executor
+                        .process_candle(user_id_timer, &candle).await 
+                    {
+                        let message = format_user_signal_message(
+                            &signal, 
+                            &pair_timer, 
+                            &bot_name_timer,
+                            &strategy_config_timer
+                        );
+                        
+                        if !message.is_empty() {
+                            if let Err(e) = bot_timer.send_message(
+                                ChatId(user_chat_id_timer),
+                                message
+                            )
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .await {
+                                error!("Failed to send trading signal to user {}: {}", user_id_timer, e);
+                            } else {
+                                info!("✅ Trading signal sent to user {} (timer-based)", user_id_timer);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    info!("✅ User Trading Service started successfully for user {}", user_id);
+}
+
+/// Format user-specific trading signal message
+fn format_user_signal_message(
+    signal: &crate::services::strategy_engine::StrategySignal,
+    pair: &str,
+    bot_name: &str,
+    strategy_config: &crate::services::strategy_engine::StrategyConfig,
+) -> String {
+    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+    match signal {
+        crate::services::strategy_engine::StrategySignal::Buy { confidence, price, reason } => {
+            format!(
+                "🟢 <b>BUY SIGNAL - {}</b>\n\n\
+💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
+📊 <b>Confidence:</b> <code>{:.1}%</code>\n\
+📝 <b>Reason:</b> {}\n\
+⏰ <b>Time:</b> <code>{}</code>\n\
+📈 <b>Strategy:</b> {}\n\
+📍 <b>Timeframe:</b> {}\n\
+📍 <b>Pair:</b> {}\n\n\
+🤖 <b>Bot:</b> {}\n\
+🔄 <b>Status:</b> <code>Live Trading Active</code>\n\n\
+⚠️ <i>This is a live trading signal. Always do your own research!</i>",
+                pair, price, confidence * 100.0, reason, timestamp, 
+                strategy_config.strategy_type, strategy_config.timeframe, pair, bot_name
+            )
+        },
+        crate::services::strategy_engine::StrategySignal::Sell { confidence, price, reason } => {
+            format!(
+                "🔴 <b>SELL SIGNAL - {}</b>\n\n\
+💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
+📊 <b>Confidence:</b> <code>{:.1}%</code>\n\
+📝 <b>Reason:</b> {}\n\
+⏰ <b>Time:</b> <code>{}</code>\n\
+📉 <b>Strategy:</b> {}\n\
+📍 <b>Timeframe:</b> {}\n\
+📍 <b>Pair:</b> {}\n\n\
+🤖 <b>Bot:</b> {}\n\
+🔄 <b>Status:</b> <code>Live Trading Active</code>\n\n\
+⚠️ <i>This is a live trading signal. Always do your own research!</i>",
+                pair, price, confidence * 100.0, reason, timestamp,
+                strategy_config.strategy_type, strategy_config.timeframe, pair, bot_name
+            )
+        },
+        crate::services::strategy_engine::StrategySignal::Hold => {
+            // Don't send messages for Hold signals
+            return String::new();
+        }
+    }
 }
 
