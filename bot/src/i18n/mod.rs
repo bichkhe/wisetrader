@@ -308,12 +308,18 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "profile_change_language") => "🌐 Change Language".to_string(),
         
         // Strategy delete buttons
+        ("vi", "strategy_delete_button") => "🗑️ Xóa Chiến Lược".to_string(),
+        ("en", "strategy_delete_button") => "🗑️ Delete Strategy".to_string(),
         ("vi", "strategy_delete_with_name") => "🗑️ Xóa".to_string(),
         ("en", "strategy_delete_with_name") => "🗑️ Delete".to_string(),
         ("vi", "strategy_delete_confirm_yes") => "✅ Xác nhận".to_string(),
         ("en", "strategy_delete_confirm_yes") => "✅ Confirm".to_string(),
         ("vi", "strategy_delete_confirm_no") => "❌ Hủy".to_string(),
         ("en", "strategy_delete_confirm_no") => "❌ Cancel".to_string(),
+        
+        // Navigation buttons
+        ("vi", "button_back") => "⬅️ Quay lại".to_string(),
+        ("en", "button_back") => "⬅️ Back".to_string(),
         
         // Live trading buttons
         ("vi", "live_trading_setup_binance") => "🔵 Thiết lập Binance".to_string(),

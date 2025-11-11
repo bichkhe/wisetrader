@@ -589,7 +589,7 @@ pub async fn handle_live_trading_callback(
             
             dialogue.exit().await?;
             
-            let cancel_msg = i18n::translate(locale, "trading_cancelled", None);
+            let cancel_msg = i18n::translate(locale, "live_trading_cancelled", None);
             if let Some(msg) = q.message {
                 // Edit message to show cancellation and remove buttons
                 if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &cancel_msg)
