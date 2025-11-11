@@ -104,7 +104,7 @@ pub async fn handle_start_trading_callback(
                     match state.strategy_service.strategy_to_config(&strategy) {
                         Ok(config) => {
                             // Start trading
-                            if let Err(e) = state.strategy_executor.start_trading(telegram_id, config).await {
+                            if let Err(e) = state.strategy_executor.start_trading(telegram_id, config, None).await {
                                 let error_msg = i18n::translate(locale, "trading_start_error", Some(&[
                                     ("error", &e.to_string())
                                 ]));

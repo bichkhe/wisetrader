@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::collections::HashMap;
 use barter_data::{
     exchange::binance::spot::BinanceSpot,
     streams::Streams,
@@ -13,13 +14,254 @@ use ta::{
     indicators::RelativeStrengthIndex,
     Next,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, Duration};
 use tracing::{info, warn, error};
 use teloxide::prelude::*;
 use chrono::Utc;
 
 use crate::state::AppState;
+
+/// Stream key to identify unique streams (exchange + base + quote)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct StreamKey {
+    exchange: String,
+    base: String,
+    quote: String,
+}
+
+impl StreamKey {
+    fn new(exchange: &str, base: &str, quote: &str) -> Self {
+        Self {
+            exchange: exchange.to_lowercase(),
+            base: base.to_lowercase(),
+            quote: quote.to_lowercase(),
+        }
+    }
+    
+    fn from_pair(exchange: &str, pair: &str) -> Option<Self> {
+        normalize_pair(pair).map(|(base, quote)| {
+            Self::new(exchange, &base, &quote)
+        })
+    }
+}
+
+/// Stream information for a trading pair
+struct StreamInfo {
+    subscribers: Arc<RwLock<Vec<i64>>>, // List of user IDs subscribed to this stream
+    sender: broadcast::Sender<MarketEvent>, // Broadcast channel to send events to all subscribers
+}
+
+/// Market event wrapper for broadcast
+#[derive(Debug, Clone)]
+struct MarketEvent {
+    price: f64,
+    timestamp: i64,
+}
+
+/// Stream Manager to share streams across users for the same trading pair
+pub struct StreamManager {
+    streams: Arc<RwLock<HashMap<StreamKey, StreamInfo>>>,
+}
+
+impl StreamManager {
+    pub fn new() -> Self {
+        Self {
+            streams: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+    
+    /// Subscribe a user to a stream for a trading pair
+    /// Returns a receiver for market events
+    pub async fn subscribe(
+        &self,
+        exchange: &str,
+        pair: &str,
+        user_id: i64,
+    ) -> Result<broadcast::Receiver<MarketEvent>, anyhow::Error> {
+        let key = StreamKey::from_pair(exchange, pair)
+            .ok_or_else(|| anyhow::anyhow!("Invalid pair format: {}", pair))?;
+        
+        let mut streams = self.streams.write().await;
+        
+        // Check if stream already exists
+        if let Some(stream_info) = streams.get(&key) {
+            // Add user to subscribers
+            let mut subscribers = stream_info.subscribers.write().await;
+            if !subscribers.contains(&user_id) {
+                subscribers.push(user_id);
+                info!("User {} subscribed to existing stream for {} ({})", user_id, pair, exchange);
+            }
+            
+            // Return receiver for this stream
+            Ok(stream_info.sender.subscribe())
+        } else {
+            // Create new stream
+            let (sender, receiver) = broadcast::channel(1000); // Buffer up to 1000 events
+            
+            let stream_info = StreamInfo {
+                subscribers: Arc::new(RwLock::new(vec![user_id])),
+                sender,
+            };
+            
+            streams.insert(key.clone(), stream_info);
+            info!("Created new stream for {} ({}) with subscriber {}", pair, exchange, user_id);
+            
+            // Spawn task to initialize and run the stream
+            // Use std::thread::spawn with LocalSet for non-Send futures
+            let key_clone = key.clone();
+            let exchange_clone = exchange.to_string();
+            let base = key.base.clone();
+            let quote = key.quote.clone();
+            let streams_map = self.streams.clone();
+            
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    use tokio::task::LocalSet;
+                    let local = LocalSet::new();
+                    local.spawn_local(async move {
+                        if let Err(e) = Self::run_stream(
+                            &key_clone,
+                            &exchange_clone,
+                            &base,
+                            &quote,
+                            streams_map.clone(),
+                        ).await {
+                            error!("Error running stream for {:?}: {}", key_clone, e);
+                            
+                            // Remove stream from map on error
+                            let mut streams = streams_map.write().await;
+                            streams.remove(&key_clone);
+                        }
+                    });
+                    local.await;
+                });
+            });
+            
+            Ok(receiver)
+        }
+    }
+    
+    /// Unsubscribe a user from a stream
+    pub async fn unsubscribe(&self, exchange: &str, pair: &str, user_id: i64) {
+        let key = StreamKey::from_pair(exchange, pair);
+        
+        if let Some(key) = key {
+            let mut streams = self.streams.write().await;
+            
+            if let Some(stream_info) = streams.get(&key) {
+                let mut subscribers = stream_info.subscribers.write().await;
+                subscribers.retain(|&id| id != user_id);
+                
+                let subscriber_count = subscribers.len();
+                drop(subscribers); // Release lock before removing from map
+                
+                info!("User {} unsubscribed from stream for {} ({})", user_id, pair, exchange);
+                
+                // If no more subscribers, remove the stream
+                if subscriber_count == 0 {
+                    streams.remove(&key);
+                    info!("Removed stream for {} ({}) - no more subscribers", pair, exchange);
+                }
+            }
+        }
+    }
+    
+    /// Get number of subscribers for a stream
+    pub async fn subscriber_count(&self, exchange: &str, pair: &str) -> usize {
+        let key = StreamKey::from_pair(exchange, pair);
+        
+        if let Some(key) = key {
+            let streams = self.streams.read().await;
+            if let Some(stream_info) = streams.get(&key) {
+                let subscribers = stream_info.subscribers.read().await;
+                return subscribers.len();
+            }
+        }
+        0
+    }
+    
+    /// Run the actual stream and broadcast events to all subscribers
+    async fn run_stream(
+        key: &StreamKey,
+        exchange: &str,
+        base: &str,
+        quote: &str,
+        streams_map: Arc<RwLock<HashMap<StreamKey, StreamInfo>>>,
+    ) -> Result<(), anyhow::Error> {
+        // Initialize stream based on exchange
+        let streams_result = match exchange {
+            "binance" => {
+                Streams::<PublicTrades>::builder()
+                    .subscribe([(
+                        BinanceSpot::default(),
+                        base,
+                        quote,
+                        MarketDataInstrumentKind::Spot,
+                        PublicTrades,
+                    )])
+                    .init()
+                    .await
+            }
+            "okx" => {
+                return Err(anyhow::anyhow!("OKX exchange not yet supported in barter-data"));
+            }
+            _ => {
+                return Err(anyhow::anyhow!("Unsupported exchange: {}", exchange));
+            }
+        };
+        
+        let streams = streams_result?;
+        info!("✅ Stream initialized for {} ({})", format!("{}/{}", base, quote), exchange);
+        
+        let mut market_stream = streams.select_all();
+        
+        loop {
+            match market_stream.next().await {
+                Some(event) => {
+                    match event {
+                        Event::Item(market_event_result) => {
+                            match market_event_result {
+                                Ok(market_event) => {
+                                    let price = market_event.kind.price;
+                                    let timestamp = market_event.time_received.timestamp();
+                                    
+                                    // Broadcast event to all subscribers
+                                    let event = MarketEvent { price, timestamp };
+                                    
+                                    // Get sender from streams map
+                                    let streams = streams_map.read().await;
+                                    if let Some(stream_info) = streams.get(key) {
+                                        // Send to all subscribers (ignore errors if no receivers)
+                                        let _ = stream_info.sender.send(event);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Error in market event for {:?}: {}", key, e);
+                                }
+                            }
+                        }
+                        Event::Reconnecting(_origin) => {
+                            warn!("Reconnecting stream for {:?}...", key);
+                        }
+                    }
+                }
+                None => {
+                    warn!("Market stream ended for {:?}, exiting...", key);
+                    break;
+                }
+            }
+        }
+        
+        // Remove stream from map when it ends
+        let mut streams = streams_map.write().await;
+        streams.remove(key);
+        info!("Stream removed for {:?}", key);
+        
+        Ok(())
+    }
+}
 
 /// Normalize pair format to "BASE/QUOTE" (e.g., "BTCUSDT" -> "BTC/USDT", "BTC/USDT" -> "BTC/USDT")
 fn normalize_pair(pair: &str) -> Option<(String, String)> {
@@ -541,6 +783,7 @@ pub fn start_trading_signal_service(
 
 /// Start user-specific trading service (runs forever in background for a specific user)
 /// This service monitors market data and sends trading signals to the user's chat/channel
+/// Uses StreamManager to share streams across users for the same trading pair
 pub fn start_user_trading_service(
     app_state: Arc<AppState>,
     bot: Bot,
@@ -579,137 +822,116 @@ pub fn start_user_trading_service(
     let user_id_for_stream = user_id;
     let strategy_config_for_stream = strategy_config.clone();
     let exchange_for_stream = exchange.clone();
+    let stream_manager = app_state.stream_manager.clone();
     
-    // Use LocalSet for non-Send futures
-    use tokio::task::LocalSet;
-    
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let local = LocalSet::new();
-            local.spawn_local(async move {
-                // Initialize streams based on exchange
-                let streams_result = match exchange_for_stream.as_str() {
-                    "binance" => {
-                        Streams::<PublicTrades>::builder()
-                            .subscribe([(
-                                BinanceSpot::default(),
-                                base.as_str(),
-                                quote.as_str(),
-                                MarketDataInstrumentKind::Spot,
-                                PublicTrades,
-                            )])
-                            .init()
-                            .await
-                    }
-                    "okx" => {
-                        // TODO: Add OKX support when barter-data supports it
-                        error!("OKX exchange not yet supported in barter-data");
-                        return;
-                    }
-                    _ => {
-                        error!("Unsupported exchange: {}", exchange_for_stream);
-                        return;
-                    }
-                };
+    // Subscribe to stream using StreamManager (will reuse existing stream if available)
+    let stream_manager_clone = stream_manager.clone();
+    tokio::spawn(async move {
+        // Subscribe to stream
+        let mut receiver = match stream_manager_clone.subscribe(&exchange_for_stream, &pair_for_stream, user_id_for_stream).await {
+            Ok(receiver) => {
+                let subscriber_count = stream_manager_clone.subscriber_count(&exchange_for_stream, &pair_for_stream).await;
+                info!("✅ User {} subscribed to stream for {} ({}). Total subscribers: {}", 
+                    user_id_for_stream, pair_for_stream, exchange_for_stream, subscriber_count);
+                receiver
+            }
+            Err(e) => {
+                error!("Failed to subscribe user {} to stream for {}: {}", user_id_for_stream, pair_for_stream, e);
+                return;
+            }
+        };
+        
+        // Process market events from shared stream
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    let price = event.price;
+                    let timestamp = event.timestamp;
                     
-                let streams = match streams_result {
-                    Ok(streams) => streams,
-                    Err(e) => {
-                        error!("Failed to initialize streams for user {}: {}", user_id_for_stream, e);
-                        return;
-                    }
-                };
-
-                info!("✅ Connected to {}! Monitoring {} for user {} trading signals...", 
-                    exchange_for_stream, pair_for_stream, user_id_for_stream);
-
-                let mut market_stream = streams.select_all();
-                let state_trades = state_for_stream.clone();
-                let bot_trades = bot_for_stream.clone();
-                let pair_trades = pair_for_stream.clone();
-                let strategy_config_trades = strategy_config_for_stream.clone();
-
-                // Process trades
-                while let Some(event) = market_stream.next().await {
-                    match event {
-                        Event::Item(market_event_result) => {
-                            match market_event_result {
-                                Ok(market_event) => {
-                                    let price = market_event.kind.price;
-                                    let timestamp = market_event.time_received.timestamp();
+                    // Use timeout to prevent blocking
+                    match tokio::time::timeout(
+                        Duration::from_secs(5),
+                        state_for_stream.write()
+                    ).await {
+                        Ok(mut state_guard) => {
+                            if let Some(candle) = state_guard.process_trade_for_user(
+                                price, 
+                                timestamp, 
+                                &strategy_config_for_stream,
+                                &app_state_for_stream,
+                                user_id_for_stream
+                            ) {
+                                // Process candle through user's strategy
+                                if let Some(signal) = app_state_for_stream.strategy_executor
+                                    .process_candle(user_id_for_stream, &candle).await 
+                                {
+                                    // Clone signal for database save
+                                    let signal_clone = signal.clone();
                                     
-                                    let mut state_guard = state_trades.write().await;
-                                    if let Some(candle) = state_guard.process_trade_for_user(
-                                        price, 
-                                        timestamp, 
-                                        &strategy_config_trades,
-                                        &app_state_for_stream,
-                                        user_id_for_stream
-                                    ) {
-                                        // Process candle through user's strategy
-                                        if let Some(signal) = app_state_for_stream.strategy_executor
-                                            .process_candle(user_id_for_stream, &candle).await 
-                                        {
-                                            // Clone signal for database save
-                                            let signal_clone = signal.clone();
-                                            
-                                            // Save order to database
-                                            let app_state_for_db = app_state_for_stream.clone();
-                                            let user_id_for_db = user_id_for_stream;
-                                            let exchange_for_db = exchange_for_stream.clone();
-                                            let pair_for_db = pair_trades.clone();
-                                            let strategy_config_for_db = strategy_config_trades.clone();
-                                            
-                                            // Spawn task to save order (non-blocking)
-                                            tokio::spawn(async move {
-                                                if let Err(e) = save_trading_order(
-                                                    &app_state_for_db,
-                                                    user_id_for_db,
-                                                    &exchange_for_db,
-                                                    &pair_for_db,
-                                                    &strategy_config_for_db,
-                                                    &signal_clone,
-                                                ).await {
-                                                    error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
-                                                }
-                                            });
-                                            
-                                            // Format and send signal to user
-                                            let message = format_user_signal_message(
-                                                &signal, 
-                                                &pair_trades, 
-                                                &bot_name_for_stream,
-                                                &strategy_config_trades
-                                            );
-                                            
-                                            if let Err(e) = bot_trades.send_message(
-                                                ChatId(user_chat_id_for_stream),
-                                                message
-                                            )
-                                            .parse_mode(teloxide::types::ParseMode::Html)
-                                            .await {
-                                                error!("Failed to send trading signal to user {}: {}", user_id_for_stream, e);
-                                            } else {
-                                                info!("✅ Trading signal sent to user {} (chat: {})", user_id_for_stream, user_chat_id_for_stream);
-                                            }
+                                    // Save order to database (non-blocking)
+                                    let app_state_for_db = app_state_for_stream.clone();
+                                    let user_id_for_db = user_id_for_stream;
+                                    let exchange_for_db = exchange_for_stream.clone();
+                                    let pair_for_db = pair_for_stream.clone();
+                                    let strategy_config_for_db = strategy_config_for_stream.clone();
+                                    
+                                    // Spawn task to save order (non-blocking)
+                                    tokio::spawn(async move {
+                                        if let Err(e) = save_trading_order(
+                                            &app_state_for_db,
+                                            user_id_for_db,
+                                            &exchange_for_db,
+                                            &pair_for_db,
+                                            &strategy_config_for_db,
+                                            &signal_clone,
+                                        ).await {
+                                            error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
                                         }
+                                    });
+                                    
+                                    // Format and send signal to user
+                                    let message = format_user_signal_message(
+                                        &signal, 
+                                        &pair_for_stream, 
+                                        &bot_name_for_stream,
+                                        &strategy_config_for_stream
+                                    );
+                                    
+                                    if let Err(e) = bot_for_stream.send_message(
+                                        ChatId(user_chat_id_for_stream),
+                                        message
+                                    )
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .await {
+                                        error!("Failed to send trading signal to user {}: {}", user_id_for_stream, e);
+                                    } else {
+                                        info!("✅ Trading signal sent to user {} (chat: {})", user_id_for_stream, user_chat_id_for_stream);
                                     }
-                                }
-                                Err(e) => {
-                                    error!("Error in market event for user {}: {}", user_id_for_stream, e);
                                 }
                             }
                         }
-                        Event::Reconnecting(_origin) => {
-                            warn!("Reconnecting to {} for user {}...", exchange_for_stream, user_id_for_stream);
+                        Err(_) => {
+                            warn!("Timeout acquiring lock for user {} trading state", user_id_for_stream);
                         }
                     }
                 }
-            });
-            local.await;
-        });
+                Err(broadcast::error::RecvError::Closed) => {
+                    warn!("Stream closed for user {}, unsubscribing...", user_id_for_stream);
+                    break;
+                }
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    warn!("User {} lagged behind stream, skipped {} events", user_id_for_stream, skipped);
+                    // Continue processing
+                }
+            }
+        }
+        
+        // Unsubscribe when loop ends
+        stream_manager_clone.unsubscribe(&exchange_for_stream, &pair_for_stream, user_id_for_stream).await;
+        info!("User {} unsubscribed from stream for {}", user_id_for_stream, pair_for_stream);
     });
+    
+    info!("✅ Trading service task spawned for user {}", user_id);
 
     // Start timer to force process candle based on strategy timeframe
     let state_timer = state.clone();

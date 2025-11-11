@@ -11,6 +11,7 @@ pub struct UserTradingState {
     pub user_id: i64,
     pub strategy: Box<dyn Strategy>,
     pub pair: String,
+    pub exchange: String, // Store exchange for stream management
     pub is_active: bool,
 }
 
@@ -32,6 +33,7 @@ impl StrategyExecutor {
         &self,
         user_id: i64,
         strategy_config: StrategyConfig,
+        exchange: Option<String>, // Optional exchange for stream management
     ) -> Result<()> {
         use crate::services::strategy_engine::StrategyRegistry;
         
@@ -43,6 +45,7 @@ impl StrategyExecutor {
             user_id,
             strategy,
             pair: strategy_config.pair,
+            exchange: exchange.unwrap_or_else(|| "binance".to_string()),
             is_active: true,
         });
         
@@ -51,14 +54,18 @@ impl StrategyExecutor {
     }
     
     /// Stop trading for a user
-    pub async fn stop_trading(&self, user_id: i64) -> Result<()> {
+    /// Returns (exchange, pair) if user was trading, for stream cleanup
+    pub async fn stop_trading(&self, user_id: i64) -> Result<Option<(String, String)>> {
         let mut users = self.users.write().await;
-        if let Some(state) = users.get_mut(&user_id) {
-            state.is_active = false;
+        if let Some(state) = users.get(&user_id) {
+            let exchange = state.exchange.clone();
+            let pair = state.pair.clone();
+            users.remove(&user_id);
+            tracing::info!("🛑 Stopped trading for user {} ({} on {})", user_id, pair, exchange);
+            Ok(Some((exchange, pair)))
+        } else {
+            Ok(None)
         }
-        users.remove(&user_id);
-        tracing::info!("🛑 Stopped trading for user {}", user_id);
-        Ok(())
     }
     
     /// Process a candle for a specific user

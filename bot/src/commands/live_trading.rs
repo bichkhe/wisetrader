@@ -577,7 +577,7 @@ async fn start_live_trading_with_exchange(
     );
     
     // Start strategy executor (registers user's strategy)
-    state.strategy_executor.start_trading(user_id, strategy_config.clone()).await?;
+    state.strategy_executor.start_trading(user_id, strategy_config.clone(), Some(token.exchange.clone())).await?;
     
     // Start user-specific trading service (monitors market and sends signals)
     use crate::services::trading_signal::start_user_trading_service;
@@ -738,9 +738,11 @@ pub async fn handle_stop_trading_callback(
                     .map(|l| i18n::get_user_language(Some(l)))
                     .unwrap_or("en");
                 
-                // Stop trading
+                // Stop trading and unsubscribe from stream
                 match state.strategy_executor.stop_trading(user_id).await {
-                    Ok(_) => {
+                    Ok(Some((exchange, pair))) => {
+                        // Unsubscribe from stream
+                        state.stream_manager.unsubscribe(&exchange, &pair, user_id).await;
                         bot.answer_callback_query(q.id)
                             .text(if locale == "vi" {
                                 "✅ Đã dừng live trading"
@@ -763,6 +765,16 @@ pub async fn handle_stop_trading_callback(
                                 .parse_mode(teloxide::types::ParseMode::Html)
                                 .await?;
                         }
+                    }
+                    Ok(None) => {
+                        // User was not trading
+                        bot.answer_callback_query(q.id)
+                            .text(if locale == "vi" {
+                                "ℹ️ Bạn không có live trading đang chạy"
+                            } else {
+                                "ℹ️ You are not currently trading"
+                            })
+                            .await?;
                     }
                     Err(e) => {
                         let error_msg = if locale == "vi" {

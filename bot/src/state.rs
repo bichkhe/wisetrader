@@ -5,6 +5,7 @@ use teloxide::{dispatching::dialogue::InMemStorage, prelude::Dialogue};
 use crate::services::user_service::UserService;
 use crate::services::strategy_engine::StrategyExecutor;
 use crate::services::strategy_service::StrategyService;
+use crate::services::trading_signal::StreamManager;
 
 pub type MyDialogue = Dialogue<BotState, InMemStorage<BotState>>;
 pub type HandlerResult = Result<(), anyhow::Error>;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub strategy_service: Arc<StrategyService>,
     pub strategy_executor: Arc<StrategyExecutor>,
     pub config: Arc<Config>,
+    pub stream_manager: Arc<StreamManager>,
 }
 
 impl AppState {
@@ -78,6 +80,10 @@ impl AppState {
         let executor = Arc::new(StrategyExecutor::new());
         tracing::info!("StrategyExecutor initialized");
 
+        // Create StreamManager for managing shared streams
+        let stream_manager = Arc::new(StreamManager::new());
+        tracing::info!("StreamManager initialized");
+
         // Create the AppState
         let app_state = Self {
             bot_token: config.bot_token.clone(),
@@ -90,6 +96,7 @@ impl AppState {
             strategy_service,
             strategy_executor: executor,
             config: Arc::new(config),
+            stream_manager,
         };
 
         tracing::info!("AppState created successfully");
