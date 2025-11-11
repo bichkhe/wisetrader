@@ -51,8 +51,12 @@ pub async fn handle_tokens(
             _ => &token.exchange,
         };
         let status = if token.is_active == 1 { "✅" } else { "❌" };
-        let button_text = format!("{} {} {}", status, exchange_name, 
-            if token.is_active == 1 { "(Active)" } else { "(Inactive)" });
+        let status_text = if token.is_active == 1 {
+            i18n::get_button_text(locale, "tokens_button_active")
+        } else {
+            i18n::get_button_text(locale, "tokens_button_inactive")
+        };
+        let button_text = format!("{} {} {}", status, exchange_name, status_text);
         
         buttons.push(vec![
             InlineKeyboardButton::callback(
@@ -123,22 +127,30 @@ pub async fn handle_tokens_callback(
                         _ => &token.exchange,
                     };
                     
-                    let status = if token.is_active == 1 { "✅ Active" } else { "❌ Inactive" };
+                    let status = if token.is_active == 1 {
+                        i18n::translate(locale, "tokens_status_active", None)
+                    } else {
+                        i18n::translate(locale, "tokens_status_inactive", None)
+                    };
+                    
+                    let created_str = token.created_at
+                        .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_else(|| i18n::translate(locale, "tokens_na", None));
+                    let updated_str = token.updated_at
+                        .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_else(|| i18n::translate(locale, "tokens_na", None));
+                    
+                    let title = i18n::translate(locale, "tokens_details_title", None);
+                    let exchange_line = i18n::translate(locale, "tokens_details_exchange", Some(&[("exchange", exchange_name)]));
+                    let status_line = i18n::translate(locale, "tokens_details_status", Some(&[("status", &status)]));
+                    let key_line = i18n::translate(locale, "tokens_details_api_key", Some(&[("key", &masked_key)]));
+                    let secret_line = i18n::translate(locale, "tokens_details_api_secret", Some(&[("secret", &masked_secret)]));
+                    let created_line = i18n::translate(locale, "tokens_details_created", Some(&[("created", &created_str)]));
+                    let updated_line = i18n::translate(locale, "tokens_details_updated", Some(&[("updated", &updated_str)]));
                     
                     let msg_text = format!(
-                        "📋 <b>Token Details</b>\n\n\
-                        <b>Exchange:</b> {}\n\
-                        <b>Status:</b> {}\n\
-                        <b>API Key:</b> <code>{}</code>\n\
-                        <b>API Secret:</b> <code>{}</code>\n\
-                        <b>Created:</b> {}\n\
-                        <b>Updated:</b> {}",
-                        exchange_name,
-                        status,
-                        masked_key,
-                        masked_secret,
-                        token.created_at.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string()),
-                        token.updated_at.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string())
+                        "{}\n\n{}\n{}\n{}\n{}\n{}\n{}",
+                        title, exchange_line, status_line, key_line, secret_line, created_line, updated_line
                     );
                     
                     let buttons = vec![

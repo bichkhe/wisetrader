@@ -179,10 +179,10 @@ impl GeminiService {
 
         // Add raw output if available (truncated to avoid token limits)
         if let Some(output) = raw_output {
-            let truncated = if output.len() > 5000 {
-                &output[..5000]
+            let truncated = if output.chars().count() > 4000 {
+                output.chars().take(4000).collect::<String>()
             } else {
-                output
+                output.to_string()
             };
             prompt.push_str(&format!("\n**Raw Output (truncated):**\n{}\n\n", truncated));
         }
@@ -301,10 +301,10 @@ Hãy viết bằng tiếng Việt, rõ ràng và chi tiết. Sử dụng định
 
         // Add raw output if available
         if let Some(output) = raw_output {
-            let truncated = if output.len() > 5000 {
-                &output[..5000]
+            let truncated = if output.chars().count() > 4000 {
+                output.chars().take(4000).collect::<String>()
             } else {
-                output
+                output.to_string()
             };
             prompt.push_str(&format!("\n**Raw Output (truncated):**\n{}\n\n", truncated));
         }

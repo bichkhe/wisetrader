@@ -34,9 +34,9 @@ welcome_new_user: |
   📈 <b>Strategy Library Access</b>
   Learn from proven strategies and customize them for your trading needs.
   
-  <b>Ready to start?</b> Use <code>/help</code> to see all commands. ℹ️
+  <b>Ready to start?</b> Use /help to see all commands. ℹ️
   
-  💎 <b>Want more features?</b> Use <code>/upgrade</code> to see premium plans.
+  💎 <b>Want more features?</b> Use /upgrade to see premium plans.
   
   <i>⚠️ <b>Disclaimer:</b> Trading cryptocurrencies involves risk. This bot provides tools, not financial advice.</i>
 welcome_back: |
@@ -140,13 +140,13 @@ strategy_saved_error: "❌ Error saving strategy. Please try again."
 strategy_already_saved: "✅ Strategy already saved! Use /strategies to view all your strategies."
 strategy_created_success: "✅ <b>Strategy Created Successfully!</b>\n\n📋 <b>Complete Summary:</b>\n\n🎯 <b>Strategy Name:</b> {strategy_name}\n📊 <b>Algorithm:</b> {algorithm}\n📈 <b>Buy Condition:</b> {buy_condition}\n📉 <b>Sell Condition:</b> {sell_condition}\n⏰ <b>Timeframe:</b> {timeframe}\n💱 <b>Trading Pair:</b> {pair}\n\nYour strategy has been saved and is ready to use!"
 strategy_my_strategies_title: "📋 <b>My Strategies</b> ({count})"
-strategy_my_strategies_empty: "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/createstrategy</code> to create your first strategy!"
-strategy_my_strategies_tip: "\n💡 <b>Tip:</b> Use <code>/backtest &lt;strategy_name&gt;</code> to test your strategies!"
+strategy_my_strategies_empty: "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse /createstrategy to create your first strategy!"
+strategy_my_strategies_tip: "\n💡 <b>Tip:</b> Use /backtest to test your strategies!"
 strategy_delete_confirm: "⚠️ <b>Are you sure you want to delete this strategy?</b>\n\n<b>Strategy:</b> {strategy_name}\n\nThis action cannot be undone!"
 strategy_delete_success: "✅ <b>Strategy deleted successfully!</b>\n\nThe strategy <b>{strategy_name}</b> has been removed from your list."
 strategy_delete_error: "❌ <b>Error deleting strategy!</b>\n\nFailed to delete the strategy. Please try again."
 strategy_delete_not_found: "❌ <b>Strategy not found!</b>\n\nThe strategy you're trying to delete doesn't exist or doesn't belong to you."
-strategy_delete_cancelled: "❌ <b>Delete cancelled.</b>\n\nUse <code>/mystrategies</code> to view your strategies again."
+strategy_delete_cancelled: "❌ <b>Delete cancelled.</b>\n\nUse /mystrategies to view your strategies again."
 strategy_delete_button: "🗑️ Delete Strategy"
 strategy_delete_confirm_yes: "Yes, Delete"
 strategy_delete_confirm_no: "No, Cancel"
@@ -162,7 +162,7 @@ strategy_delete_with_name: "🗑️ Delete"
 strategy_delete_list_title: "🗑️ <b>Delete Strategy</b>\n\nSelect a strategy to delete:"
 strategy_type_custom_mix: "🔀 Mix Strategies"
 strategy_choose_mix: "🔀 <b>Select Strategies to Mix</b>\n\nSelect one or more strategies from your list to create a mixed strategy:\n\n💡 <i>Tap on strategies to select/deselect, then tap \"Done\"</i>"
-strategy_mix_no_strategies: "❌ <b>You don't have any strategies yet!</b>\n\nPlease create at least one strategy before mixing. Use <code>/createstrategy</code> to create a new strategy."
+strategy_mix_no_strategies: "❌ <b>You don't have any strategies yet!</b>\n\nPlease create at least one strategy before mixing. Use /createstrategy to create a new strategy."
 strategy_mix_done: "✅ Done"
 strategy_mix_selected: "🔀 <b>Select Strategies to Mix</b>\n\n<b>{count}</b> strategies selected. Tap \"Done\" to continue."
 strategy_mix_no_selection: "⚠️ Please select at least one strategy!"
@@ -267,6 +267,18 @@ tokens_back: "⬅️ Back"
 tokens_unauthorized: "❌ <b>Unauthorized</b>\n\nYou don't have permission to access this token."
 tokens_revoked: "✅ <b>Token Revoked</b>\n\n🔐 <b>Exchange:</b> {exchange}\n\nThe token has been deactivated and will no longer be used for trading."
 tokens_revoked_all: "✅ <b>All Tokens Revoked</b>\n\nAll your exchange tokens have been deactivated."
+tokens_details_title: "📋 <b>Token Details</b>"
+tokens_details_exchange: "<b>Exchange:</b> {exchange}"
+tokens_details_status: "<b>Status:</b> {status}"
+tokens_details_api_key: "<b>API Key:</b> <code>{key}</code>"
+tokens_details_api_secret: "<b>API Secret:</b> <code>{secret}</code>"
+tokens_details_created: "<b>Created:</b> {created}"
+tokens_details_updated: "<b>Updated:</b> {updated}"
+tokens_status_active: "✅ Active"
+tokens_status_inactive: "❌ Inactive"
+tokens_button_active: "(Active)"
+tokens_button_inactive: "(Inactive)"
+tokens_na: "N/A"
 
 # Errors (additional)
 error_invalid_strategy_id: "❌ Invalid strategy ID"

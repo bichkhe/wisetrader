@@ -321,6 +321,18 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "button_back") => "⬅️ Quay lại".to_string(),
         ("en", "button_back") => "⬅️ Back".to_string(),
         
+        // Tokens buttons
+        ("vi", "tokens_revoke_all") => "🗑️ Hủy Tất Cả".to_string(),
+        ("en", "tokens_revoke_all") => "🗑️ Revoke All".to_string(),
+        ("vi", "tokens_revoke") => "🗑️ Hủy Token".to_string(),
+        ("en", "tokens_revoke") => "🗑️ Revoke Token".to_string(),
+        ("vi", "tokens_back") => "⬅️ Quay lại".to_string(),
+        ("en", "tokens_back") => "⬅️ Back".to_string(),
+        ("vi", "tokens_button_active") => "(Đang hoạt động)".to_string(),
+        ("en", "tokens_button_active") => "(Active)".to_string(),
+        ("vi", "tokens_button_inactive") => "(Không hoạt động)".to_string(),
+        ("en", "tokens_button_inactive") => "(Inactive)".to_string(),
+        
         // Live trading buttons
         ("vi", "live_trading_setup_binance") => "🔵 Thiết lập Binance".to_string(),
         ("en", "live_trading_setup_binance") => "🔵 Setup Binance".to_string(),

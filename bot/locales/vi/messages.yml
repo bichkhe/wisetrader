@@ -281,6 +281,28 @@ stop_trading_confirmed: "✅ Đã xác nhận dừng: {strategy}"
 
 button_back: "⬅️ Quay lại"
 
+# Tokens Management
+tokens_no_tokens: "❌ <b>Không tìm thấy Token</b>\n\nBạn chưa cấu hình token exchange nào.\n\nSử dụng /livetrading để thiết lập token exchange đầu tiên."
+tokens_list: "🔐 <b>Token Exchange của bạn</b>\n\n📊 <b>Tổng số:</b> {count} token\n\nChọn token để xem chi tiết hoặc hủy:"
+tokens_revoke_all: "🗑️ Hủy Tất Cả"
+tokens_revoke: "🗑️ Hủy Token"
+tokens_back: "⬅️ Quay lại"
+tokens_unauthorized: "❌ <b>Không được phép</b>\n\nBạn không có quyền truy cập token này."
+tokens_revoked: "✅ <b>Token đã được hủy</b>\n\n🔐 <b>Sàn giao dịch:</b> {exchange}\n\nToken đã được vô hiệu hóa và sẽ không còn được sử dụng cho giao dịch."
+tokens_revoked_all: "✅ <b>Tất cả Token đã được hủy</b>\n\nTất cả token exchange của bạn đã được vô hiệu hóa."
+tokens_details_title: "📋 <b>Chi tiết Token</b>"
+tokens_details_exchange: "<b>Sàn giao dịch:</b> {exchange}"
+tokens_details_status: "<b>Trạng thái:</b> {status}"
+tokens_details_api_key: "<b>API Key:</b> <code>{key}</code>"
+tokens_details_api_secret: "<b>API Secret:</b> <code>{secret}</code>"
+tokens_details_created: "<b>Đã tạo:</b> {created}"
+tokens_details_updated: "<b>Đã cập nhật:</b> {updated}"
+tokens_status_active: "✅ Đang hoạt động"
+tokens_status_inactive: "❌ Không hoạt động"
+tokens_button_active: "(Đang hoạt động)"
+tokens_button_inactive: "(Không hoạt động)"
+tokens_na: "N/A"
+
 # Time periods
 period_1day: "📅 1 Ngày"
 period_1week: "📅 1 Tuần"
