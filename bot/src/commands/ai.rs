@@ -6,6 +6,23 @@ use crate::state::AppState;
 use crate::i18n;
 use crate::services::gemini::GeminiService;
 
+/// Split text into chunks at character boundaries (safe for UTF-8)
+fn split_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut current_pos = 0;
+    let chars: Vec<char> = text.chars().collect();
+    let total_chars = chars.len();
+    
+    while current_pos < total_chars {
+        let end_pos = std::cmp::min(current_pos + max_chars, total_chars);
+        let chunk: String = chars[current_pos..end_pos].iter().collect();
+        chunks.push(chunk);
+        current_pos = end_pos;
+    }
+    
+    chunks
+}
+
 /// Handler for the /ai command to ask Gemini AI questions
 pub async fn handle_ai(
     bot: Bot,
@@ -142,10 +159,53 @@ pub async fn handle_ai(
     
     match response {
         Ok(answer) => {
-            // Edit the "thinking" message with the answer
-            bot.edit_message_text(msg.chat.id, sent_msg.id, answer)
+            // Split answer into chunks of 3000 characters
+            const CHUNK_SIZE: usize = 3000;
+            let chunks = split_into_chunks(&answer, CHUNK_SIZE);
+            let total_chunks = chunks.len();
+            
+            if chunks.is_empty() {
+                let empty_msg = if locale == "vi" {
+                    "❌ AI không trả về câu trả lời."
+                } else {
+                    "❌ AI did not return an answer."
+                };
+                bot.edit_message_text(msg.chat.id, sent_msg.id, empty_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+                return Ok(());
+            }
+            
+            // Send first chunk by editing the "thinking" message
+            let first_chunk = if total_chunks > 1 {
+                format!("{}\n\n<i>(1/{})</i>", chunks[0], total_chunks)
+            } else {
+                chunks[0].clone()
+            };
+            
+            bot.edit_message_text(msg.chat.id, sent_msg.id, first_chunk)
                 .parse_mode(teloxide::types::ParseMode::Html)
                 .await?;
+            
+            // Send remaining chunks as new messages
+            for (idx, chunk) in chunks.iter().enumerate().skip(1) {
+                let chunk_num = idx + 1;
+                let chunk_msg = if total_chunks > 1 {
+                    format!("{}\n\n<i>({}/{})</i>", chunk, chunk_num, total_chunks)
+                } else {
+                    chunk.clone()
+                };
+                
+                // Send chunk as new message (no reply needed, they're sequential)
+                bot.send_message(msg.chat.id, chunk_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+                
+                // Small delay between messages to avoid rate limiting
+                if idx < chunks.len() - 1 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                }
+            }
         }
         Err(e) => {
             let error_msg = if locale == "vi" {
