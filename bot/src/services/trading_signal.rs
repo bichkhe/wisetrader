@@ -7,7 +7,7 @@ use barter_data::{
 };
 use barter_instrument::instrument::market_data::kind::MarketDataInstrumentKind;
 use sea_orm::{EntityTrait, ActiveValue};
-use shared::entity::live_trading_orders;
+use shared::entity::live_trading_signals;
 use barter_data::streams::reconnect::Event;
 use futures::StreamExt;
 use ta::{
@@ -18,7 +18,7 @@ use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, Duration};
 use tracing::{info, warn, error};
 use teloxide::prelude::*;
-use chrono::Utc;
+use chrono::{Utc, DateTime};
 
 use crate::state::AppState;
 
@@ -875,7 +875,10 @@ pub fn start_user_trading_service(
                                     let pair_for_db = pair_for_stream.clone();
                                     let strategy_config_for_db = strategy_config_for_stream.clone();
                                     
-                                    // Spawn task to save order (non-blocking)
+                                    // Clone candle timestamp for save
+                                    let candle_timestamp_for_save = DateTime::from_timestamp(candle.timestamp, 0).unwrap_or_else(|| Utc::now());
+                                    
+                                    // Spawn task to save signal (non-blocking)
                                     tokio::spawn(async move {
                                         if let Err(e) = save_trading_order(
                                             &app_state_for_db,
@@ -884,8 +887,10 @@ pub fn start_user_trading_service(
                                             &pair_for_db,
                                             &strategy_config_for_db,
                                             &signal_clone,
+                                            Some(candle_timestamp_for_save),
+                                            None, // Indicator values - TODO: extract from strategy state
                                         ).await {
-                                            error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
+                                            error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
                                         }
                                     });
                                     
@@ -977,7 +982,10 @@ pub fn start_user_trading_service(
                         let pair_for_db = pair_timer.clone();
                         let strategy_config_for_db = strategy_config_timer.clone();
                         
-                        // Spawn task to save order (non-blocking)
+                        // Clone candle timestamp for save
+                        let candle_timestamp_for_save = DateTime::from_timestamp(candle.timestamp, 0).unwrap_or_else(|| Utc::now());
+                        
+                        // Spawn task to save signal (non-blocking)
                         tokio::spawn(async move {
                             if let Err(e) = save_trading_order(
                                 &app_state_for_db,
@@ -986,8 +994,10 @@ pub fn start_user_trading_service(
                                 &pair_for_db,
                                 &strategy_config_for_db,
                                 &signal_clone,
+                                Some(candle_timestamp_for_save),
+                                None, // Indicator values - TODO: extract from strategy state
                             ).await {
-                                error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
+                                error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
                             }
                         });
                         
@@ -1069,7 +1079,7 @@ fn format_user_signal_message(
     }
 }
 
-/// Save trading order to database and manage positions/trades
+/// Save trading signal to database and manage positions/trades
 async fn save_trading_order(
     app_state: &Arc<AppState>,
     user_id: i64,
@@ -1077,6 +1087,8 @@ async fn save_trading_order(
     pair: &str,
     strategy_config: &crate::services::strategy_engine::StrategyConfig,
     signal: &crate::services::strategy_engine::StrategySignal,
+    candle_timestamp: Option<DateTime<Utc>>,
+    indicator_values: Option<serde_json::Value>,
 ) -> Result<(), anyhow::Error> {
     use crate::services::strategy_engine::StrategySignal;
     use crate::services::position_service;
@@ -1097,8 +1109,8 @@ async fn save_trading_order(
     // Get strategy ID if available (from strategy_config or lookup)
     let strategy_id = None; // TODO: Get strategy ID from strategy_config if available
     
-    // Save order first
-    let order = live_trading_orders::ActiveModel {
+    // Save signal first
+    let signal = live_trading_signals::ActiveModel {
         user_id: ActiveValue::Set(user_id),
         strategy_id: ActiveValue::Set(strategy_id),
         strategy_name: ActiveValue::Set(Some(strategy_config.strategy_type.clone())),
@@ -1117,14 +1129,18 @@ async fn save_trading_order(
         executed_at: ActiveValue::Set(Some(Utc::now())),
         created_at: ActiveValue::Set(Some(Utc::now())),
         updated_at: ActiveValue::Set(Some(Utc::now())),
+        candle_timestamp: ActiveValue::Set(candle_timestamp),
+        indicator_values: ActiveValue::Set(indicator_values.map(|v| v.to_string())),
+        telegram_message_id: ActiveValue::NotSet, // Will be set when message is sent
+        related_signal_id: ActiveValue::NotSet, // Can be set to link to previous signal
         ..Default::default()
     };
     
-    let order_result = live_trading_orders::Entity::insert(order)
+    let signal_result = live_trading_signals::Entity::insert(signal)
         .exec(app_state.db.as_ref())
         .await?;
     
-    let order_id = order_result.last_insert_id;
+    let signal_id = signal_result.last_insert_id;
     
     // For now, use a default quantity (in production, calculate based on balance)
     let quantity = 0.001; // Default quantity for demo
@@ -1134,7 +1150,7 @@ async fn save_trading_order(
         match position_service::create_position(
             app_state.db.as_ref(),
             user_id,
-            Some(order_id),
+            Some(signal_id),
             strategy_id,
             Some(strategy_config.strategy_type.clone()),
             exchange.to_string(),
@@ -1162,7 +1178,7 @@ async fn save_trading_order(
                 app_state.db.as_ref(),
                 user_id,
                 position.id,
-                Some(order_id),
+                Some(signal_id),
                 price,
             ).await {
                 Ok(trade_id) => {
@@ -1179,7 +1195,7 @@ async fn save_trading_order(
         }
     }
     
-    info!("✅ Saved trading order {} to database for user {}: {} {} at {}", order_id, user_id, side, pair, price);
+    info!("✅ Saved trading signal {} to database for user {}: {} {} at {}", signal_id, user_id, side, pair, price);
     
     Ok(())
 }

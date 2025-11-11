@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(ColumnDef::new(Positions::Id).big_unsigned().auto_increment().primary_key())
                     .col(ColumnDef::new(Positions::UserId).big_integer().not_null())
-                    .col(ColumnDef::new(Positions::OrderId).big_unsigned().null()) // Reference to live_trading_orders
+                    .col(ColumnDef::new(Positions::OrderId).big_unsigned().null()) // Reference to live_trading_signals
                     .col(ColumnDef::new(Positions::StrategyId).big_unsigned().null())
                     .col(ColumnDef::new(Positions::StrategyName).text().null())
                     .col(ColumnDef::new(Positions::Exchange).string().not_null())
@@ -65,8 +65,8 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Trades::Id).big_unsigned().auto_increment().primary_key())
                     .col(ColumnDef::new(Trades::UserId).big_integer().not_null())
                     .col(ColumnDef::new(Trades::PositionId).big_unsigned().null()) // Reference to positions
-                    .col(ColumnDef::new(Trades::BuyOrderId).big_unsigned().null()) // Reference to live_trading_orders (buy)
-                    .col(ColumnDef::new(Trades::SellOrderId).big_unsigned().null()) // Reference to live_trading_orders (sell)
+                    .col(ColumnDef::new(Trades::BuyOrderId).big_unsigned().null()) // Reference to live_trading_signals (buy)
+                    .col(ColumnDef::new(Trades::SellOrderId).big_unsigned().null()) // Reference to live_trading_signals (sell)
                     .col(ColumnDef::new(Trades::StrategyId).big_unsigned().null())
                     .col(ColumnDef::new(Trades::StrategyName).text().null())
                     .col(ColumnDef::new(Trades::Exchange).string().not_null())

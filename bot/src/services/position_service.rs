@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use sea_orm::{EntityTrait, ActiveValue, ColumnTrait, QueryFilter, QueryOrder, Order};
-use shared::entity::{positions, trades, live_trading_orders};
+use shared::entity::{positions, trades, live_trading_signals};
 use chrono::Utc;
 
 /// Create a new position when buy signal is executed

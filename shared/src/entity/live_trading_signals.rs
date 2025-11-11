@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "live_trading_orders")]
+#[sea_orm(table_name = "live_trading_signals")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: u64,
@@ -34,6 +34,14 @@ pub struct Model {
     pub executed_at: Option<DateTimeUtc>,
     pub created_at: Option<DateTimeUtc>,
     pub updated_at: Option<DateTimeUtc>,
+    // New fields for better signal tracking
+    pub candle_timestamp: Option<DateTimeUtc>, // Timestamp of the candle that generated this signal
+    #[sea_orm(column_type = "Text", nullable)]
+    pub indicator_values: Option<String>, // JSON string storing indicator values at signal time (e.g., {"rsi": 30.5, "macd": 0.02})
+    #[sea_orm(column_type = "BigInteger", nullable)]
+    pub telegram_message_id: Option<i64>, // Telegram message ID that sent this signal
+    #[sea_orm(column_type = "BigUnsigned", nullable)]
+    pub related_signal_id: Option<u64>, // Link to previous signal in sequence (for signal chain tracking)
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
