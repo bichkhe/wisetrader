@@ -16,7 +16,7 @@ use ta::{
 };
 use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, Duration};
-use tracing::{info, warn, error};
+use tracing::{info, warn, error, debug};
 use teloxide::prelude::*;
 use chrono::{Utc, DateTime};
 
@@ -509,7 +509,7 @@ impl TradingState {
         timestamp: i64,
         strategy_config: &crate::services::strategy_engine::StrategyConfig,
         _app_state: &Arc<crate::state::AppState>,
-        _user_id: i64,
+        user_id: i64,
     ) -> Option<crate::services::strategy_engine::Candle> {
         // Parse timeframe to seconds
         let timeframe_secs = parse_timeframe_to_seconds(&strategy_config.timeframe);
@@ -522,6 +522,7 @@ impl TradingState {
                 // Candle completed!
                 if candle.processed {
                     // Already processed, start new candle
+                    debug!("🕯️ [User {}] Candle already processed, starting new candle at price {:.4}", user_id, price);
                     self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
                     return None;
                 }
@@ -544,6 +545,7 @@ impl TradingState {
             }
         } else {
             // No candle yet - initialize new one
+            debug!("🕯️ [User {}] Initializing new candle at price {:.4} for {} timeframe", user_id, price, strategy_config.timeframe);
             self.current_candle = Some(OneMinuteCandle::new(price, timestamp));
         }
         
@@ -553,12 +555,13 @@ impl TradingState {
     /// Force process candle for user (timer-based)
     fn force_process_candle_for_user(
         &mut self,
-        _strategy_config: &crate::services::strategy_engine::StrategyConfig,
+        strategy_config: &crate::services::strategy_engine::StrategyConfig,
         _app_state: &Arc<crate::state::AppState>,
-        _user_id: i64,
+        user_id: i64,
     ) -> Option<crate::services::strategy_engine::Candle> {
         if let Some(ref mut candle) = self.current_candle {
             if candle.processed {
+                debug!("🕯️ [User {}] Candle already processed, skipping", user_id);
                 return None;
             }
             
@@ -574,6 +577,7 @@ impl TradingState {
             candle.processed = true;
             return Some(completed_candle);
         }
+        debug!("🕯️ [User {}] No active candle to process", user_id);
         None
     }
 }
@@ -842,11 +846,22 @@ pub fn start_user_trading_service(
         };
         
         // Process market events from shared stream
+        let mut last_heartbeat = std::time::Instant::now();
+        let mut event_count = 0u64;
         loop {
             match receiver.recv().await {
                 Ok(event) => {
                     let price = event.price;
                     let timestamp = event.timestamp;
+                    event_count += 1;
+                    
+                    // Log heartbeat every 2 minutes
+                    if last_heartbeat.elapsed().as_secs() >= 120 {
+                        info!("💓 [User {}] Heartbeat: Service active, received {} market events, strategy: {} on {} ({})", 
+                            user_id_for_stream, event_count, strategy_config_for_stream.strategy_type, 
+                            exchange_for_stream, pair_for_stream);
+                        last_heartbeat = std::time::Instant::now();
+                    }
                     
                     // Use timeout to prevent blocking
                     match tokio::time::timeout(
@@ -861,10 +876,33 @@ pub fn start_user_trading_service(
                                 &app_state_for_stream,
                                 user_id_for_stream
                             ) {
+                                info!("📊 [User {}] Candle completed: O={:.4} H={:.4} L={:.4} C={:.4} ({} timeframe)", 
+                                    user_id_for_stream, candle.open, candle.high, candle.low, candle.close,
+                                    strategy_config_for_stream.timeframe);
+                                
                                 // Process candle through user's strategy
+                                info!("🔍 [User {}] Evaluating strategy '{}' on candle...", 
+                                    user_id_for_stream, strategy_config_for_stream.strategy_type);
+                                
                                 if let Some(signal) = app_state_for_stream.strategy_executor
                                     .process_candle(user_id_for_stream, &candle).await 
                                 {
+                                    match &signal {
+                                        crate::services::strategy_engine::StrategySignal::Buy { price, confidence, reason } => {
+                                            info!("✅ [User {}] Strategy '{}' generated BUY signal: price={:.4}, confidence={:.2}, reason={}", 
+                                                user_id_for_stream, strategy_config_for_stream.strategy_type, 
+                                                price, confidence, reason);
+                                        }
+                                        crate::services::strategy_engine::StrategySignal::Sell { price, confidence, reason } => {
+                                            info!("✅ [User {}] Strategy '{}' generated SELL signal: price={:.4}, confidence={:.2}, reason={}", 
+                                                user_id_for_stream, strategy_config_for_stream.strategy_type, 
+                                                price, confidence, reason);
+                                        }
+                                        crate::services::strategy_engine::StrategySignal::Hold => {
+                                            info!("✅ [User {}] Strategy '{}' generated HOLD signal", 
+                                                user_id_for_stream, strategy_config_for_stream.strategy_type);
+                                        }
+                                    }
                                     // Clone signal for database save
                                     let signal_clone = signal.clone();
                                     
@@ -910,13 +948,16 @@ pub fn start_user_trading_service(
                                     .await {
                                         error!("Failed to send trading signal to user {}: {}", user_id_for_stream, e);
                                     } else {
-                                        info!("✅ Trading signal sent to user {} (chat: {})", user_id_for_stream, user_chat_id_for_stream);
+                                        info!("✅ [User {}] Trading signal sent to user (chat: {})", user_id_for_stream, user_chat_id_for_stream);
                                     }
+                                } else {
+                                    info!("🔍 [User {}] Strategy '{}' evaluated: No signal generated (hold)", 
+                                        user_id_for_stream, strategy_config_for_stream.strategy_type);
                                 }
                             }
                         }
                         Err(_) => {
-                            warn!("Timeout acquiring lock for user {} trading state", user_id_for_stream);
+                            warn!("⏱️ [User {}] Timeout acquiring lock for trading state", user_id_for_stream);
                         }
                     }
                 }
@@ -956,22 +997,61 @@ pub fn start_user_trading_service(
     tokio::spawn(async move {
         let mut timer = interval(Duration::from_secs(timeframe_secs));
         timer.tick().await; // Skip first tick
-        info!("⏰ Timer started for user {}: will process candles every {} seconds", user_id_timer, timeframe_secs);
+        info!("⏰ [User {}] Timer started: will process candles every {} seconds ({} timeframe)", 
+            user_id_timer, timeframe_secs, strategy_config_timer.timeframe);
+        
+        let mut timer_count = 0u64;
+        let mut last_heartbeat_timer = std::time::Instant::now();
         
         loop {
             timer.tick().await;
+            timer_count += 1;
+            
+            // Log heartbeat every 2 minutes
+            if last_heartbeat_timer.elapsed().as_secs() >= 120 {
+                info!("💓 [User {}] Timer heartbeat: Service active, processed {} timer ticks, strategy: {} on {} ({})", 
+                    user_id_timer, timer_count, strategy_config_timer.strategy_type, 
+                    exchange_timer, pair_timer);
+                last_heartbeat_timer = std::time::Instant::now();
+            }
+            
             let mut state_guard = state_timer.write().await;
             
             if state_guard.current_candle.is_some() {
+                info!("⏰ [User {}] Timer tick #{}: Processing candle...", user_id_timer, timer_count);
+                
                 if let Some(candle) = state_guard.force_process_candle_for_user(
                     &strategy_config_timer,
                     &app_state_timer,
                     user_id_timer
                 ) {
+                    info!("📊 [User {}] Timer: Candle completed: O={:.4} H={:.4} L={:.4} C={:.4} ({} timeframe)", 
+                        user_id_timer, candle.open, candle.high, candle.low, candle.close,
+                        strategy_config_timer.timeframe);
+                    
                     // Process candle through user's strategy
+                    info!("🔍 [User {}] Timer: Evaluating strategy '{}' on candle...", 
+                        user_id_timer, strategy_config_timer.strategy_type);
+                    
                     if let Some(signal) = app_state_timer.strategy_executor
                         .process_candle(user_id_timer, &candle).await 
                     {
+                        match &signal {
+                            crate::services::strategy_engine::StrategySignal::Buy { price, confidence, reason } => {
+                                info!("✅ [User {}] Timer: Strategy '{}' generated BUY signal: price={:.4}, confidence={:.2}, reason={}", 
+                                    user_id_timer, strategy_config_timer.strategy_type, 
+                                    price, confidence, reason);
+                            }
+                            crate::services::strategy_engine::StrategySignal::Sell { price, confidence, reason } => {
+                                info!("✅ [User {}] Timer: Strategy '{}' generated SELL signal: price={:.4}, confidence={:.2}, reason={}", 
+                                    user_id_timer, strategy_config_timer.strategy_type, 
+                                    price, confidence, reason);
+                            }
+                            crate::services::strategy_engine::StrategySignal::Hold => {
+                                info!("✅ [User {}] Timer: Strategy '{}' generated HOLD signal", 
+                                    user_id_timer, strategy_config_timer.strategy_type);
+                            }
+                        }
                         // Clone signal for database save
                         let signal_clone = signal.clone();
                         
@@ -1017,11 +1097,18 @@ pub fn start_user_trading_service(
                             .await {
                                 error!("Failed to send trading signal to user {}: {}", user_id_timer, e);
                             } else {
-                                info!("✅ Trading signal sent to user {} (timer-based)", user_id_timer);
+                                info!("✅ [User {}] Timer: Trading signal sent to user", user_id_timer);
                             }
+                        } else {
+                            info!("🔍 [User {}] Timer: Strategy '{}' evaluated: No signal generated (hold)", 
+                                user_id_timer, strategy_config_timer.strategy_type);
                         }
                     }
+                } else {
+                    info!("⏰ [User {}] Timer tick #{}: No active candle to process", user_id_timer, timer_count);
                 }
+            } else {
+                info!("⏰ [User {}] Timer tick #{}: No candle initialized yet", user_id_timer, timer_count);
             }
         }
     });
