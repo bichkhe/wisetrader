@@ -362,5 +362,49 @@ Please write in clear, detailed English. Use markdown formatting for readability
 
         Ok(analysis)
     }
+
+    /// Ask a general question to Gemini AI
+    /// 
+    /// Takes a question/prompt and returns AI-generated response
+    pub async fn ask_question(&self, question: &str) -> Result<String, anyhow::Error> {
+        // Call Gemini API
+        let request = GeminiRequest {
+            contents: vec![Content {
+                parts: vec![Part {
+                    text: question.to_string(),
+                }],
+            }],
+        };
+
+        let url = self.build_api_url();
+
+        let response = self.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(anyhow::anyhow!(
+                "Gemini API error ({}): {}",
+                status,
+                error_text
+            ));
+        }
+
+        let gemini_response: GeminiResponse = response.json().await?;
+
+        // Extract text from response
+        let answer = gemini_response
+            .candidates
+            .first()
+            .and_then(|c| c.content.parts.first())
+            .map(|p| p.text.clone())
+            .ok_or_else(|| anyhow::anyhow!("No response from Gemini API"))?;
+
+        Ok(answer)
+    }
 }
 

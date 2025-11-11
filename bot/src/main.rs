@@ -26,6 +26,7 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_live_trading, handle_live_trading_callback, handle_live_trading_input,
     handle_tokens, handle_tokens_callback,
     handle_back, handle_deposit, handle_balance, handle_deposit_callback,
+    handle_ai,
     Command},  state::AppState};
 use state::{BotState, BacktestState};
 
@@ -48,6 +49,7 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::StartTrading].endpoint(handle_start_trading))
                 .branch(case![Command::LiveTrading].endpoint(handle_live_trading))
                 .branch(case![Command::Tokens].endpoint(handle_tokens))
+                .branch(case![Command::Ai(_question)].endpoint(handle_ai))
         );
 
     let message_handler = Update::filter_message()

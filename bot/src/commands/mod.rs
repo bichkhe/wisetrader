@@ -28,6 +28,8 @@ pub mod live_trading;
 pub use live_trading::{handle_live_trading, handle_live_trading_callback, handle_live_trading_input};
 pub mod tokens;
 pub use tokens::{handle_tokens, handle_tokens_callback};
+pub mod ai;
+pub use ai::handle_ai;
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -74,6 +76,8 @@ pub enum Command {
    LiveTrading,
    /// Quản lý OAuth tokens cho exchanges
    Tokens,
+   /// Hỏi AI (Gemini) bất kỳ câu hỏi nào
+   Ai(String),
 }
 
 
@@ -127,6 +131,7 @@ pub async fn handle_help(
     help_text.push_str(&format!("/back - {}\n", i18n::translate(locale, "cmd_help_back", None)));
     help_text.push_str(&format!("/deposit - {}\n", i18n::translate(locale, "cmd_help_deposit", None)));
     help_text.push_str(&format!("/balance - {}\n", i18n::translate(locale, "cmd_help_balance", None)));
+    help_text.push_str(&format!("/ai - {}\n", i18n::translate(locale, "cmd_help_ai", None)));
     
     help_text.push_str(&i18n::translate(locale, "cmd_help_footer", None));
     

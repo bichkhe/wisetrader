@@ -22,11 +22,14 @@ async fn main() -> anyhow::Result<()> {
         { "command": "me", "description": "👤 Show your user profile" },
         { "command": "createstrategy", "description": "🛠️ Create a new trading strategy" },
         { "command": "mystrategies", "description": "📋 List all your strategies" },
-        { "command": "starttrading", "description": "💹 Start trading with a selected strategy" },
+        // { "command": "starttrading", "description": "💹 Start trading with a selected strategy" },
         { "command": "backtest", "description": "🔎 Run backtest on a strategy" },
         { "command": "back", "description": "🔙 Exit current dialogue and return to normal state" },
         { "command": "deposit", "description": "➕ Deposit points to your account" },
         { "command": "balance", "description": "💰 View your current balance" },
+        { "command": "livetrading", "description": "💹 Start live trading with exchange" },
+        { "command": "tokens", "description": "🔑 Manage OAuth tokens for exchanges" },
+        { "command": "ai", "description": "🤖 Ask AI (Gemini) any question" },
         ],
         "scope": { "type": "default" }
     });
@@ -39,11 +42,14 @@ async fn main() -> anyhow::Result<()> {
         { "command": "me", "description": "👤 Show your user profile" },
         { "command": "createstrategy", "description": "🛠️ Create a new trading strategy" },
         { "command": "mystrategies", "description": "📋 List all your strategies" },
-        { "command": "starttrading", "description": "💹 Start trading with a selected strategy" },
+        // { "command": "starttrading", "description": "💹 Start trading with a selected strategy" },
         { "command": "backtest", "description": "🔎 Run backtest on a strategy" },
         { "command": "back", "description": "🔙 Exit current dialogue and return to normal state" },
         { "command": "deposit", "description": "➕ Deposit points to your account" },
         { "command": "balance", "description": "💰 View your current balance" },
+        { "command": "livetrading", "description": "💹 Start live trading with exchange" },
+        { "command": "tokens", "description": "🔑 Manage OAuth tokens for exchanges" },
+        { "command": "ai", "description": "🤖 Ask AI (Gemini) any question" },
         ],
         "scope": { "type": "default" }
     });
