@@ -58,7 +58,57 @@ RUST_LOG=info cargo run --example rsi_bnbusdt_barter
 
 Press `Ctrl+C` to stop and see trading summary.
 
+## Gemini API Integration Test
+
+### 3. Test Gemini API
+
+**File:** `test_gemini.rs`
+
+### Description
+
+This example demonstrates how to test the Gemini API integration for backtest analysis:
+
+- ✅ **Environment Variable:** Loads `GEMINI_API_KEY` from `.env` file or environment
+- ✅ **GeminiService:** Creates and uses GeminiService to call Gemini API
+- ✅ **Backtest Analysis:** Tests `analyze_backtest` method with sample data
+- ✅ **Error Handling:** Proper error handling and logging
+
+### Features
+
+- ✅ Loads API key from environment variables
+- ✅ Tests simple backtest analysis request
+- ✅ Tests detailed backtest analysis with tables
+- ✅ Displays AI-generated analysis in Vietnamese
+- ✅ Comprehensive error handling
+
+### Running the Example
+
+**Prerequisites:**
+1. Set `GEMINI_API_KEY` in your `.env` file or environment:
+   ```bash
+   export GEMINI_API_KEY="your-api-key-here"
+   ```
+
+**Run the test:**
+```bash
+# From the bot directory
+cargo run --example test_gemini
+
+# Or with detailed logging
+RUST_LOG=info cargo run --example test_gemini
+```
+
 ### Implementation Details
+
+**Gemini Test Example (`test_gemini.rs`):**
+- Standalone implementation of GeminiService for testing
+- Tests two scenarios:
+  1. Simple analysis with minimal data
+  2. Detailed analysis with trade tables
+- Uses Vietnamese prompts for analysis
+- Handles API errors gracefully
+
+## Implementation Details
 
 **Basic Example (`rsi_bnbusdt.rs`):**
 - This is a **simulated** implementation that generates random price data

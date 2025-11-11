@@ -8,6 +8,9 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct GeminiService {
     api_key: String,
+    model_name: String,
+    base_url: String,
+    timeout_secs: u64,
     client: reqwest::Client,
 }
 
@@ -47,16 +50,70 @@ struct ResponsePart {
 }
 
 impl GeminiService {
-    /// Create a new Gemini service instance
+    /// Create a new Gemini service instance with default configuration
     pub fn new(api_key: String) -> Self {
+        Self::with_config(
+            api_key,
+            "gemini-pro".to_string(),
+            "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            60,
+        )
+    }
+
+    /// Create a new Gemini service instance with custom configuration
+    pub fn with_config(
+        api_key: String,
+        model_name: String,
+        base_url: String,
+        timeout_secs: u64,
+    ) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(timeout_secs))
             .build()
             .expect("Failed to create HTTP client");
         
         Self {
             api_key,
+            model_name,
+            base_url,
+            timeout_secs,
             client,
+        }
+    }
+
+    /// Build the API URL for Gemini requests
+    /// 
+    /// Supports two formats:
+    /// 1. If GEMINI_MODEL_URL env var is set, use it directly (can contain {key} placeholder)
+    /// 2. Otherwise, build from base_url, model_name, and api_key
+    fn build_api_url(&self) -> String {
+        // Check if custom URL is provided via environment variable
+        if let Ok(custom_url) = std::env::var("GEMINI_MODEL_URL") {
+            // Only use custom URL if it's not empty
+            if !custom_url.trim().is_empty() {
+                // Replace {key} placeholder if present, otherwise use as-is
+                if custom_url.contains("{key}") {
+                    custom_url.replace("{key}", &self.api_key)
+                } else {
+                    custom_url
+                }
+            } else {
+                // Build URL from components if custom URL is empty
+                format!(
+                    "{}/models/{}:generateContent?key={}",
+                    self.base_url.trim_end_matches('/'),
+                    self.model_name,
+                    self.api_key
+                )
+            }
+        } else {
+            // Build URL from components
+            format!(
+                "{}/models/{}:generateContent?key={}",
+                self.base_url.trim_end_matches('/'),
+                self.model_name,
+                self.api_key
+            )
         }
     }
 
@@ -153,10 +210,7 @@ Hãy viết bằng tiếng Việt, rõ ràng và chi tiết. Sử dụng định
             }],
         };
 
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={}",
-            self.api_key
-        );
+        let url = self.build_api_url();
 
         let response = self.client
             .post(&url)
@@ -278,10 +332,7 @@ Please write in clear, detailed English. Use markdown formatting for readability
             }],
         };
 
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={}",
-            self.api_key
-        );
+        let url = self.build_api_url();
 
         let response = self.client
             .post(&url)

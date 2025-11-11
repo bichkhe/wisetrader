@@ -15,6 +15,9 @@ pub struct Config {
     pub mobile_friendly_tables: bool,
     pub gemini_api_key: Option<String>,
     pub enable_gemini_analysis: bool,
+    pub gemini_model_name: String,
+    pub gemini_base_url: String,
+    pub gemini_timeout_secs: u64,
 }
 
 impl Config {
@@ -53,6 +56,14 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),
+            gemini_model_name: std::env::var("GEMINI_MODEL_NAME")
+                .unwrap_or_else(|_| "gemini-2.5-flash".to_string()),
+            gemini_base_url: std::env::var("GEMINI_BASE_URL")
+                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1beta".to_string()),
+            gemini_timeout_secs: std::env::var("GEMINI_TIMEOUT_SECS")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()
+                .unwrap_or(60),
         })
     }
 }

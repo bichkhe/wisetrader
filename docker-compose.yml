@@ -146,6 +146,9 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyCfEVe6e96bLcmh1xw10IeG00NvljTjpzE}
       - ENABLE_GEMINI_ANALYSIS=${ENABLE_GEMINI_ANALYSIS:-true}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-2.5-flash}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      - GEMINI_TIMEOUT_SECS=${GEMINI_TIMEOUT_SECS:-60}
     depends_on:
       db:
         condition: service_healthy

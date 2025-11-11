@@ -12,12 +12,29 @@ Thêm các dòng sau vào file `.env` của bạn:
 # Gemini AI Configuration
 GEMINI_API_KEY=AIzaSyCfEVe6e96bLcmh1xw10IeG00NvljTjpzE
 ENABLE_GEMINI_ANALYSIS=true
+
+# Optional: Advanced Configuration
+GEMINI_MODEL_NAME=gemini-pro
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_TIMEOUT_SECS=60
+GEMINI_MODEL_URL=  # Optional: Custom full URL (can use {key} placeholder)
 ```
 
 ### 2. Giải thích các biến môi trường
 
+#### Bắt buộc:
 - **`GEMINI_API_KEY`**: API key của Google Gemini (bắt buộc nếu muốn sử dụng AI analysis)
+
+#### Tùy chọn:
 - **`ENABLE_GEMINI_ANALYSIS`**: Bật/tắt tính năng AI analysis (mặc định: `true`)
+- **`GEMINI_MODEL_NAME`**: Tên model Gemini để sử dụng (mặc định: `gemini-pro`)
+  - Các model khả dụng: `gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`, etc.
+- **`GEMINI_BASE_URL`**: Base URL của Gemini API (mặc định: `https://generativelanguage.googleapis.com/v1beta`)
+- **`GEMINI_TIMEOUT_SECS`**: Timeout cho API requests tính bằng giây (mặc định: `60`)
+- **`GEMINI_MODEL_URL`**: URL đầy đủ tùy chỉnh (tùy chọn)
+  - Nếu set, sẽ override các cấu hình khác
+  - Có thể sử dụng placeholder `{key}` để tự động thay thế API key
+  - Ví dụ: `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={key}`
 
 ### 3. Cách hoạt động
 

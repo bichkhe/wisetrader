@@ -1315,7 +1315,12 @@ pub async fn handle_backtest_callback(
                                         let ai_analysis = if config.enable_gemini_analysis {
                                             if let Some(ref api_key) = config.gemini_api_key {
                                                 use crate::services::gemini::GeminiService;
-                                                let gemini = GeminiService::new(api_key.clone());
+                                                let gemini = GeminiService::with_config(
+                                                    api_key.clone(),
+                                                    config.gemini_model_name.clone(),
+                                                    config.gemini_base_url.clone(),
+                                                    config.gemini_timeout_secs,
+                                                );
                                                 
                                                 // Determine language based on user locale
                                                 let locale = user.as_ref()

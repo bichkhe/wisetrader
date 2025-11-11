@@ -47,3 +47,7 @@ path = "examples/rsi_bnbusdt.rs"
 [[example]]
 name = "rsi_bnbusdt_barter"
 path = "examples/rsi_bnbusdt_barter.rs"
+
+[[example]]
+name = "test_gemini"
+path = "examples/test_gemini.rs"
