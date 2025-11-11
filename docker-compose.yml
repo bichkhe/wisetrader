@@ -144,6 +144,8 @@ services:
       - STRATEGIES_PRESETS_PATH=/app/strategies_presets
       - MOBILE_FRIENDLY_TABLES=${MOBILE_FRIENDLY_TABLES:-true}
       - RUST_LOG=${RUST_LOG:-info}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:AIzaSyCfEVe6e96bLcmh1xw10IeG00NvljTjpzE}
+      - ENABLE_GEMINI_ANALYSIS=${ENABLE_GEMINI_ANALYSIS:true}
     depends_on:
       db:
         condition: service_healthy
