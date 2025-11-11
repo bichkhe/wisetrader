@@ -25,11 +25,13 @@ pub use payment::{handle_deposit, handle_balance, handle_deposit_callback};
 pub mod start_trading;
 pub use start_trading::{handle_start_trading, handle_start_trading_callback};
 pub mod live_trading;
-pub use live_trading::{handle_live_trading, handle_live_trading_callback, handle_live_trading_input};
+pub use live_trading::{handle_live_trading, handle_live_trading_callback, handle_live_trading_input, handle_my_trading, handle_stop_trading_callback};
 pub mod tokens;
 pub use tokens::{handle_tokens, handle_tokens_callback};
 pub mod ai;
 pub use ai::handle_ai;
+pub mod pnl;
+pub use pnl::handle_pnl;
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -78,6 +80,10 @@ pub enum Command {
    Tokens,
    /// Hỏi AI (Gemini) bất kỳ câu hỏi nào
    Ai(String),
+   /// Xem trạng thái live trading hiện tại
+   MyTrading,
+   /// Xem profit/loss và thống kê trading
+   Pnl,
 }
 
 
@@ -132,6 +138,8 @@ pub async fn handle_help(
     help_text.push_str(&format!("/deposit - {}\n", i18n::translate(locale, "cmd_help_deposit", None)));
     help_text.push_str(&format!("/balance - {}\n", i18n::translate(locale, "cmd_help_balance", None)));
     help_text.push_str(&format!("/ai - {}\n", i18n::translate(locale, "cmd_help_ai", None)));
+    help_text.push_str(&format!("/mytrading - {}\n", i18n::translate(locale, "cmd_help_my_trading", None)));
+    help_text.push_str(&format!("/pnl - {}\n", i18n::translate(locale, "cmd_help_pnl", None)));
     
     help_text.push_str(&i18n::translate(locale, "cmd_help_footer", None));
     

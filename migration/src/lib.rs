@@ -4,6 +4,8 @@ mod m20220101_000001_create_table;
 mod m20251029_000001_add_user_id_to_strategies;
 mod m20251103_073712_add_content_to_strategies;
 mod m20251106_000001_create_exchange_tokens;
+mod m20251107_000001_create_live_trading_orders;
+mod m20251108_000001_create_positions_and_trades;
 
 pub struct Migrator;
 
@@ -15,6 +17,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20251029_000001_add_user_id_to_strategies::Migration),
             Box::new(m20251103_073712_add_content_to_strategies::Migration),
             Box::new(m20251106_000001_create_exchange_tokens::Migration),
+            Box::new(m20251107_000001_create_live_trading_orders::Migration),
+            Box::new(m20251108_000001_create_positions_and_trades::Migration),
         ]
     }
 }

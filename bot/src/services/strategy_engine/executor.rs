@@ -115,5 +115,35 @@ impl StrategyExecutor {
             .map(|s| format!("Strategy: {}, Pair: {}, Active: {}", 
                 s.strategy.name(), s.pair, s.is_active))
     }
+    
+    /// Get all active trading users with their details
+    pub async fn get_active_trading_users(&self) -> Vec<(i64, String, String, String)> {
+        let users = self.users.read().await;
+        users.iter()
+            .filter(|(_, state)| state.is_active)
+            .map(|(user_id, state)| {
+                (
+                    *user_id,
+                    state.strategy.name().to_string(),
+                    state.pair.clone(),
+                    state.strategy.config().timeframe.clone(),
+                )
+            })
+            .collect()
+    }
+    
+    /// Get user's trading details
+    pub async fn get_user_trading_details(&self, user_id: i64) -> Option<(String, String, String)> {
+        let users = self.users.read().await;
+        users.get(&user_id)
+            .filter(|s| s.is_active)
+            .map(|s| {
+                (
+                    s.strategy.name().to_string(),
+                    s.pair.clone(),
+                    s.strategy.config().timeframe.clone(),
+                )
+            })
+    }
 }
 

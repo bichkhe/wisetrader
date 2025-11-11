@@ -5,6 +5,8 @@ use barter_data::{
     subscription::trade::PublicTrades,
 };
 use barter_instrument::instrument::market_data::kind::MarketDataInstrumentKind;
+use sea_orm::{EntityTrait, ActiveValue};
+use shared::entity::live_trading_orders;
 use barter_data::streams::reconnect::Event;
 use futures::StreamExt;
 use ta::{
@@ -611,6 +613,30 @@ pub fn start_user_trading_service(
                                         if let Some(signal) = app_state_for_stream.strategy_executor
                                             .process_candle(user_id_for_stream, &candle).await 
                                         {
+                                            // Clone signal for database save
+                                            let signal_clone = signal.clone();
+                                            
+                                            // Save order to database
+                                            let app_state_for_db = app_state_for_stream.clone();
+                                            let user_id_for_db = user_id_for_stream;
+                                            let exchange_for_db = exchange_for_stream.clone();
+                                            let pair_for_db = pair_trades.clone();
+                                            let strategy_config_for_db = strategy_config_trades.clone();
+                                            
+                                            // Spawn task to save order (non-blocking)
+                                            tokio::spawn(async move {
+                                                if let Err(e) = save_trading_order(
+                                                    &app_state_for_db,
+                                                    user_id_for_db,
+                                                    &exchange_for_db,
+                                                    &pair_for_db,
+                                                    &strategy_config_for_db,
+                                                    &signal_clone,
+                                                ).await {
+                                                    error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
+                                                }
+                                            });
+                                            
                                             // Format and send signal to user
                                             let message = format_user_signal_message(
                                                 &signal, 
@@ -656,6 +682,7 @@ pub fn start_user_trading_service(
     let user_id_timer = user_id;
     let user_chat_id_timer = user_chat_id;
     let app_state_timer = app_state.clone();
+    let exchange_timer = exchange.clone();
     
     // Parse timeframe to seconds (e.g., "1m" -> 60, "5m" -> 300, "1h" -> 3600)
     let timeframe_secs = parse_timeframe_to_seconds(&strategy_config.timeframe);
@@ -680,6 +707,30 @@ pub fn start_user_trading_service(
                     if let Some(signal) = app_state_timer.strategy_executor
                         .process_candle(user_id_timer, &candle).await 
                     {
+                        // Clone signal for database save
+                        let signal_clone = signal.clone();
+                        
+                        // Save order to database
+                        let app_state_for_db = app_state_timer.clone();
+                        let user_id_for_db = user_id_timer;
+                        let exchange_for_db = exchange_timer.clone();
+                        let pair_for_db = pair_timer.clone();
+                        let strategy_config_for_db = strategy_config_timer.clone();
+                        
+                        // Spawn task to save order (non-blocking)
+                        tokio::spawn(async move {
+                            if let Err(e) = save_trading_order(
+                                &app_state_for_db,
+                                user_id_for_db,
+                                &exchange_for_db,
+                                &pair_for_db,
+                                &strategy_config_for_db,
+                                &signal_clone,
+                            ).await {
+                                error!("Failed to save trading order for user {}: {}", user_id_for_db, e);
+                            }
+                        });
+                        
                         let message = format_user_signal_message(
                             &signal, 
                             &pair_timer, 
@@ -756,5 +807,120 @@ fn format_user_signal_message(
             return String::new();
         }
     }
+}
+
+/// Save trading order to database and manage positions/trades
+async fn save_trading_order(
+    app_state: &Arc<AppState>,
+    user_id: i64,
+    exchange: &str,
+    pair: &str,
+    strategy_config: &crate::services::strategy_engine::StrategyConfig,
+    signal: &crate::services::strategy_engine::StrategySignal,
+) -> Result<(), anyhow::Error> {
+    use crate::services::strategy_engine::StrategySignal;
+    use crate::services::position_service;
+    
+    let (signal_type, side, price, confidence, reason) = match signal {
+        StrategySignal::Buy { confidence, price, reason } => {
+            ("buy".to_string(), "buy".to_string(), *price, *confidence, reason.clone())
+        },
+        StrategySignal::Sell { confidence, price, reason } => {
+            ("sell".to_string(), "sell".to_string(), *price, *confidence, reason.clone())
+        },
+        StrategySignal::Hold => {
+            // Don't save Hold signals
+            return Ok(());
+        }
+    };
+    
+    // Get strategy ID if available (from strategy_config or lookup)
+    let strategy_id = None; // TODO: Get strategy ID from strategy_config if available
+    
+    // Save order first
+    let order = live_trading_orders::ActiveModel {
+        user_id: ActiveValue::Set(user_id),
+        strategy_id: ActiveValue::Set(strategy_id),
+        strategy_name: ActiveValue::Set(Some(strategy_config.strategy_type.clone())),
+        exchange: ActiveValue::Set(exchange.to_string()),
+        pair: ActiveValue::Set(pair.to_string()),
+        side: ActiveValue::Set(side.clone()),
+        signal_type: ActiveValue::Set(signal_type.clone()),
+        price: ActiveValue::Set(price.to_string()),
+        confidence: ActiveValue::Set(Some(confidence.to_string())),
+        reason: ActiveValue::Set(Some(reason)),
+        timeframe: ActiveValue::Set(Some(strategy_config.timeframe.clone())),
+        status: ActiveValue::Set("signal".to_string()),
+        external_order_id: ActiveValue::NotSet,
+        executed_price: ActiveValue::Set(Some(price.to_string())),
+        executed_quantity: ActiveValue::NotSet, // TODO: Calculate based on available balance
+        executed_at: ActiveValue::Set(Some(Utc::now())),
+        created_at: ActiveValue::Set(Some(Utc::now())),
+        updated_at: ActiveValue::Set(Some(Utc::now())),
+        ..Default::default()
+    };
+    
+    let order_result = live_trading_orders::Entity::insert(order)
+        .exec(app_state.db.as_ref())
+        .await?;
+    
+    let order_id = order_result.last_insert_id;
+    
+    // For now, use a default quantity (in production, calculate based on balance)
+    let quantity = 0.001; // Default quantity for demo
+    
+    // Handle Buy signal: Create position
+    if side == "buy" {
+        match position_service::create_position(
+            app_state.db.as_ref(),
+            user_id,
+            Some(order_id),
+            strategy_id,
+            Some(strategy_config.strategy_type.clone()),
+            exchange.to_string(),
+            pair.to_string(),
+            price,
+            quantity,
+        ).await {
+            Ok(position_id) => {
+                info!("✅ Created position {} for user {}: {} {} at {}", position_id, user_id, side, pair, price);
+            }
+            Err(e) => {
+                error!("Failed to create position for user {}: {}", user_id, e);
+            }
+        }
+    }
+    
+    // Handle Sell signal: Close position and create trade
+    if side == "sell" {
+        // Find open position for this user and pair
+        let open_positions = position_service::get_open_positions(app_state.db.as_ref(), user_id).await?;
+        
+        // Find matching position (same pair)
+        if let Some(position) = open_positions.iter().find(|p| p.pair == pair && p.status == "open") {
+            match position_service::close_position_and_create_trade(
+                app_state.db.as_ref(),
+                user_id,
+                position.id,
+                Some(order_id),
+                price,
+            ).await {
+                Ok(trade_id) => {
+                    let pnl: f64 = position.unrealized_pnl.parse().unwrap_or(0.0);
+                    info!("✅ Closed position {} and created trade {} for user {}: {} {} at {} (P&L: {:.2})", 
+                        position.id, trade_id, user_id, side, pair, price, pnl);
+                }
+                Err(e) => {
+                    error!("Failed to close position for user {}: {}", user_id, e);
+                }
+            }
+        } else {
+            warn!("No open position found for user {} to close with sell signal for {}", user_id, pair);
+        }
+    }
+    
+    info!("✅ Saved trading order {} to database for user {}: {} {} at {}", order_id, user_id, side, pair, price);
+    
+    Ok(())
 }
 

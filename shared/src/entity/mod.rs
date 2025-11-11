@@ -3,5 +3,8 @@
 pub mod prelude;
 
 pub mod exchange_tokens;
+pub mod live_trading_orders;
+pub mod positions;
 pub mod strategies;
+pub mod trades;
 pub mod users;

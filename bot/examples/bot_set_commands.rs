@@ -30,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
         { "command": "livetrading", "description": "💹 Start live trading with exchange" },
         { "command": "tokens", "description": "🔑 Manage OAuth tokens for exchanges" },
         { "command": "ai", "description": "🤖 Ask AI (Gemini) any question" },
+        { "command": "mytrading", "description": "📊 View your live trading status" },
+        { "command": "pnl", "description": "💰 View profit and loss statistics" },
         ],
         "scope": { "type": "default" }
     });
@@ -50,6 +52,8 @@ async fn main() -> anyhow::Result<()> {
         { "command": "livetrading", "description": "💹 Start live trading with exchange" },
         { "command": "tokens", "description": "🔑 Manage OAuth tokens for exchanges" },
         { "command": "ai", "description": "🤖 Ask AI (Gemini) any question" },
+        { "command": "mytrading", "description": "📊 View your live trading status" },
+        { "command": "pnl", "description": "💰 View profit and loss statistics" },
         ],
         "scope": { "type": "default" }
     });

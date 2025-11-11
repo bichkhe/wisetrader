@@ -26,7 +26,8 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_live_trading, handle_live_trading_callback, handle_live_trading_input,
     handle_tokens, handle_tokens_callback,
     handle_back, handle_deposit, handle_balance, handle_deposit_callback,
-    handle_ai,
+    handle_ai, handle_my_trading, handle_stop_trading_callback,
+    handle_pnl,
     Command},  state::AppState};
 use state::{BotState, BacktestState};
 
@@ -50,6 +51,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::LiveTrading].endpoint(handle_live_trading))
                 .branch(case![Command::Tokens].endpoint(handle_tokens))
                 .branch(case![Command::Ai(_question)].endpoint(handle_ai))
+                .branch(case![Command::MyTrading].endpoint(handle_my_trading))
+                .branch(case![Command::Pnl].endpoint(handle_pnl))
         );
 
     let message_handler = Update::filter_message()
@@ -144,6 +147,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 ).unwrap_or(false)
             })
             .endpoint(handle_tokens_callback)
+        )
+        .branch(
+            // Handle stop trading callbacks from any state
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| d.starts_with("stop_live_trading_")).unwrap_or(false)
+            })
+            .endpoint(handle_stop_trading_callback)
         );
         
 

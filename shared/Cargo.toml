@@ -13,6 +13,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = "1.1"
+rust_decimal = "1.35"
 redis = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }

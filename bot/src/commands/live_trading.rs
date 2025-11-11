@@ -62,7 +62,6 @@ pub async fn handle_live_trading(
     let has_binance = exchange_tokens_list.iter().any(|t| t.exchange == "binance");
     let has_okx = exchange_tokens_list.iter().any(|t| t.exchange == "okx");
     
-    // Build setup buttons with status - each button on its own row
     let mut setup_buttons = Vec::new();
     
     // Binance button - on its own row
@@ -101,7 +100,6 @@ pub async fn handle_live_trading(
         "live_trading_setup_okx"
     )]);
     
-    // If user has at least one active token, show strategy selection option
     if !active_tokens.is_empty() {
         setup_buttons.push(vec![
             InlineKeyboardButton::callback(
@@ -118,120 +116,107 @@ pub async fn handle_live_trading(
         )
     ]);
     
-    // Build message text
-    let msg_text = if active_tokens.is_empty() {
+    let exchanges_list: Vec<String> = active_tokens.iter()
+        .map(|t| {
+            match t.exchange.as_str() {
+                "binance" => "🔵 Binance".to_string(),
+                "okx" => "🟢 OKX".to_string(),
+                _ => t.exchange.clone(),
+            }
+        })
+        .collect();
+    
+    let status_msg = if active_tokens.is_empty() {
         i18n::translate(locale, "live_trading_no_tokens", None)
     } else {
-        let exchanges_list: Vec<String> = active_tokens.iter()
-            .map(|t| {
-                match t.exchange.as_str() {
-                    "binance" => "🔵 Binance".to_string(),
-                    "okx" => "🟢 OKX".to_string(),
-                    _ => t.exchange.clone(),
-                }
-            })
-            .collect();
         i18n::translate(locale, "live_trading_tokens_configured", Some(&[
             ("exchanges", &exchanges_list.join(", ")),
             ("count", &active_tokens.len().to_string()),
         ]))
     };
     
-    bot.send_message(msg.chat.id, msg_text)
+    bot.send_message(msg.chat.id, status_msg)
         .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(teloxide::types::InlineKeyboardMarkup::new(setup_buttons))
         .await?;
     
     dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchangeSetup)).await?;
+    
     Ok(())
 }
 
 /// Handler for live trading callbacks
 pub async fn handle_live_trading_callback(
     bot: Bot,
-    q: CallbackQuery,
     dialogue: MyDialogue,
+    q: CallbackQuery,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
+    let telegram_id = q.from.id.0 as i64;
+    
+    // Get user locale
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
     if let Some(data) = q.data {
-        let telegram_id = q.from.id.0 as i64;
-        
-        // Get user locale
-        let user = users::Entity::find_by_id(telegram_id)
-            .one(state.db.as_ref())
-            .await?;
-        
-        let locale = user
-            .as_ref()
-            .and_then(|u| u.language.as_ref())
-            .map(|l| i18n::get_user_language(Some(l)))
-            .unwrap_or("en");
-        
-        if data.starts_with("live_trading_setup_") {
+        if data == "live_trading_setup_binance" {
             bot.answer_callback_query(q.id).await?;
-            let exchange = data.replace("live_trading_setup_", "");
             
-            // Check if token already exists for this exchange
-            let existing_token = exchange_tokens::Entity::find()
-                .filter(exchange_tokens::Column::UserId.eq(telegram_id))
-                .filter(exchange_tokens::Column::Exchange.eq(&exchange))
-                .one(state.db.as_ref())
+            let exchange_name = "🔵 Binance";
+            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
+            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
+                .parse_mode(teloxide::types::ParseMode::Html)
                 .await?;
             
-            let exchange_name = match exchange.as_str() {
-                "binance" => "🔵 Binance",
-                "okx" => "🟢 OKX",
-                _ => &exchange,
-            };
+            dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForApiKey {
+                exchange: "binance".to_string(),
+            })).await?;
+        } else if data == "live_trading_setup_okx" {
+            bot.answer_callback_query(q.id).await?;
             
-            let msg_text = if existing_token.is_some() {
-                i18n::translate(locale, "live_trading_update_token", Some(&[
-                    ("exchange", exchange_name),
-                ]))
-            } else {
-                i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]))
-            };
-            
-            // Edit the existing message instead of sending a new one to avoid duplicates
-            if let Some(msg_ref) = q.message {
-                bot.edit_message_text(msg_ref.chat().id, msg_ref.id(), msg_text)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .await?;
-            } else {
-                bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .await?;
-            }
+            let exchange_name = "🟢 OKX";
+            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
+            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await?;
             
             dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForApiKey {
-                exchange: exchange.clone(),
+                exchange: "okx".to_string(),
             })).await?;
         } else if data == "live_trading_show_strategies" {
             bot.answer_callback_query(q.id).await?;
             
-            // Show strategy selection
-            let strategies = state.strategy_service.get_user_strategies(telegram_id).await?;
+            // Get user's strategies
+            let strategies_list = state.strategy_service.get_user_strategies(telegram_id).await?;
             
-            if strategies.is_empty() {
+            if strategies_list.is_empty() {
                 let msg_text = i18n::translate(locale, "trading_no_strategies", None);
                 bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text).await?;
                 return Ok(());
             }
             
-            let mut buttons = Vec::new();
-            for strategy in &strategies {
+            // Create buttons for strategies
+            let mut strategy_buttons = Vec::new();
+            for strategy in &strategies_list {
                 let button_text = strategy.name.as_ref()
                     .map(|n| n.clone())
                     .unwrap_or_else(|| format!("Strategy #{}", strategy.id));
-                buttons.push(vec![
+                strategy_buttons.push(vec![
                     InlineKeyboardButton::callback(
                         button_text,
-                        format!("live_trading_{}", strategy.id)
+                        format!("live_trading_strategy_{}", strategy.id)
                     )
                 ]);
             }
             
-            buttons.push(vec![
+            strategy_buttons.push(vec![
                 InlineKeyboardButton::callback(
                     i18n::get_button_text(locale, "trading_cancel"),
                     "cancel_live_trading"
@@ -239,77 +224,71 @@ pub async fn handle_live_trading_callback(
             ]);
             
             let msg_text = i18n::translate(locale, "live_trading_select_strategy", None);
-            if let Some(msg_ref) = q.message {
-                bot.edit_message_text(msg_ref.chat().id, msg_ref.id(), msg_text)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
-                    .await?;
-            }
+            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
+                .await?;
             
             dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForStrategy)).await?;
-        } else if data.starts_with("live_trading_") {
-            let strategy_id_str = data.strip_prefix("live_trading_").unwrap();
+        } else if data.starts_with("live_trading_strategy_") {
+            let strategy_id_str = data.trim_start_matches("live_trading_strategy_");
             if let Ok(strategy_id) = strategy_id_str.parse::<u64>() {
                 bot.answer_callback_query(q.id).await?;
                 
-                // Get strategy from database
-                if let Some(_strategy) = state.strategy_service.get_strategy_by_id(strategy_id).await? {
-                    // Get user's exchange tokens
-                    let tokens = exchange_tokens::Entity::find()
-                        .filter(exchange_tokens::Column::UserId.eq(telegram_id))
-                        .filter(exchange_tokens::Column::IsActive.eq(1))
-                        .all(state.db.as_ref())
-                        .await?;
-                    
-                    if tokens.is_empty() {
-                        let error_msg = i18n::translate(locale, "live_trading_no_tokens", None);
-                        bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg).await?;
-                        return Ok(());
-                    }
-                    
-                    // Show exchange selection
-                    let mut buttons = Vec::new();
-                    for token in &tokens {
-                        let exchange_name = match token.exchange.as_str() {
-                            "binance" => "🔵 Binance",
-                            "okx" => "🟢 OKX",
-                            _ => &token.exchange,
-                        };
-                        buttons.push(vec![
-                            InlineKeyboardButton::callback(
-                                exchange_name.to_string(),
-                                format!("live_trading_exchange_{}_{}", token.exchange, strategy_id)
-                            )
-                        ]);
-                    }
-                    buttons.push(vec![
+                // Get user's active tokens to select exchange
+                let exchange_tokens_list = exchange_tokens::Entity::find()
+                    .filter(exchange_tokens::Column::UserId.eq(telegram_id))
+                    .filter(exchange_tokens::Column::IsActive.eq(1))
+                    .all(state.db.as_ref())
+                    .await?;
+                
+                if exchange_tokens_list.is_empty() {
+                    let error_msg = i18n::translate(locale, "live_trading_no_tokens", None);
+                    bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg).await?;
+                    return Ok(());
+                }
+                
+                // Create buttons for exchanges
+                let mut exchange_buttons = Vec::new();
+                for token in &exchange_tokens_list {
+                    let exchange_name = match token.exchange.as_str() {
+                        "binance" => "🔵 Binance",
+                        "okx" => "🟢 OKX",
+                        _ => &token.exchange,
+                    };
+                    exchange_buttons.push(vec![
                         InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "trading_cancel"),
-                            "cancel_live_trading"
+                            exchange_name.to_string(),
+                            format!("live_trading_exchange_{}_{}", token.exchange, strategy_id)
                         )
                     ]);
-                    
-                    let msg_text = i18n::translate(locale, "live_trading_select_exchange", None);
-                    if let Some(msg_ref) = q.message {
-                        bot.edit_message_text(msg_ref.chat().id, msg_ref.id(), msg_text)
-                            .parse_mode(teloxide::types::ParseMode::Html)
-                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
-                            .await?;
-                    }
-                    
-                    dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchange {
-                        strategy_id,
-                    })).await?;
                 }
+                
+                exchange_buttons.push(vec![
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "trading_cancel"),
+                        "cancel_live_trading"
+                    )
+                ]);
+                
+                let msg_text = i18n::translate(locale, "live_trading_select_exchange", None);
+                bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons))
+                    .await?;
+                
+                dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchange {
+                    strategy_id,
+                })).await?;
             }
         } else if data.starts_with("live_trading_exchange_") {
-            bot.answer_callback_query(q.id).await?;
-            let parts: Vec<&str> = data.strip_prefix("live_trading_exchange_").unwrap().split('_').collect();
+            // Format: live_trading_exchange_{exchange}_{strategy_id}
+            let parts: Vec<&str> = data.trim_start_matches("live_trading_exchange_").split('_').collect();
             if parts.len() >= 2 {
                 let exchange = parts[0];
-                let strategy_id = parts[1].parse::<u64>().ok();
-                
-                if let Some(strategy_id) = strategy_id {
+                if let Ok(strategy_id) = parts[1].parse::<u64>() {
+                    bot.answer_callback_query(q.id).await?;
+                    
                     // Get token for this exchange
                     let token = exchange_tokens::Entity::find()
                         .filter(exchange_tokens::Column::UserId.eq(telegram_id))
@@ -368,20 +347,26 @@ pub async fn handle_live_trading_callback(
         } else if data == "cancel_live_trading" {
             bot.answer_callback_query(q.id).await?;
             dialogue.exit().await?;
+            
+            let cancel_msg = i18n::translate(locale, "trading_cancelled", None);
+            bot.send_message(q.message.as_ref().unwrap().chat().id, cancel_msg).await?;
         }
     }
     
     Ok(())
 }
 
-/// Handler for text input during live trading setup
+/// Handler for live trading input (API key, API secret)
 pub async fn handle_live_trading_input(
     bot: Bot,
     dialogue: MyDialogue,
     msg: Message,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
-    let telegram_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let telegram_id = msg.from.as_ref().map(|f| f.id.0 as i64).unwrap_or(0);
+    
+    // Get text first before moving msg
+    let text = msg.text().map(|t| t.to_string());
     
     // Get user locale
     let user = users::Entity::find_by_id(telegram_id)
@@ -395,8 +380,7 @@ pub async fn handle_live_trading_input(
         .unwrap_or("en");
     
     if let Ok(Some(BotState::LiveTrading(LiveTradingState::WaitingForApiKey { exchange }))) = dialogue.get().await {
-        if let Some(text) = msg.text() {
-            // Store API key temporarily and ask for API secret
+        if let Some(text) = text {
             let api_key = text.trim().to_string();
             
             if api_key.is_empty() {
@@ -422,7 +406,7 @@ pub async fn handle_live_trading_input(
             })).await?;
         }
     } else if let Ok(Some(BotState::LiveTrading(LiveTradingState::WaitingForApiSecret { exchange, api_key }))) = dialogue.get().await {
-        if let Some(text) = msg.text() {
+        if let Some(text) = text {
             let api_secret = text.trim().to_string();
             
             if api_secret.is_empty() {
@@ -611,3 +595,190 @@ async fn start_live_trading_with_exchange(
     Ok(())
 }
 
+/// Handler for /mytrading command to view current live trading status
+pub async fn handle_my_trading(
+    bot: Bot,
+    msg: Message,
+    state: Arc<AppState>,
+) -> Result<(), anyhow::Error> {
+    let from = msg.from.unwrap();
+    let telegram_id = from.id.0 as i64;
+    
+    // Get user locale
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    // Check if user is trading
+    if !state.strategy_executor.is_user_trading(telegram_id).await {
+        let msg_text = if locale == "vi" {
+            "❌ Bạn chưa có live trading nào đang chạy.\n\n\
+            Sử dụng /livetrading để bắt đầu live trading."
+        } else {
+            "❌ You don't have any live trading running.\n\n\
+            Use /livetrading to start live trading."
+        };
+        
+        bot.send_message(msg.chat.id, msg_text)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await?;
+        return Ok(());
+    }
+    
+    // Get user's trading details
+    if let Some((strategy_name, pair, timeframe)) = state.strategy_executor
+        .get_user_trading_details(telegram_id).await 
+    {
+        // Get exchange token info
+        let token = exchange_tokens::Entity::find()
+            .filter(exchange_tokens::Column::UserId.eq(telegram_id))
+            .filter(exchange_tokens::Column::IsActive.eq(1))
+            .one(state.db.as_ref())
+            .await?;
+        
+        let exchange_name = token.as_ref()
+            .map(|t| match t.exchange.as_str() {
+                "binance" => "🔵 Binance",
+                "okx" => "🟢 OKX",
+                _ => &t.exchange,
+            })
+            .unwrap_or("Unknown");
+        
+        let status_msg = if locale == "vi" {
+            format!(
+                "📊 <b>Live Trading Status</b>\n\n\
+                ✅ <b>Trạng thái:</b> Đang chạy\n\n\
+                📈 <b>Strategy:</b> {}\n\
+                💱 <b>Pair:</b> {}\n\
+                ⏰ <b>Timeframe:</b> {}\n\
+                🌐 <b>Exchange:</b> {}\n\n\
+                ⚠️ <i>Live trading đang monitor thị trường và sẽ gửi signals khi có tín hiệu.</i>",
+                strategy_name, pair, timeframe, exchange_name
+            )
+        } else {
+            format!(
+                "📊 <b>Live Trading Status</b>\n\n\
+                ✅ <b>Status:</b> Running\n\n\
+                📈 <b>Strategy:</b> {}\n\
+                💱 <b>Pair:</b> {}\n\
+                ⏰ <b>Timeframe:</b> {}\n\
+                🌐 <b>Exchange:</b> {}\n\n\
+                ⚠️ <i>Live trading is monitoring the market and will send signals when detected.</i>",
+                strategy_name, pair, timeframe, exchange_name
+            )
+        };
+        
+        // Create stop button
+        let stop_button = InlineKeyboardButton::callback(
+            if locale == "vi" {
+                "🛑 Dừng Live Trading"
+            } else {
+                "🛑 Stop Live Trading"
+            },
+            format!("stop_live_trading_{}", telegram_id)
+        );
+        
+        let buttons = vec![vec![stop_button]];
+        
+        bot.send_message(msg.chat.id, status_msg)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
+            .await?;
+    }
+    
+    Ok(())
+}
+
+/// Handler for stop trading callback
+pub async fn handle_stop_trading_callback(
+    bot: Bot,
+    q: CallbackQuery,
+    state: Arc<AppState>,
+) -> Result<(), anyhow::Error> {
+    if let Some(data) = q.data {
+        if data.starts_with("stop_live_trading_") {
+            let user_id_str = data.trim_start_matches("stop_live_trading_");
+            if let Ok(user_id) = user_id_str.parse::<i64>() {
+                // Verify this is the user's own trading
+                let callback_user_id = q.from.id.0 as i64;
+                if user_id != callback_user_id {
+                    // Get user locale
+                    let user = users::Entity::find_by_id(callback_user_id)
+                        .one(state.db.as_ref())
+                        .await?;
+                    let locale = user
+                        .as_ref()
+                        .and_then(|u| u.language.as_ref())
+                        .map(|l| i18n::get_user_language(Some(l)))
+                        .unwrap_or("en");
+                    
+                    bot.answer_callback_query(q.id)
+                        .text(if locale == "vi" {
+                            "❌ Bạn chỉ có thể dừng trading của chính mình."
+                        } else {
+                            "❌ You can only stop your own trading."
+                        })
+                        .await?;
+                    return Ok(());
+                }
+                
+                // Get user locale
+                let user = users::Entity::find_by_id(user_id)
+                    .one(state.db.as_ref())
+                    .await?;
+                let locale = user
+                    .as_ref()
+                    .and_then(|u| u.language.as_ref())
+                    .map(|l| i18n::get_user_language(Some(l)))
+                    .unwrap_or("en");
+                
+                // Stop trading
+                match state.strategy_executor.stop_trading(user_id).await {
+                    Ok(_) => {
+                        bot.answer_callback_query(q.id)
+                            .text(if locale == "vi" {
+                                "✅ Đã dừng live trading"
+                            } else {
+                                "✅ Live trading stopped"
+                            })
+                            .await?;
+                        
+                        // Update message
+                        if let Some(msg) = q.message {
+                            let success_msg = if locale == "vi" {
+                                "✅ <b>Live Trading đã được dừng</b>\n\n\
+                                Bạn có thể bắt đầu lại bằng lệnh /livetrading"
+                            } else {
+                                "✅ <b>Live Trading Stopped</b>\n\n\
+                                You can start again using /livetrading"
+                            };
+                            
+                            bot.edit_message_text(msg.chat().id, msg.id(), success_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await?;
+                        }
+                    }
+                    Err(e) => {
+                        let error_msg = if locale == "vi" {
+                            format!("❌ Lỗi khi dừng trading: {}", e)
+                        } else {
+                            format!("❌ Error stopping trading: {}", e)
+                        };
+                        
+                        bot.answer_callback_query(q.id)
+                            .text(&error_msg)
+                            .await?;
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
