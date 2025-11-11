@@ -203,7 +203,27 @@ live_trading_enter_api_secret: "📝 <b>Enter API Secret for {exchange}</b>\n\nP
 live_trading_invalid_api_key: "❌ <b>Invalid API Key</b>\n\nAPI Key cannot be empty. Please try again."
 live_trading_invalid_api_secret: "❌ <b>Invalid API Secret</b>\n\nAPI Secret cannot be empty. Please try again."
 live_trading_token_saved: "✅ <b>Token Saved Successfully!</b>\n\n🔐 <b>Exchange:</b> {exchange}\n\nYour API credentials have been saved and encrypted.\n\nYou can now use /livetrading to start live trading."
-live_trading_started: "✅ <b>Live Trading Started!</b>\n\n🔐 <b>Exchange:</b> {exchange}\n📊 <b>Strategy:</b> {strategy}\n\n⚠️ <b>Warning:</b> This will execute real trades using your exchange account. Make sure you understand the risks."
+live_trading_started: |
+  🚀 <b>LIVE TRADING ACTIVATED!</b>
+  
+  ════════════════════════════
+  🎯 <b>TRADING CONFIGURATION</b>
+  ════════════════════════════
+  
+  📊 <b>Strategy:</b> {strategy}
+  💱 <b>Trading Pair:</b> {pair}
+  ⏰ <b>Timeframe:</b> {timeframe}
+  🌐 <b>Exchange:</b> {exchange}
+  
+  ════════════════════════════
+  ⚡ <b>STATUS: ACTIVE</b> ⚡
+  ════════════════════════════
+  
+  📡 <i>Market monitoring is now active. Trading signals will be sent to you automatically when detected.</i>
+  
+  ⚠️ <b>IMPORTANT:</b> This is executing real trades with real money. Monitor your positions carefully.
+  
+  💡 <i>Use /mytrading to view your active trading session</i>
 live_trading_start_error: "❌ <b>Error Starting Live Trading</b>\n\n<b>Error:</b> {error}\n\nPlease check your API credentials and try again."
 
 # My Trading / Stop Trading
@@ -229,6 +249,14 @@ stop_trading_not_found: "ℹ️ You are not currently trading"
 stop_trading_not_yours: "❌ You can only stop your own trading."
 stop_trading_session_not_active: "ℹ️ This session is not active"
 stop_trading_session_not_found: "❌ Session not found"
+
+# Live Trading Callback Feedback
+live_trading_selecting_strategy: "📊 Selecting strategy..."
+live_trading_starting: "🚀 Starting live trading with {exchange}..."
+live_trading_strategy_not_found: "❌ Strategy not found"
+live_trading_token_not_found: "❌ Token not found"
+live_trading_cancelled: "❌ Cancelled"
+stop_trading_confirmed: "✅ Confirmed stop: {strategy}"
 
 # Tokens Management
 tokens_no_tokens: "❌ <b>No Tokens Found</b>\n\nYou haven't configured any exchange tokens yet.\n\nUse /livetrading to set up your first exchange token."

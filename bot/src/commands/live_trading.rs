@@ -174,38 +174,87 @@ pub async fn handle_live_trading_callback(
     
     if let Some(data) = q.data {
         if data == "live_trading_setup_binance" {
-            bot.answer_callback_query(q.id).await?;
-            
             let exchange_name = "🔵 Binance";
-            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
-            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
-                .parse_mode(teloxide::types::ParseMode::Html)
+            let callback_id = q.id.clone();
+            bot.answer_callback_query(callback_id)
+                .text(exchange_name)
                 .await?;
+            
+            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
+            if let Some(msg) = q.message {
+                // Edit message to show next step and remove buttons
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Remove buttons
+                    .await
+                {
+                    // If edit fails, send new message
+                    bot.send_message(msg.chat().id, msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                }
+            } else {
+                bot.send_message(q.from.id, msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+            }
             
             dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForApiKey {
                 exchange: "binance".to_string(),
             })).await?;
         } else if data == "live_trading_setup_okx" {
-            bot.answer_callback_query(q.id).await?;
-            
             let exchange_name = "🟢 OKX";
-            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
-            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
-                .parse_mode(teloxide::types::ParseMode::Html)
+            let callback_id = q.id.clone();
+            bot.answer_callback_query(callback_id)
+                .text(exchange_name)
                 .await?;
+            
+            let msg_text = i18n::translate(locale, "live_trading_enter_api_key", Some(&[("exchange", exchange_name)]));
+            if let Some(msg) = q.message {
+                // Edit message to show next step and remove buttons
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Remove buttons
+                    .await
+                {
+                    // If edit fails, send new message
+                    bot.send_message(msg.chat().id, msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await?;
+                }
+            } else {
+                bot.send_message(q.from.id, msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .await?;
+            }
             
             dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForApiKey {
                 exchange: "okx".to_string(),
             })).await?;
         } else if data == "live_trading_show_strategies" {
-            bot.answer_callback_query(q.id).await?;
+            let callback_id = q.id.clone();
+            let selection_text = i18n::translate(locale, "live_trading_selecting_strategy", None);
+            bot.answer_callback_query(callback_id)
+                .text(&selection_text)
+                .await?;
             
             // Get user's strategies
             let strategies_list = state.strategy_service.get_user_strategies(telegram_id).await?;
             
             if strategies_list.is_empty() {
                 let msg_text = i18n::translate(locale, "trading_no_strategies", None);
-                bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text).await?;
+                if let Some(msg) = q.message {
+                    // Edit message to show error and remove buttons
+                    if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                        .await
+                    {
+                        bot.send_message(msg.chat().id, msg_text).await?;
+                    }
+                } else {
+                    bot.send_message(q.from.id, msg_text).await?;
+                }
                 return Ok(());
             }
             
@@ -231,16 +280,44 @@ pub async fn handle_live_trading_callback(
             ]);
             
             let msg_text = i18n::translate(locale, "live_trading_select_strategy", None);
-            bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
-                .parse_mode(teloxide::types::ParseMode::Html)
-                .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
-                .await?;
+            if let Some(msg) = q.message {
+                // Edit message to show strategy selection
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons.clone()))
+                    .await
+                {
+                    // If edit fails, send new message
+                    bot.send_message(msg.chat().id, msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
+                        .await?;
+                }
+            } else {
+                bot.send_message(q.from.id, msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(strategy_buttons))
+                    .await?;
+            }
             
             dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForStrategy)).await?;
         } else if data.starts_with("live_trading_strategy_") {
             let strategy_id_str = data.trim_start_matches("live_trading_strategy_");
             if let Ok(strategy_id) = strategy_id_str.parse::<u64>() {
-                bot.answer_callback_query(q.id).await?;
+                // Get strategy name first for feedback
+                let strategy_name = if let Some(strategy) = state.strategy_service.get_strategy_by_id(strategy_id).await? {
+                    strategy.name.as_ref()
+                        .map(|n| n.clone())
+                        .unwrap_or_else(|| format!("Strategy #{}", strategy_id))
+                } else {
+                    format!("Strategy #{}", strategy_id)
+                };
+                
+                // Answer callback with user's selection
+                let callback_id = q.id.clone();
+                bot.answer_callback_query(callback_id)
+                    .text(&strategy_name)
+                    .await?;
                 
                 // Get user's active tokens to select exchange
                 let exchange_tokens_list = exchange_tokens::Entity::find()
@@ -251,7 +328,18 @@ pub async fn handle_live_trading_callback(
                 
                 if exchange_tokens_list.is_empty() {
                     let error_msg = i18n::translate(locale, "live_trading_no_tokens", None);
-                    bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg).await?;
+                    if let Some(msg) = q.message {
+                        // Edit message to show error and remove buttons
+                        if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &error_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                            .await
+                        {
+                            bot.send_message(msg.chat().id, error_msg).await?;
+                        }
+                    } else {
+                        bot.send_message(q.from.id, error_msg).await?;
+                    }
                     return Ok(());
                 }
                 
@@ -279,10 +367,25 @@ pub async fn handle_live_trading_callback(
                 ]);
                 
                 let msg_text = i18n::translate(locale, "live_trading_select_exchange", None);
-                bot.send_message(q.message.as_ref().unwrap().chat().id, msg_text)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons))
-                    .await?;
+                if let Some(msg) = q.message {
+                    // Edit message to show exchange selection
+                    if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons.clone()))
+                        .await
+                    {
+                        // If edit fails, send new message
+                        bot.send_message(msg.chat().id, msg_text)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons))
+                            .await?;
+                    }
+                } else {
+                    bot.send_message(q.from.id, msg_text)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(exchange_buttons))
+                        .await?;
+                }
                 
                 dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchange {
                     strategy_id,
@@ -294,7 +397,18 @@ pub async fn handle_live_trading_callback(
             if parts.len() >= 2 {
                 let exchange = parts[0];
                 if let Ok(strategy_id) = parts[1].parse::<u64>() {
-                    bot.answer_callback_query(q.id).await?;
+                    // Get exchange name for feedback
+                    let exchange_name = match exchange {
+                        "binance" => "🔵 Binance",
+                        "okx" => "🟢 OKX",
+                        _ => exchange,
+                    };
+                    
+                    // Answer callback with user's selection
+                    let callback_id = q.id.clone();
+                    bot.answer_callback_query(callback_id)
+                        .text(exchange_name)
+                        .await?;
                     
                     // Get token for this exchange
                     let token = exchange_tokens::Entity::find()
@@ -309,6 +423,30 @@ pub async fn handle_live_trading_callback(
                         if let Some(_strategy) = state.strategy_service.get_strategy_by_id(strategy_id).await? {
                             match state.strategy_service.strategy_to_config(&_strategy) {
                                 Ok(config) => {
+                                    // Clone config fields before moving config
+                                    let pair = config.pair.clone();
+                                    let timeframe = config.timeframe.clone();
+                                    
+                                    // Store message info before moving
+                                    let msg_info = q.message.as_ref().map(|m| (m.chat().id, m.id()));
+                                    
+                                    // Show "Starting..." message and remove buttons
+                                    let starting_msg = i18n::translate(locale, "live_trading_starting", Some(&[("exchange", exchange_name)]));
+                                    
+                                    if let Some((chat_id, msg_id)) = msg_info {
+                                        // Edit message to show starting status and remove buttons
+                                        if let Err(e) = bot.edit_message_text(chat_id, msg_id, &starting_msg)
+                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                            .await
+                                        {
+                                            // If edit fails, send new message
+                                            bot.send_message(chat_id, &starting_msg)
+                                                .parse_mode(teloxide::types::ParseMode::Html)
+                                                .await?;
+                                        }
+                                    }
+                                    
                                     // Start live trading with exchange API
                                     // Get user chat ID from callback query
                                     let user_chat_id = q.from.id.0 as i64;
@@ -323,13 +461,39 @@ pub async fn handle_live_trading_callback(
                                         Some(strategy_id), // Pass strategy_id
                                     ).await {
                                         Ok(_) => {
+                                            let strategy_name = _strategy.name.as_ref()
+                                                .unwrap_or(&format!("Strategy #{}", strategy_id))
+                                                .clone();
+                                            let exchange_name = match exchange {
+                                                "binance" => "🔵 Binance",
+                                                "okx" => "🟢 OKX",
+                                                _ => exchange,
+                                            };
+                                            
                                             let success_msg = i18n::translate(locale, "live_trading_started", Some(&[
-                                                ("exchange", exchange),
-                                                ("strategy", &_strategy.name.as_ref().unwrap_or(&format!("Strategy #{}", strategy_id))),
+                                                ("exchange", exchange_name),
+                                                ("strategy", &strategy_name),
+                                                ("pair", &pair),
+                                                ("timeframe", &timeframe),
                                             ]));
-                                            bot.send_message(q.message.as_ref().unwrap().chat().id, success_msg)
-                                                .parse_mode(teloxide::types::ParseMode::Html)
-                                                .await?;
+                                            
+                                            if let Some((chat_id, msg_id)) = msg_info {
+                                                // Edit message to show success
+                                                if let Err(e) = bot.edit_message_text(chat_id, msg_id, &success_msg)
+                                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                                    .await
+                                                {
+                                                    // If edit fails, send new message
+                                                    bot.send_message(chat_id, &success_msg)
+                                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                                        .await?;
+                                                }
+                                            } else {
+                                                bot.send_message(q.from.id, success_msg)
+                                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                                    .await?;
+                                            }
                                             
                                             // Exit dialogue after successful start
                                             dialogue.exit().await?;
@@ -338,9 +502,24 @@ pub async fn handle_live_trading_callback(
                                             let error_msg = i18n::translate(locale, "live_trading_start_error", Some(&[
                                                 ("error", &e.to_string()),
                                             ]));
-                                            bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg)
-                                                .parse_mode(teloxide::types::ParseMode::Html)
-                                                .await?;
+                                            
+                                            if let Some((chat_id, msg_id)) = msg_info {
+                                                // Edit message to show error
+                                                if let Err(e) = bot.edit_message_text(chat_id, msg_id, &error_msg)
+                                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                                    .await
+                                                {
+                                                    // If edit fails, send new message
+                                                    bot.send_message(chat_id, &error_msg)
+                                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                                        .await?;
+                                                }
+                                            } else {
+                                                bot.send_message(q.from.id, error_msg)
+                                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                                    .await?;
+                                            }
                                             
                                             // Exit dialogue even on error
                                             dialogue.exit().await?;
@@ -351,7 +530,19 @@ pub async fn handle_live_trading_callback(
                                     let error_msg = i18n::translate(locale, "trading_config_error", Some(&[
                                         ("error", &e.to_string()),
                                     ]));
-                                    bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg).await?;
+                                    
+                                    if let Some(msg) = q.message {
+                                        // Edit message to show error and remove buttons
+                                        if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &error_msg)
+                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                            .await
+                                        {
+                                            bot.send_message(msg.chat().id, error_msg).await?;
+                                        }
+                                    } else {
+                                        bot.send_message(q.from.id, error_msg).await?;
+                                    }
                                     
                                     // Exit dialogue on config error
                                     dialogue.exit().await?;
@@ -359,20 +550,59 @@ pub async fn handle_live_trading_callback(
                             }
                         } else {
                             // Strategy not found - exit dialogue
+                            let error_msg = i18n::translate(locale, "live_trading_strategy_not_found", None);
+                            
+                            if let Some(msg) = q.message {
+                                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &error_msg)
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                    .await
+                                {
+                                    bot.send_message(msg.chat().id, &error_msg).await?;
+                                }
+                            }
                             dialogue.exit().await?;
                         }
                     } else {
                         // Token not found - exit dialogue
+                        let error_msg = i18n::translate(locale, "live_trading_token_not_found", None);
+                        
+                        if let Some(msg) = q.message {
+                            if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &error_msg)
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                                .await
+                            {
+                                bot.send_message(msg.chat().id, &error_msg).await?;
+                            }
+                        }
                         dialogue.exit().await?;
                     }
                 }
             }
         } else if data == "cancel_live_trading" {
-            bot.answer_callback_query(q.id).await?;
+            let callback_id = q.id.clone();
+            let cancel_text = i18n::get_button_text(locale, "live_trading_cancelled");
+            bot.answer_callback_query(callback_id)
+                .text(&cancel_text)
+                .await?;
+            
             dialogue.exit().await?;
             
             let cancel_msg = i18n::translate(locale, "trading_cancelled", None);
-            bot.send_message(q.message.as_ref().unwrap().chat().id, cancel_msg).await?;
+            if let Some(msg) = q.message {
+                // Edit message to show cancellation and remove buttons
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &cancel_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![]))
+                    .await
+                {
+                    // If edit fails, send new message
+                    bot.send_message(msg.chat().id, cancel_msg).await?;
+                }
+            } else {
+                bot.send_message(q.from.id, cancel_msg).await?;
+            }
         }
     }
     
@@ -1023,11 +1253,7 @@ pub async fn handle_stop_trading_callback(
                     
                     // Answer callback with confirmation
                     let callback_id = q.id.clone();
-                    let confirm_text = if locale == "vi" {
-                        format!("✅ Đã xác nhận dừng: {}", strategy_name)
-                    } else {
-                        format!("✅ Confirmed stop: {}", strategy_name)
-                    };
+                    let confirm_text = i18n::translate(locale, "stop_trading_confirmed", Some(&[("strategy", &strategy_name)]));
                     bot.answer_callback_query(callback_id)
                         .text(&confirm_text)
                         .await?;
@@ -1129,13 +1355,9 @@ pub async fn handle_stop_trading_callback(
         } else if data == "stop_cancel" {
             // Cancel stop operation
             let callback_id = q.id.clone();
-            let cancel_text = if locale == "vi" {
-                "❌ Đã hủy"
-            } else {
-                "❌ Cancelled"
-            };
+            let cancel_text = i18n::get_button_text(locale, "live_trading_cancelled");
             bot.answer_callback_query(callback_id)
-                .text(cancel_text)
+                .text(&cancel_text)
                 .await?;
             
             if let Some(msg) = q.message {

@@ -333,6 +333,14 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "stop_trading_confirm_no") => "❌ Hủy".to_string(),
         ("en", "stop_trading_confirm_no") => "❌ Cancel".to_string(),
         
+        // Live trading callback feedback buttons
+        ("vi", "live_trading_cancelled") => "❌ Đã hủy".to_string(),
+        ("en", "live_trading_cancelled") => "❌ Cancelled".to_string(),
+        
+        // My trading buttons
+        ("vi", "mytrading_stop_button") => "🛑 Dừng Live Trading".to_string(),
+        ("en", "mytrading_stop_button") => "🛑 Stop Live Trading".to_string(),
+        
         // Default fallback
         _ => key.to_string(),
     }
