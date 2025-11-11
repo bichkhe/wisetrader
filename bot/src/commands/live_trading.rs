@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use anyhow::Result;
+use teloxide::dispatching::dialogue;
 use teloxide::prelude::*;
 use teloxide::types::InlineKeyboardButton;
 use sea_orm::{EntityTrait, ActiveValue, ColumnTrait, QueryFilter};
@@ -322,6 +323,9 @@ pub async fn handle_live_trading_callback(
                                             bot.send_message(q.message.as_ref().unwrap().chat().id, success_msg)
                                                 .parse_mode(teloxide::types::ParseMode::Html)
                                                 .await?;
+                                            
+                                            // Exit dialogue after successful start
+                                            dialogue.exit().await?;
                                         }
                                         Err(e) => {
                                             let error_msg = i18n::translate(locale, "live_trading_start_error", Some(&[
@@ -330,6 +334,9 @@ pub async fn handle_live_trading_callback(
                                             bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg)
                                                 .parse_mode(teloxide::types::ParseMode::Html)
                                                 .await?;
+                                            
+                                            // Exit dialogue even on error
+                                            dialogue.exit().await?;
                                         }
                                     }
                                 }
@@ -338,9 +345,18 @@ pub async fn handle_live_trading_callback(
                                         ("error", &e.to_string()),
                                     ]));
                                     bot.send_message(q.message.as_ref().unwrap().chat().id, error_msg).await?;
+                                    
+                                    // Exit dialogue on config error
+                                    dialogue.exit().await?;
                                 }
                             }
+                        } else {
+                            // Strategy not found - exit dialogue
+                            dialogue.exit().await?;
                         }
+                    } else {
+                        // Token not found - exit dialogue
+                        dialogue.exit().await?;
                     }
                 }
             }
@@ -591,7 +607,6 @@ async fn start_live_trading_with_exchange(
         token.exchange.clone(),
         strategy_config.pair.clone(),
     );
-    
     Ok(())
 }
 
