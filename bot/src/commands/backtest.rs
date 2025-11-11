@@ -510,6 +510,8 @@ async fn update_html_report_with_ai_analysis(
     tables: &[(String, String)],
     ai_analysis: String,
 ) -> Result<(), anyhow::Error> {
+    tracing::info!("📝 Updating HTML report with AI analysis (length: {} chars) at: {}", ai_analysis.len(), filepath.display());
+    
     // Re-create template with AI analysis
     let template = BacktestReportTemplate::new(
         strategy_name.to_string(),
@@ -530,6 +532,14 @@ async fn update_html_report_with_ai_analysis(
         result.stdout.clone(),
         Some(ai_analysis),
     );
+    
+    // Check if ai_analysis_html was generated
+    if template.ai_analysis_html.is_none() {
+        tracing::warn!("⚠️ ai_analysis_html is None after template creation!");
+    } else {
+        tracing::info!("✅ ai_analysis_html generated successfully (length: {} chars)", 
+            template.ai_analysis_html.as_ref().map(|s| s.len()).unwrap_or(0));
+    }
     
     // Render template
     let html_content = template.render()?;
@@ -1385,8 +1395,16 @@ pub async fn handle_backtest_callback(
                                         };
                                         
                                         // Spawn background task to generate AI analysis and update HTML report
+                                        tracing::info!(
+                                            "🔍 Checking Gemini analysis conditions: enable_gemini_analysis={}, html_report_filepath.is_some()={}, gemini_api_key.is_some()={}",
+                                            config.enable_gemini_analysis,
+                                            html_report_filepath.is_some(),
+                                            config.gemini_api_key.is_some()
+                                        );
+                                        
                                         if config.enable_gemini_analysis && html_report_filepath.is_some() {
                                             if let Some(ref api_key) = config.gemini_api_key {
+                                                tracing::info!("✅ Starting Gemini AI analysis background task...");
                                                 use crate::services::gemini::GeminiService;
                                                 
                                                 // Determine language based on user locale (before moving into task)
@@ -1454,7 +1472,7 @@ pub async fn handle_backtest_callback(
                                                     
                                                     match analysis_result {
                                                         Ok(analysis) => {
-                                                            tracing::info!("✅ Gemini AI analysis generated successfully");
+                                                            tracing::info!("✅ Gemini AI analysis generated successfully (length: {} chars)", analysis.len());
                                                             
                                                             // Update HTML report with AI analysis
                                                             if let Err(e) = update_html_report_with_ai_analysis(
@@ -1470,6 +1488,8 @@ pub async fn handle_backtest_callback(
                                                                 analysis,
                                                             ).await {
                                                                 tracing::error!("⚠️ Failed to update HTML report with AI analysis: {}", e);
+                                                            } else {
+                                                                tracing::info!("✅ HTML report successfully updated with AI analysis at: {}", filepath.display());
                                                             }
                                                         }
                                                         Err(e) => {
@@ -1478,7 +1498,14 @@ pub async fn handle_backtest_callback(
                                                     }
                                                 });
                                             } else {
-                                                tracing::debug!("Gemini API key not configured, skipping AI analysis");
+                                                tracing::warn!("⚠️ Gemini API key not configured, skipping AI analysis");
+                                            }
+                                        } else {
+                                            if !config.enable_gemini_analysis {
+                                                tracing::debug!("Gemini analysis is disabled in config");
+                                            }
+                                            if html_report_filepath.is_none() {
+                                                tracing::debug!("HTML report filepath is None, skipping AI analysis");
                                             }
                                         }
                                         
