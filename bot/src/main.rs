@@ -27,7 +27,7 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_tokens, handle_tokens_callback,
     handle_back, handle_deposit, handle_balance, handle_deposit_callback,
     handle_ai, handle_my_trading, handle_stop_trading_callback,
-    handle_pnl,
+    handle_pnl, handle_command_invalid,
     Command},  state::AppState};
 use state::{BotState, BacktestState};
 
@@ -53,6 +53,7 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::Ai(_question)].endpoint(handle_ai))
                 .branch(case![Command::MyTrading].endpoint(handle_my_trading))
                 .branch(case![Command::Pnl].endpoint(handle_pnl))
+                .branch(dptree::endpoint(handle_command_invalid))
         );
 
     let message_handler = Update::filter_message()
@@ -69,6 +70,9 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(dptree::endpoint(handle_invalid));
 
     let callback_query_handler = Update::filter_callback_query()
+        // IMPORTANT: Filter-based handlers (that check callback data) MUST come BEFORE state-based handlers
+        // to ensure they get matched first, regardless of dialogue state
+        
         // Handle delete strategy callbacks from any state FIRST (before other handlers)
         .branch(
             dptree::filter(|q: CallbackQuery| {
@@ -82,13 +86,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             })
             .endpoint(handle_delete_strategy_callback)
         )
+        // Handle language selection callbacks (lang_select_vi, lang_select_en, cancel_language) from any state
         .branch(
-            // Language selection can happen in WaitingForLanguage state
-            case![BotState::WaitingForLanguage]
-                .endpoint(handle_language_selection)
-        )
-        .branch(
-            // Handle language selection callbacks (lang_select_vi, lang_select_en, cancel_language) from any state
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| 
                     d == "lang_select_vi" || 
@@ -98,35 +97,34 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             })
             .endpoint(handle_language_callback)
         )
+        // Handle payment/deposit callbacks from any state
         .branch(
-            // Handle profile callbacks (like change language button) in Normal state
-            case![BotState::Normal]
-                .endpoint(handle_profile_callback)
-        )
-        .branch(
-            case![BotState::CreateStrategy(pk)]
-                .endpoint(handle_strategy_callback)
-        )
-        .branch(
-            case![BotState::Backtest(pk)]
-                .endpoint(handle_backtest_callback)
-        )
-        .branch(
-            // Handle payment/deposit callbacks from any state
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| d.starts_with("deposit_") || d == "deposit_cancel" || d == "deposit_start").unwrap_or(false)
             })
             .endpoint(handle_deposit_callback)
         )
+        // Handle start trading callbacks from any state
         .branch(
-            // Handle start trading callbacks from any state
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| d.starts_with("start_trading_") || d == "cancel_start_trading").unwrap_or(false)
             })
             .endpoint(handle_start_trading_callback)
         )
+        // Handle stop trading callbacks from any state - MUST BE BEFORE live_trading_ to avoid conflicts
         .branch(
-            // Handle live trading callbacks from any state
+            dptree::filter(|q: CallbackQuery| {
+                q.data.as_ref().map(|d| 
+                    d.starts_with("stop_live_trading_") ||
+                    d.starts_with("stop_session_") ||
+                    d.starts_with("stop_confirm_") ||
+                    d == "stop_cancel"
+                ).unwrap_or(false)
+            })
+            .endpoint(handle_stop_trading_callback)
+        )
+        // Handle live trading callbacks from any state
+        .branch(
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| 
                     d.starts_with("live_trading_") || 
@@ -137,8 +135,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             })
             .endpoint(handle_live_trading_callback)
         )
+        // Handle tokens callbacks from any state
         .branch(
-            // Handle tokens callbacks from any state
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| 
                     d.starts_with("tokens_") || 
@@ -148,12 +146,25 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             })
             .endpoint(handle_tokens_callback)
         )
+        // State-based handlers (check dialogue state) come AFTER filter-based handlers
         .branch(
-            // Handle stop trading callbacks from any state
-            dptree::filter(|q: CallbackQuery| {
-                q.data.as_ref().map(|d| d.starts_with("stop_live_trading_")).unwrap_or(false)
-            })
-            .endpoint(handle_stop_trading_callback)
+            // Language selection can happen in WaitingForLanguage state
+            case![BotState::WaitingForLanguage]
+                .endpoint(handle_language_selection)
+        )
+        .branch(
+            // Handle profile callbacks (like change language button) in Normal state
+            // This should only handle "profile_change_language" - other callbacks should be handled above
+            case![BotState::Normal]
+                .endpoint(handle_profile_callback)
+        )
+        .branch(
+            case![BotState::CreateStrategy(pk)]
+                .endpoint(handle_strategy_callback)
+        )
+        .branch(
+            case![BotState::Backtest(pk)]
+                .endpoint(handle_backtest_callback)
         );
         
 

@@ -135,62 +135,65 @@ pub async fn handle_profile_callback(
     q: CallbackQuery,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
+    // Only handle profile-specific callbacks
+    // Other callbacks should be handled by filter-based handlers that come before this
     if let Some(data) = q.data {
-        match data.as_str() {
-            "profile_change_language" => {
-                // Show language selection buttons
-                let user_id = q.from.id.0 as i64;
-                let user = shared::entity::users::Entity::find_by_id(user_id)
-                    .one(state.db.as_ref())
+        if data == "profile_change_language" {
+            // Show language selection buttons
+            let user_id = q.from.id.0 as i64;
+            let user = shared::entity::users::Entity::find_by_id(user_id)
+                .one(state.db.as_ref())
+                .await?;
+            let locale = user
+                .as_ref()
+                .and_then(|u| u.language.as_ref())
+                .map(|l| i18n::get_user_language(Some(l)))
+                .unwrap_or("en");
+            
+            let lang_buttons = vec![
+                vec![
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "lang_selection_button_vi"),
+                        "lang_select_vi"
+                    ),
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "lang_selection_button_en"),
+                        "lang_select_en"
+                    ),
+                ],
+                vec![
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "button_cancel"),
+                        "cancel_language"
+                    ),
+                ],
+            ];
+            
+            let selection_msg = i18n::translate(locale, "lang_selection_title", None);
+            
+            bot.answer_callback_query(q.id).await?;
+            
+            if let Some(msg) = q.message {
+                bot.edit_message_text(msg.chat().id, msg.id(), selection_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(lang_buttons))
                     .await?;
-                let locale = user
-                    .as_ref()
-                    .and_then(|u| u.language.as_ref())
-                    .map(|l| i18n::get_user_language(Some(l)))
-                    .unwrap_or("en");
-                
-                let lang_buttons = vec![
-                    vec![
-                        InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "lang_selection_button_vi"),
-                            "lang_select_vi"
-                        ),
-                        InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "lang_selection_button_en"),
-                            "lang_select_en"
-                        ),
-                    ],
-                    vec![
-                        InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "button_cancel"),
-                            "cancel_language"
-                        ),
-                    ],
-                ];
-                
-                let selection_msg = i18n::translate(locale, "lang_selection_title", None);
-                
-                bot.answer_callback_query(q.id).await?;
-                
-                if let Some(msg) = q.message {
-                    bot.edit_message_text(msg.chat().id, msg.id(), selection_msg)
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(lang_buttons))
-                        .await?;
-                } else {
-                    // If no message (shouldn't happen), send new message
-                    bot.send_message(q.from.id, selection_msg)
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .reply_markup(teloxide::types::InlineKeyboardMarkup::new(lang_buttons))
-                        .await?;
-                }
-                
-                // Set dialogue state to waiting for language
-                dialogue.update(BotState::WaitingForLanguage).await?;
+            } else {
+                // If no message (shouldn't happen), send new message
+                bot.send_message(q.from.id, selection_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(lang_buttons))
+                    .await?;
             }
-            _ => {
-                bot.answer_callback_query(q.id).await?;
-            }
+            
+            // Set dialogue state to waiting for language
+            dialogue.update(BotState::WaitingForLanguage).await?;
+        } else {
+            // Not a profile callback - return early to let other handlers process it
+            // This should not happen if filter-based handlers are set up correctly,
+            // but we return early to be safe
+            tracing::debug!("handle_profile_callback: Not a profile callback, ignoring: {:?}", data);
+            return Ok(());
         }
     }
     

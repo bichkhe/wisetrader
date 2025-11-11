@@ -248,6 +248,60 @@ pub async fn handle_invalid(
     Ok(())
 }
 
+/// Handler for invalid commands - shows current state for debugging
+pub async fn handle_command_invalid(
+    bot: Bot,
+    dialogue: MyDialogue,
+    msg: Message,
+    state: Arc<AppState>,
+) -> anyhow::Result<()> {
+    use crate::state::{BotState, CreateStrategyState, BacktestState, LiveTradingState};
+    use crate::i18n;
+    use shared::entity::users;
+    use tracing::debug;
+    
+    // Get user locale
+    let telegram_id = msg.from.as_ref().map(|f| f.id.0 as i64).unwrap_or(0);
+    let user = users::Entity::find_by_id(telegram_id)
+        .one(state.db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    // Get command text for debugging
+    let command_text = msg.text().unwrap_or("").to_string();
+    
+    // Get dialogue state
+    let dialogue_state = dialogue.get().await?;
+    let state_info = if let Some(bot_state) = dialogue_state {
+        format!("{:?}", bot_state)
+    } else {
+        "None".to_string()
+    };
+    
+    // Log for debugging
+    debug!("🔍 [User {}] Invalid command received: '{}', Current state: {}", 
+        telegram_id, command_text, state_info);
+    
+    // Build debug message
+    let debug_msg = format!(
+        "❌ <b>Invalid Command</b>\n\n\
+        📝 <b>Command:</b> <code>{}</code>\n\
+        🔄 <b>Current State:</b> <code>{}</code>\n\n\
+        💡 <i>Use /help to see available commands</i>",
+        command_text, state_info
+    );
+    
+    bot.send_message(msg.chat.id, debug_msg)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await?;
+    
+    Ok(())
+}
+
 /// Handler for /back command to exit dialogue and return to Normal state
 pub async fn handle_back(
     bot: Bot,

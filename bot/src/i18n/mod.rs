@@ -327,6 +327,12 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "trading_cancel") => "❌ Hủy".to_string(),
         ("en", "trading_cancel") => "❌ Cancel".to_string(),
         
+        // Stop trading buttons
+        ("vi", "stop_trading_confirm_yes") => "✅ Xác nhận".to_string(),
+        ("en", "stop_trading_confirm_yes") => "✅ Confirm".to_string(),
+        ("vi", "stop_trading_confirm_no") => "❌ Hủy".to_string(),
+        ("en", "stop_trading_confirm_no") => "❌ Cancel".to_string(),
+        
         // Default fallback
         _ => key.to_string(),
     }

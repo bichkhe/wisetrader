@@ -662,15 +662,17 @@ pub async fn handle_my_trading(
         .map(|l| i18n::get_user_language(Some(l)))
         .unwrap_or("en");
     
-    // Get active live trading session from database
-    let active_session = live_trading_sessions::Entity::find()
+    // Get all active live trading sessions from database
+    let active_sessions = live_trading_sessions::Entity::find()
         .filter(live_trading_sessions::Column::UserId.eq(telegram_id))
         .filter(live_trading_sessions::Column::Status.eq("active"))
         .order_by(live_trading_sessions::Column::StartedAt, Order::Desc)
-        .one(state.db.as_ref())
+        .all(state.db.as_ref())
         .await?;
     
-    if let Some(session) = active_session {
+    if !active_sessions.is_empty() {
+        // Get the first (most recent) session for display
+        let session = &active_sessions[0];
         let exchange_name = match session.exchange.as_str() {
             "binance" => "🔵 Binance",
             "okx" => "🟢 OKX",
@@ -690,39 +692,21 @@ pub async fn handle_my_trading(
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| "N/A".to_string());
         
-        let status_msg = if locale == "vi" {
-            format!(
-                "📊 <b>Live Trading Status</b>\n\n\
-                ✅ <b>Trạng thái:</b> Đang chạy\n\n\
-                📈 <b>Strategy:</b> {}\n\
-                💱 <b>Pair:</b> {}\n\
-                ⏰ <b>Timeframe:</b> {}\n\
-                🌐 <b>Exchange:</b> {}\n\
-                🕐 <b>Bắt đầu:</b> {}\n\n\
-                ⚠️ <i>Live trading đang monitor thị trường và sẽ gửi signals khi có tín hiệu.</i>",
-                strategy_name, pair, timeframe, exchange_name, started_at
-            )
-        } else {
-            format!(
-                "📊 <b>Live Trading Status</b>\n\n\
-                ✅ <b>Status:</b> Running\n\n\
-                📈 <b>Strategy:</b> {}\n\
-                💱 <b>Pair:</b> {}\n\
-                ⏰ <b>Timeframe:</b> {}\n\
-                🌐 <b>Exchange:</b> {}\n\
-                🕐 <b>Started:</b> {}\n\n\
-                ⚠️ <i>Live trading is monitoring the market and will send signals when detected.</i>",
-                strategy_name, pair, timeframe, exchange_name, started_at
-            )
-        };
+        let status_msg = format!(
+            "{}\n\n{}\n\n{}\n{}\n{}\n{}\n{}\n\n{}",
+            i18n::translate(locale, "mytrading_status_title", None),
+            i18n::translate(locale, "mytrading_status_running", None),
+            i18n::translate(locale, "mytrading_strategy", Some(&[("strategy", &strategy_name)])),
+            i18n::translate(locale, "mytrading_pair", Some(&[("pair", &pair)])),
+            i18n::translate(locale, "mytrading_timeframe", Some(&[("timeframe", &timeframe)])),
+            i18n::translate(locale, "mytrading_exchange", Some(&[("exchange", exchange_name)])),
+            i18n::translate(locale, "mytrading_started", Some(&[("started_at", &started_at)])),
+            i18n::translate(locale, "mytrading_monitoring", None),
+        );
         
-        // Create stop button
+        // Create stop button - will show session list if multiple sessions
         let stop_button = InlineKeyboardButton::callback(
-            if locale == "vi" {
-                "🛑 Dừng Live Trading"
-            } else {
-                "🛑 Stop Live Trading"
-            },
+            i18n::get_button_text(locale, "mytrading_stop_button"),
             format!("stop_live_trading_{}", telegram_id)
         );
         
@@ -731,6 +715,13 @@ pub async fn handle_my_trading(
         bot.send_message(msg.chat.id, status_msg)
             .parse_mode(teloxide::types::ParseMode::Html)
             .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
+            .await?;
+    } else {
+        // No active session found
+        let msg_text = i18n::translate(locale, "mytrading_no_active", None);
+        
+        bot.send_message(msg.chat.id, msg_text)
+            .parse_mode(teloxide::types::ParseMode::Html)
             .await?;
     }
     
@@ -743,58 +734,313 @@ pub async fn handle_stop_trading_callback(
     q: CallbackQuery,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
+    tracing::info!("🔍 handle_stop_trading_callback called with data: {:?}", q.data);
+    
     if let Some(data) = q.data {
+        let callback_user_id = q.from.id.0 as i64;
+        
+        tracing::info!("🔍 Processing callback data: '{}' for user {}", data, callback_user_id);
+        
+        // Get user locale
+        let user = users::Entity::find_by_id(callback_user_id)
+            .one(state.db.as_ref())
+            .await?;
+        let locale = user
+            .as_ref()
+            .and_then(|u| u.language.as_ref())
+            .map(|l| i18n::get_user_language(Some(l)))
+            .unwrap_or("en");
+        
         if data.starts_with("stop_live_trading_") {
+            tracing::info!("🔍 Matched stop_live_trading_ pattern");
+            // Step 1: Show list of active sessions to choose from
             let user_id_str = data.trim_start_matches("stop_live_trading_");
             if let Ok(user_id) = user_id_str.parse::<i64>() {
                 // Verify this is the user's own trading
-                let callback_user_id = q.from.id.0 as i64;
                 if user_id != callback_user_id {
-                    // Get user locale
-                    let user = users::Entity::find_by_id(callback_user_id)
-                        .one(state.db.as_ref())
-                        .await?;
-                    let locale = user
-                        .as_ref()
-                        .and_then(|u| u.language.as_ref())
-                        .map(|l| i18n::get_user_language(Some(l)))
-                        .unwrap_or("en");
-                    
-                    bot.answer_callback_query(q.id)
-                        .text(if locale == "vi" {
-                            "❌ Bạn chỉ có thể dừng trading của chính mình."
-                        } else {
-                            "❌ You can only stop your own trading."
-                        })
+                    let callback_id = q.id.clone();
+                    bot.answer_callback_query(callback_id)
+                        .text(i18n::translate(locale, "stop_trading_not_yours", None))
                         .await?;
                     return Ok(());
                 }
                 
-                // Get user locale
-                let user = users::Entity::find_by_id(user_id)
+                // Get all active sessions first
+                let active_sessions = live_trading_sessions::Entity::find()
+                    .filter(live_trading_sessions::Column::UserId.eq(user_id))
+                    .filter(live_trading_sessions::Column::Status.eq("active"))
+                    .order_by(live_trading_sessions::Column::StartedAt, Order::Desc)
+                    .all(state.db.as_ref())
+                    .await?;
+                
+                if active_sessions.is_empty() {
+                    let callback_id = q.id.clone();
+                    let error_text = i18n::translate(locale, "stop_trading_not_found", None);
+                    bot.answer_callback_query(callback_id)
+                        .text(&error_text)
+                        .await?;
+                    return Ok(());
+                }
+                
+                // If only one session, go directly to confirmation
+                if active_sessions.len() == 1 {
+                    let session = &active_sessions[0];
+                    let session_id = session.id;
+                    
+                    let exchange_name = match session.exchange.as_str() {
+                        "binance" => "🔵 Binance",
+                        "okx" => "🟢 OKX",
+                        _ => &session.exchange,
+                    };
+                    
+                    let strategy_name = session.strategy_name.as_ref()
+                        .unwrap_or(&format!("Strategy #{}", session.strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string())))
+                        .clone();
+                    
+                    // Answer callback with user's selection
+                    let callback_id = q.id.clone();
+                    let selection_text = format!("{} - {}", strategy_name, session.pair);
+                    bot.answer_callback_query(callback_id)
+                        .text(&selection_text)
+                        .await?;
+                    
+                    // Show confirmation dialog
+                    if let Some(msg) = q.message {
+                        let confirm_msg = format!(
+                            "{}\n\n{}\n{}\n{}\n\n{}",
+                            i18n::translate(locale, "stop_trading_confirm_title", None),
+                            i18n::translate(locale, "mytrading_strategy", Some(&[("strategy", &strategy_name)])),
+                            i18n::translate(locale, "mytrading_pair", Some(&[("pair", &session.pair)])),
+                            i18n::translate(locale, "mytrading_exchange", Some(&[("exchange", exchange_name)])),
+                            i18n::translate(locale, "stop_trading_confirm_message", None),
+                        );
+                        
+                        let confirm_buttons = vec![
+                            vec![
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "stop_trading_confirm_yes"),
+                                    format!("stop_confirm_{}", session_id)
+                                ),
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "stop_trading_confirm_no"),
+                                    "stop_cancel"
+                                ),
+                            ],
+                        ];
+                        
+                        // Edit message, ignore "message is not modified" error
+                        if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &confirm_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(confirm_buttons.clone()))
+                            .await
+                        {
+                            // Ignore "message is not modified" error - message already has correct content
+                            let error_str = e.to_string();
+                            if !error_str.contains("message is not modified") {
+                                tracing::warn!("Failed to edit message: {}", e);
+                            }
+                        }
+                    }
+                } else {
+                    // Multiple sessions - show list to choose from
+                    let callback_id = q.id.clone();
+                    let selection_text = i18n::translate(locale, "stop_trading_select_session", None);
+                    bot.answer_callback_query(callback_id)
+                        .text(&selection_text)
+                        .await?;
+                    
+                    if let Some(msg) = q.message {
+                        let select_msg = i18n::translate(locale, "stop_trading_select_session", None);
+                        
+                        let mut session_buttons = Vec::new();
+                        for session in &active_sessions {
+                            let exchange_name = match session.exchange.as_str() {
+                                "binance" => "🔵 Binance",
+                                "okx" => "🟢 OKX",
+                                _ => &session.exchange,
+                            };
+                            
+                            let strategy_name = session.strategy_name.as_ref()
+                                .unwrap_or(&format!("Strategy #{}", session.strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string())))
+                                .clone();
+                            
+                            let button_text = format!("{} - {} ({})", strategy_name, session.pair, exchange_name);
+                            session_buttons.push(vec![
+                                InlineKeyboardButton::callback(
+                                    button_text,
+                                    format!("stop_session_{}", session.id)
+                                )
+                            ]);
+                        }
+                        
+                        session_buttons.push(vec![
+                            InlineKeyboardButton::callback(
+                                i18n::get_button_text(locale, "trading_cancel"),
+                                "stop_cancel"
+                            )
+                        ]);
+                        
+                        // Edit message, ignore "message is not modified" error
+                        if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &select_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(session_buttons.clone()))
+                            .await
+                        {
+                            // Ignore "message is not modified" error - message already has correct content
+                            let error_str = e.to_string();
+                            if !error_str.contains("message is not modified") {
+                                tracing::warn!("Failed to edit message: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        } else if data.starts_with("stop_session_") {
+            // Step 2: Show confirmation for selected session
+            let session_id_str = data.trim_start_matches("stop_session_");
+            if let Ok(session_id) = session_id_str.parse::<u64>() {
+                // Get session details first
+                let session = live_trading_sessions::Entity::find_by_id(session_id)
                     .one(state.db.as_ref())
                     .await?;
-                let locale = user
-                    .as_ref()
-                    .and_then(|u| u.language.as_ref())
-                    .map(|l| i18n::get_user_language(Some(l)))
-                    .unwrap_or("en");
                 
-                // Stop trading and unsubscribe from stream
-                match state.strategy_executor.stop_trading(user_id).await {
-                    Ok(Some((exchange, pair))) => {
-                        // Unsubscribe from stream
-                        state.stream_manager.unsubscribe(&exchange, &pair, user_id).await;
-                        
-                        // Update live trading session status to stopped
-                        let active_session = live_trading_sessions::Entity::find()
-                            .filter(live_trading_sessions::Column::UserId.eq(user_id))
-                            .filter(live_trading_sessions::Column::Status.eq("active"))
-                            .order_by(live_trading_sessions::Column::StartedAt, Order::Desc)
-                            .one(state.db.as_ref())
+                if let Some(session) = session {
+                    // Verify session belongs to user
+                    if session.user_id != callback_user_id {
+                        let callback_id = q.id.clone();
+                        let error_text = i18n::translate(locale, "stop_trading_not_yours", None);
+                        bot.answer_callback_query(callback_id)
+                            .text(&error_text)
                             .await?;
+                        return Ok(());
+                    }
+                    
+                    // Verify session is active
+                    if session.status != "active" {
+                        let callback_id = q.id.clone();
+                        let info_text = i18n::translate(locale, "stop_trading_session_not_active", None);
+                        bot.answer_callback_query(callback_id)
+                            .text(&info_text)
+                            .await?;
+                        return Ok(());
+                    }
+                    
+                    let exchange_name = match session.exchange.as_str() {
+                        "binance" => "🔵 Binance",
+                        "okx" => "🟢 OKX",
+                        _ => &session.exchange,
+                    };
+                    
+                    let strategy_name = session.strategy_name.as_ref()
+                        .unwrap_or(&format!("Strategy #{}", session.strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string())))
+                        .clone();
+                    
+                    // Answer callback with user's selection
+                    let callback_id = q.id.clone();
+                    let selection_text = format!("{} - {}", strategy_name, session.pair);
+                    bot.answer_callback_query(callback_id)
+                        .text(&selection_text)
+                        .await?;
+                    
+                    // Show confirmation dialog
+                    if let Some(msg) = q.message {
+                        let confirm_msg = format!(
+                            "{}\n\n{}\n{}\n{}\n\n{}",
+                            i18n::translate(locale, "stop_trading_confirm_title", None),
+                            i18n::translate(locale, "mytrading_strategy", Some(&[("strategy", &strategy_name)])),
+                            i18n::translate(locale, "mytrading_pair", Some(&[("pair", &session.pair)])),
+                            i18n::translate(locale, "mytrading_exchange", Some(&[("exchange", exchange_name)])),
+                            i18n::translate(locale, "stop_trading_confirm_message", None),
+                        );
                         
-                        if let Some(session) = active_session {
+                        let confirm_buttons = vec![
+                            vec![
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "stop_trading_confirm_yes"),
+                                    format!("stop_confirm_{}", session_id)
+                                ),
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "stop_trading_confirm_no"),
+                                    "stop_cancel"
+                                ),
+                            ],
+                        ];
+                        
+                        // Edit message, ignore "message is not modified" error
+                        if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &confirm_msg)
+                            .parse_mode(teloxide::types::ParseMode::Html)
+                            .reply_markup(teloxide::types::InlineKeyboardMarkup::new(confirm_buttons.clone()))
+                            .await
+                        {
+                            // Ignore "message is not modified" error - message already has correct content
+                            let error_str = e.to_string();
+                            if !error_str.contains("message is not modified") {
+                                tracing::warn!("Failed to edit message: {}", e);
+                            }
+                        }
+                    }
+                } else {
+                    let callback_id = q.id.clone();
+                    let error_text = i18n::translate(locale, "stop_trading_session_not_found", None);
+                    bot.answer_callback_query(callback_id)
+                        .text(&error_text)
+                        .await?;
+                }
+            }
+        } else if data.starts_with("stop_confirm_") {
+            // Step 3: Actually stop the trading
+            let session_id_str = data.trim_start_matches("stop_confirm_");
+            if let Ok(session_id) = session_id_str.parse::<u64>() {
+                // Get session details first
+                let session = live_trading_sessions::Entity::find_by_id(session_id)
+                    .one(state.db.as_ref())
+                    .await?;
+                
+                if let Some(session) = session {
+                    // Verify session belongs to user
+                    if session.user_id != callback_user_id {
+                        let callback_id = q.id.clone();
+                        let error_text = i18n::translate(locale, "stop_trading_not_yours", None);
+                        bot.answer_callback_query(callback_id)
+                            .text(&error_text)
+                            .await?;
+                        return Ok(());
+                    }
+                    
+                    // Verify session is active
+                    if session.status != "active" {
+                        let callback_id = q.id.clone();
+                        let info_text = i18n::translate(locale, "stop_trading_session_not_active", None);
+                        bot.answer_callback_query(callback_id)
+                            .text(&info_text)
+                            .await?;
+                        return Ok(());
+                    }
+                    
+                    let strategy_name = session.strategy_name.as_ref()
+                        .unwrap_or(&format!("Strategy #{}", session.strategy_id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string())))
+                        .clone();
+                    
+                    // Answer callback with confirmation
+                    let callback_id = q.id.clone();
+                    let confirm_text = if locale == "vi" {
+                        format!("✅ Đã xác nhận dừng: {}", strategy_name)
+                    } else {
+                        format!("✅ Confirmed stop: {}", strategy_name)
+                    };
+                    bot.answer_callback_query(callback_id)
+                        .text(&confirm_text)
+                        .await?;
+                    
+                    let user_id = session.user_id;
+                    
+                    // Stop trading and unsubscribe from stream
+                    match state.strategy_executor.stop_trading(user_id).await {
+                        Ok(Some((exchange_stream, pair_stream))) => {
+                            // Unsubscribe from stream
+                            state.stream_manager.unsubscribe(&exchange_stream, &pair_stream, user_id).await;
+                            
+                            // Update live trading session status to stopped
                             let mut session_update: live_trading_sessions::ActiveModel = session.into();
                             session_update.status = ActiveValue::Set("stopped".to_string());
                             session_update.stopped_at = ActiveValue::Set(Some(Utc::now()));
@@ -804,52 +1050,107 @@ pub async fn handle_stop_trading_callback(
                                 .exec(state.db.as_ref())
                                 .await?;
                             
-                            tracing::info!("✅ Updated live trading session status to stopped for user {}", user_id);
-                        }
-                        
-                        bot.answer_callback_query(q.id)
-                            .text(if locale == "vi" {
-                                "✅ Đã dừng live trading"
-                            } else {
-                                "✅ Live trading stopped"
-                            })
-                            .await?;
-                        
-                        // Update message
-                        if let Some(msg) = q.message {
-                            let success_msg = if locale == "vi" {
-                                "✅ <b>Live Trading đã được dừng</b>\n\n\
-                                Bạn có thể bắt đầu lại bằng lệnh /livetrading"
-                            } else {
-                                "✅ <b>Live Trading Stopped</b>\n\n\
-                                You can start again using /livetrading"
-                            };
+                            tracing::info!("✅ Updated live trading session {} status to stopped for user {}", session_id, user_id);
                             
-                            bot.edit_message_text(msg.chat().id, msg.id(), success_msg)
-                                .parse_mode(teloxide::types::ParseMode::Html)
+                            // Update message and remove buttons to prevent further clicks
+                            if let Some(msg) = q.message {
+                                let success_msg = i18n::translate(locale, "stop_trading_success", None);
+                                
+                                // Edit message and remove buttons
+                                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &success_msg)
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Empty buttons
+                                    .await
+                                {
+                                    // Ignore "message is not modified" error - message already has correct content
+                                    let error_str = e.to_string();
+                                    if !error_str.contains("message is not modified") {
+                                        tracing::warn!("Failed to edit message: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            // User was not trading in executor, but session exists - just update session
+                            let mut session_update: live_trading_sessions::ActiveModel = session.into();
+                            session_update.status = ActiveValue::Set("stopped".to_string());
+                            session_update.stopped_at = ActiveValue::Set(Some(Utc::now()));
+                            session_update.updated_at = ActiveValue::Set(Some(Utc::now()));
+                            
+                            live_trading_sessions::Entity::update(session_update)
+                                .exec(state.db.as_ref())
                                 .await?;
+                            
+                            // Update message and remove buttons
+                            if let Some(msg) = q.message {
+                                let success_msg = i18n::translate(locale, "stop_trading_success", None);
+                                
+                                // Edit message and remove buttons
+                                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &success_msg)
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Empty buttons
+                                    .await
+                                {
+                                    // Ignore "message is not modified" error - message already has correct content
+                                    let error_str = e.to_string();
+                                    if !error_str.contains("message is not modified") {
+                                        tracing::warn!("Failed to edit message: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let error_msg = i18n::translate(locale, "stop_trading_error", Some(&[("error", &e.to_string())]));
+                            
+                            // Show error in message and remove buttons
+                            if let Some(msg) = q.message {
+                                // Edit message with error and remove buttons
+                                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &error_msg)
+                                    .parse_mode(teloxide::types::ParseMode::Html)
+                                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Empty buttons
+                                    .await
+                                {
+                                    // If edit fails, send new message
+                                    bot.send_message(msg.chat().id, &error_msg)
+                                        .parse_mode(teloxide::types::ParseMode::Html)
+                                        .await?;
+                                }
+                            }
                         }
                     }
-                    Ok(None) => {
-                        // User was not trading
-                        bot.answer_callback_query(q.id)
-                            .text(if locale == "vi" {
-                                "ℹ️ Bạn không có live trading đang chạy"
-                            } else {
-                                "ℹ️ You are not currently trading"
-                            })
-                            .await?;
-                    }
-                    Err(e) => {
-                        let error_msg = if locale == "vi" {
-                            format!("❌ Lỗi khi dừng trading: {}", e)
-                        } else {
-                            format!("❌ Error stopping trading: {}", e)
-                        };
-                        
-                        bot.answer_callback_query(q.id)
-                            .text(&error_msg)
-                            .await?;
+                } else {
+                    let callback_id = q.id.clone();
+                    let error_text = i18n::translate(locale, "stop_trading_session_not_found", None);
+                    bot.answer_callback_query(callback_id)
+                        .text(&error_text)
+                        .await?;
+                }
+            }
+        } else if data == "stop_cancel" {
+            // Cancel stop operation
+            let callback_id = q.id.clone();
+            let cancel_text = if locale == "vi" {
+                "❌ Đã hủy"
+            } else {
+                "❌ Cancelled"
+            };
+            bot.answer_callback_query(callback_id)
+                .text(cancel_text)
+                .await?;
+            
+            if let Some(msg) = q.message {
+                let cancel_msg = i18n::translate(locale, "stop_trading_cancelled", None);
+                
+                // Edit message and remove buttons to prevent further clicks
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &cancel_msg)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new::<Vec<Vec<teloxide::types::InlineKeyboardButton>>>(vec![])) // Empty buttons
+                    .await
+                {
+                    // Ignore "message is not modified" error - message already has correct content
+                    let error_str = e.to_string();
+                    if !error_str.contains("message is not modified") {
+                        tracing::warn!("Failed to edit message: {}", e);
                     }
                 }
             }
