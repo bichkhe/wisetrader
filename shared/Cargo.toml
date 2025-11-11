@@ -23,6 +23,7 @@ askama = "0.12"
 reqwest = { workspace = true }
 regex = "1.10"
 base64 = { workspace = true }
+pulldown-cmark = "0.9"
 
 [build-dependencies]
 askama = "0.12"

@@ -184,6 +184,100 @@
             color: #6c757d;
             font-size: 0.9em;
         }
+        
+        .ai-analysis-content {
+            line-height: 1.8;
+            color: #2c3e50;
+            font-size: 1.05em;
+        }
+        
+        .ai-analysis-content h1,
+        .ai-analysis-content h2,
+        .ai-analysis-content h3,
+        .ai-analysis-content h4,
+        .ai-analysis-content h5,
+        .ai-analysis-content h6 {
+            color: #667eea;
+            margin-top: 1.5em;
+            margin-bottom: 0.8em;
+            font-weight: 600;
+        }
+        
+        .ai-analysis-content h1 { font-size: 1.8em; }
+        .ai-analysis-content h2 { font-size: 1.5em; }
+        .ai-analysis-content h3 { font-size: 1.3em; }
+        .ai-analysis-content h4 { font-size: 1.1em; }
+        
+        .ai-analysis-content p {
+            margin-bottom: 1em;
+        }
+        
+        .ai-analysis-content ul,
+        .ai-analysis-content ol {
+            margin-left: 1.5em;
+            margin-bottom: 1em;
+        }
+        
+        .ai-analysis-content li {
+            margin-bottom: 0.5em;
+        }
+        
+        .ai-analysis-content strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .ai-analysis-content code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+        }
+        
+        .ai-analysis-content pre {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+        
+        .ai-analysis-content pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+        }
+        
+        .ai-analysis-content blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1em;
+            margin-left: 0;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .ai-analysis-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+        }
+        
+        .ai-analysis-content table th,
+        .ai-analysis-content table td {
+            padding: 8px 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .ai-analysis-content table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .ai-analysis-content table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
     </style>
 </head>
 <body>
@@ -273,13 +367,13 @@
             </div>
             {% endif %}
             
-            {% match ai_analysis %}
-            {% when Some with (analysis) %}
+            {% match ai_analysis_html %}
+            {% when Some with (analysis_html) %}
             <div class="section">
                 <h2>🤖 AI Analysis (Powered by Gemini)</h2>
                 <div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 25px; border-radius: 12px; border-left: 5px solid #667eea; margin-top: 20px;">
-                    <div style="white-space: pre-wrap; line-height: 1.8; color: #2c3e50; font-size: 1.05em;">
-                        {{ analysis }}
+                    <div class="ai-analysis-content" style="line-height: 1.8; color: #2c3e50; font-size: 1.05em;">
+                        {{ analysis_html }}
                     </div>
                 </div>
             </div>

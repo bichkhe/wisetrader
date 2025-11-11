@@ -1,6 +1,23 @@
 use askama::Template;
 use chrono::Utc;
 use base64::{Engine as _, engine::general_purpose};
+use pulldown_cmark::{Parser, Options, html};
+
+/// Convert markdown text to HTML
+pub fn markdown_to_html(markdown: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_SMART_PUNCTUATION);
+    
+    let parser = Parser::new_ext(markdown, options);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    
+    html_output
+}
 
 /// Load logo and convert to base64 data URI
 /// Tries to load from filesystem first, falls back to embedded logo if available
@@ -98,6 +115,12 @@ pub struct StrategyTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "ai_analysis.html.jinja", escape = "none")]
+struct AiAnalysisTemplate {
+    ai_analysis_html: String,
+}
+
+#[derive(Template)]
 #[template(path = "backtest_report.html.jinja", escape = "html")]
 pub struct BacktestReportTemplate {
     pub strategy_name: String,
@@ -119,6 +142,7 @@ pub struct BacktestReportTemplate {
     pub raw_output: Option<String>,
     pub logo_base64: String,
     pub ai_analysis: Option<String>,
+    pub ai_analysis_html: Option<String>,
 }
 
 impl BacktestReportTemplate {
@@ -141,6 +165,17 @@ impl BacktestReportTemplate {
         raw_output: Option<String>,
         ai_analysis: Option<String>,
     ) -> Self {
+        // Convert markdown to HTML if ai_analysis is provided
+        let ai_analysis_html = ai_analysis.as_ref()
+            .map(|md| {
+                let html = markdown_to_html(md);
+                // Render through template with escape = "none" to get properly formatted HTML
+                let html_clone = html.clone();
+                AiAnalysisTemplate { ai_analysis_html: html }
+                    .render()
+                    .unwrap_or_else(|_| html_clone) // Fallback to raw HTML if template render fails
+            });
+        
         Self {
             strategy_name,
             exchange,
@@ -161,6 +196,7 @@ impl BacktestReportTemplate {
             raw_output,
             logo_base64: load_logo_base64(),
             ai_analysis,
+            ai_analysis_html,
         }
     }
 }
