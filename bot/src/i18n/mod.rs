@@ -226,6 +226,10 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "period_3months") => "📅 3 Months".to_string(),
         ("vi", "period_6months") => "📅 6 Tháng".to_string(),
         ("en", "period_6months") => "📅 6 Months".to_string(),
+        ("vi", "period_9months") => "📅 9 Tháng".to_string(),
+        ("en", "period_9months") => "📅 9 Months".to_string(),
+        ("vi", "period_1year") => "📅 1 Năm".to_string(),
+        ("en", "period_1year") => "📅 1 Year".to_string(),
         
         // Strategy buttons
         ("vi", "algorithm_rsi") => "📊 RSI".to_string(),
@@ -304,7 +308,7 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("en", "payment_deposit_button") => "💵 Deposit".to_string(),
         
         // Profile buttons
-        ("vi", "profile_change_language") => "🌐 Đổi Ngôn Ngữ / Change Language".to_string(),
+        ("vi", "profile_change_language") => "🌐 Đổi Ngôn Ngữ".to_string(),
         ("en", "profile_change_language") => "🌐 Change Language".to_string(),
         
         // Strategy delete buttons

@@ -561,6 +561,8 @@ fn calculate_timerange(range: &str) -> String {
         "1month" => now - Duration::days(30),
         "3months" => now - Duration::days(90),
         "6months" => now - Duration::days(180),
+        "9months" => now - Duration::days(270),
+        "1year" => now - Duration::days(365),
         _ => now - Duration::days(7),
     };
     
@@ -1096,6 +1098,16 @@ pub async fn handle_backtest_callback(
                                     i18n::get_button_text(locale, "period_6months"),
                                     "backtest_timerange_6months"
                                 ),
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "period_9months"),
+                                    "backtest_timerange_9months"
+                                ),
+                            ],
+                            vec![
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(locale, "period_1year"),
+                                    "backtest_timerange_1year"
+                                ),
                             ],
                             vec![
                                 InlineKeyboardButton::callback(
@@ -1230,24 +1242,18 @@ pub async fn handle_backtest_callback(
                                 // }
 
                                 // Update message - checking/downloading data
-                                bot.edit_message_text(
-                                    chat_id,
-                                    message_id,
-                                    format!(
-                                        "⏳ <b>Step 1: Checking Data...</b>\n\n\
-                                        <b>Strategy:</b> {}\n\
-                                        <b>Exchange:</b> {}\n\
-                                        <b>Pair:</b> {}\n\
-                                        <b>Timeframe:</b> {}\n\
-                                        <b>Time Range:</b> {}\n\n\
-                                        🔍 Checking if historical data exists...",
-                                        escape_html(&strategy_name),
-                                        escape_html(&exchange),
-                                        freqtrade_pair,
-                                        timeframe,
-                                        timerange
-                                    )
-                                )
+                                let checking_msg = i18n::translate(
+                                    locale,
+                                    "backtest_checking_data",
+                                    Some(&[
+                                        ("strategy", &escape_html(&strategy_name)),
+                                        ("exchange", &escape_html(&exchange)),
+                                        ("pair", &freqtrade_pair),
+                                        ("timeframe", &timeframe),
+                                        ("timerange", &timerange),
+                                    ]),
+                                );
+                                bot.edit_message_text(chat_id, message_id, checking_msg)
                                     .parse_mode(teloxide::types::ParseMode::Html)
                                     .await?;
 
@@ -1267,24 +1273,21 @@ pub async fn handle_backtest_callback(
                                         let error_str = e.to_string();
                                         let truncated_error = if error_str.chars().count() > 1500 {
                                             let truncated: String = error_str.chars().take(1500).collect();
-                                            format!("{}...\n\n(Error message truncated)", truncated)
+                                            let truncated_msg = i18n::translate(locale, "backtest_error_truncated", None);
+                                            format!("{}{}", truncated, truncated_msg)
                                         } else {
                                             error_str.clone()
                                         };
                                         
-                                        bot.edit_message_text(
-                                            chat_id,
-                                            message_id,
-                                            format!(
-                                                "❌ <b>Backtest Failed</b>\n\n\
-                                                <b>Error:</b>\n\
-                                                <code>{}</code>\n\n\
-                                                💾 Strategy file: <code>{}</code>\n\n\
-                                                💡 <i>Tip: Make sure data is downloaded for all required pairs.</i>",
-                                                escape_html(&truncated_error),
-                                                filepath.display()
-                                            )
-                                        )
+                                        let failed_msg = i18n::translate(
+                                            locale,
+                                            "backtest_failed",
+                                            Some(&[
+                                                ("error", &escape_html(&truncated_error)),
+                                                ("filepath", &filepath.display().to_string()),
+                                            ]),
+                                        );
+                                        bot.edit_message_text(chat_id, message_id, failed_msg)
                                             .parse_mode(teloxide::types::ParseMode::Html)
                                             .await?;
                                         Err(e)
@@ -1302,56 +1305,108 @@ pub async fn handle_backtest_callback(
                                         );
                                         
                                         // Build result message with detailed report table
-                                        let mut result_msg = format!(
-                                            "✅ <b>Backtest Complete!</b>\n\n\
-                                            <b>Strategy:</b> {}\n\
-                                            <b>Exchange:</b> {}\n\
-                                            <b>Pair:</b> {}\n\
-                                            <b>Time Range:</b> {}\n\
-                                            <b>Timeframe:</b> {}\n\n",
-                                            escape_html(&strategy_name),
-                                            escape_html(&exchange),
-                                            freqtrade_pair,
-                                            timerange,
-                                            timeframe
+                                        let mut result_msg = i18n::translate(
+                                            locale,
+                                            "backtest_result_header",
+                                            Some(&[
+                                                ("strategy", &escape_html(&strategy_name)),
+                                                ("exchange", &escape_html(&exchange)),
+                                                ("pair", &freqtrade_pair),
+                                                ("timerange", &timerange),
+                                                ("timeframe", &timeframe),
+                                            ]),
                                         );
                                         
                                         // Add detailed results table
-                                        result_msg.push_str("<b>📊 Backtest Report:</b>\n");
-                                        result_msg.push_str("━━━━━━━━━━━━━━━━━━━━\n");
+                                        result_msg.push_str(&i18n::translate(locale, "backtest_report_title", None));
+                                        result_msg.push_str("\n");
+                                        result_msg.push_str("━━━━━━━━━━\n");
                                         
-                                        result_msg.push_str(&format!("📈 Total Trades: <b>{}</b>\n", result.trades));
+                                        // Total trades
+                                        result_msg.push_str(&i18n::translate(
+                                            locale,
+                                            "backtest_total_trades",
+                                            Some(&[("count", &result.trades.to_string())]),
+                                        ));
+                                        result_msg.push_str("\n");
                                         
                                         // Profit with color indication
-                                        let profit_symbol = if result.profit_pct >= 0.0 { "💰" } else { "📉" };
-                                        result_msg.push_str(&format!("{} Profit: <b>{:.2}%</b>\n", profit_symbol, result.profit_pct));
+                                        let profit_key = if result.profit_pct >= 0.0 {
+                                            "backtest_profit"
+                                        } else {
+                                            "backtest_profit_negative"
+                                        };
+                                        result_msg.push_str(&i18n::translate(
+                                            locale,
+                                            profit_key,
+                                            Some(&[("profit", &format!("{:.2}", result.profit_pct))]),
+                                        ));
+                                        result_msg.push_str("\n");
                                         
                                         // Additional metrics if available
                                         if let Some(win_rate) = result.win_rate {
-                                            result_msg.push_str(&format!("✅ Win Rate: <b>{:.2}%</b>\n", win_rate));
+                                            result_msg.push_str(&i18n::translate(
+                                                locale,
+                                                "backtest_win_rate",
+                                                Some(&[("rate", &format!("{:.2}", win_rate))]),
+                                            ));
+                                            result_msg.push_str("\n");
                                         }
                                         if let Some(drawdown) = result.max_drawdown {
-                                            result_msg.push_str(&format!("📉 Max Drawdown: <b>{:.2}%</b>\n", drawdown));
+                                            result_msg.push_str(&i18n::translate(
+                                                locale,
+                                                "backtest_max_drawdown",
+                                                Some(&[("drawdown", &format!("{:.2}", drawdown))]),
+                                            ));
+                                            result_msg.push_str("\n");
                                         }
                                         if let (Some(start), Some(final_bal)) = (result.starting_balance, result.final_balance) {
-                                            result_msg.push_str(&format!("💵 Starting: <b>${:.2}</b> → Final: <b>${:.2}</b>\n", start, final_bal));
+                                            result_msg.push_str(&i18n::translate(
+                                                locale,
+                                                "backtest_balance",
+                                                Some(&[
+                                                    ("start", &format!("{:.2}", start)),
+                                                    ("final", &format!("{:.2}", final_bal)),
+                                                ]),
+                                            ));
+                                            result_msg.push_str("\n");
                                         }
                                         
-                                        result_msg.push_str("━━━━━━━━━━━━━━━━━━━━\n\n");
+                                        result_msg.push_str("━━━━━━━━━━━━━━━\n\n");
                                         
                                         // Add timing info
-                                        result_msg.push_str("<b>⏱️ Performance:</b>\n");
+                                        result_msg.push_str(&i18n::translate(locale, "backtest_performance_title", None));
+                                        result_msg.push_str("\n");
                                         if let Some(dl_time) = result.download_time_secs {
-                                            result_msg.push_str(&format!("📥 Data Download: <b>{}s</b>\n", dl_time));
+                                            result_msg.push_str(&i18n::translate(
+                                                locale,
+                                                "backtest_data_download",
+                                                Some(&[("time", &dl_time.to_string())]),
+                                            ));
                                         } else {
-                                            result_msg.push_str("📥 Data Download: <b>Skipped</b>\n");
+                                            result_msg.push_str(&i18n::translate(locale, "backtest_data_download_skipped", None));
                                         }
-                                        result_msg.push_str(&format!("🔄 Backtest Execution: <b>{}s</b>\n", result.backtest_time_secs));
+                                        result_msg.push_str("\n");
+                                        result_msg.push_str(&i18n::translate(
+                                            locale,
+                                            "backtest_execution_time",
+                                            Some(&[("time", &result.backtest_time_secs.to_string())]),
+                                        ));
+                                        result_msg.push_str("\n");
                                         
                                         let total_time = result.download_time_secs.unwrap_or(0) + result.backtest_time_secs;
-                                        result_msg.push_str(&format!("⏱️ Total Time: <b>{}s</b>\n\n", total_time));
+                                        result_msg.push_str(&i18n::translate(
+                                            locale,
+                                            "backtest_total_time",
+                                            Some(&[("time", &total_time.to_string())]),
+                                        ));
+                                        result_msg.push_str("\n\n");
                                         
-                                        result_msg.push_str(&format!("💾 Strategy file: <code>{}</code>", filepath.display()));
+                                        result_msg.push_str(&i18n::translate(
+                                            locale,
+                                            "backtest_strategy_file",
+                                            Some(&[("filepath", &filepath.display().to_string())]),
+                                        ));
                                         
                                         // Extract tables for HTML report and Telegram messages
                                         let tables = if let Some(ref stdout) = result.stdout {
