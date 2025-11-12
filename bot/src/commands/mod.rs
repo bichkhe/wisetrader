@@ -32,6 +32,8 @@ pub mod ai;
 pub use ai::handle_ai;
 pub mod pnl;
 pub use pnl::handle_pnl;
+pub mod streams;
+pub use streams::handle_streams;
 /// ✅🤖 <b>WiseTrader</b> 🧠 — Bạn có thể chọn một trong các lệnh sau
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
@@ -84,6 +86,8 @@ pub enum Command {
    MyTrading,
    /// Xem profit/loss và thống kê trading
    Pnl,
+   /// Xem các streams đang active (các cặp tiền đang được monitor)
+   Streams,
 }
 
 

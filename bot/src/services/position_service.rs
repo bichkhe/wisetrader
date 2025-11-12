@@ -5,6 +5,8 @@ use std::sync::Arc;
 use sea_orm::{EntityTrait, ActiveValue, ColumnTrait, QueryFilter, QueryOrder, Order};
 use shared::entity::{positions, trades, live_trading_signals};
 use chrono::Utc;
+use rust_decimal::Decimal;
+use std::str::FromStr;
 
 /// Create a new position when buy signal is executed
 pub async fn create_position(
@@ -18,7 +20,12 @@ pub async fn create_position(
     entry_price: f64,
     quantity: f64,
 ) -> Result<u64, anyhow::Error> {
-    let entry_value = entry_price * quantity;
+    // Convert f64 to Decimal via string
+    let entry_price_decimal = Decimal::from_str(&entry_price.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let quantity_decimal = Decimal::from_str(&quantity.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let entry_value_decimal = entry_price_decimal * quantity_decimal;
     
     let position = positions::ActiveModel {
         user_id: ActiveValue::Set(user_id),
@@ -28,12 +35,12 @@ pub async fn create_position(
         exchange: ActiveValue::Set(exchange),
         pair: ActiveValue::Set(pair),
         side: ActiveValue::Set("buy".to_string()),
-        entry_price: ActiveValue::Set(entry_price.to_string()),
-        quantity: ActiveValue::Set(quantity.to_string()),
-        entry_value: ActiveValue::Set(entry_value.to_string()),
-        current_price: ActiveValue::Set(Some(entry_price.to_string())),
-        unrealized_pnl: ActiveValue::Set("0.0".to_string()),
-        unrealized_pnl_percent: ActiveValue::Set("0.0".to_string()),
+        entry_price: ActiveValue::Set(entry_price_decimal),
+        quantity: ActiveValue::Set(quantity_decimal),
+        entry_value: ActiveValue::Set(entry_value_decimal),
+        current_price: ActiveValue::Set(Some(entry_price_decimal)),
+        unrealized_pnl: ActiveValue::Set(Decimal::ZERO),
+        unrealized_pnl_percent: ActiveValue::Set(Decimal::ZERO),
         status: ActiveValue::Set("open".to_string()),
         entry_time: ActiveValue::Set(Some(Utc::now())),
         close_time: ActiveValue::NotSet,
@@ -65,9 +72,10 @@ pub async fn close_position_and_create_trade(
         .await?
         .ok_or_else(|| anyhow::anyhow!("Position not found or already closed"))?;
     
-    let entry_price: f64 = position.entry_price.parse().unwrap_or(0.0);
-    let quantity: f64 = position.quantity.parse().unwrap_or(0.0);
-    let entry_value: f64 = position.entry_value.parse().unwrap_or(0.0);
+    // Convert Decimal to f64 for calculations
+    let entry_price: f64 = f64::from_str(&position.entry_price.to_string()).unwrap_or(0.0);
+    let quantity: f64 = f64::from_str(&position.quantity.to_string()).unwrap_or(0.0);
+    let entry_value: f64 = f64::from_str(&position.entry_value.to_string()).unwrap_or(0.0);
     
     let exit_value = exit_price * quantity;
     let pnl = exit_value - entry_value;
@@ -116,13 +124,21 @@ pub async fn close_position_and_create_trade(
         .exec(db)
         .await?;
     
+    // Convert f64 to Decimal for database
+    let exit_price_decimal = Decimal::from_str(&exit_price.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let pnl_decimal = Decimal::from_str(&pnl.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let pnl_percent_decimal = Decimal::from_str(&pnl_percent.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    
     // Update position status to closed
     let mut position_update: positions::ActiveModel = position.into();
     position_update.status = ActiveValue::Set("closed".to_string());
     position_update.close_time = ActiveValue::Set(Some(exit_time));
-    position_update.current_price = ActiveValue::Set(Some(exit_price.to_string()));
-    position_update.unrealized_pnl = ActiveValue::Set(pnl.to_string());
-    position_update.unrealized_pnl_percent = ActiveValue::Set(pnl_percent.to_string());
+    position_update.current_price = ActiveValue::Set(Some(exit_price_decimal));
+    position_update.unrealized_pnl = ActiveValue::Set(pnl_decimal);
+    position_update.unrealized_pnl_percent = ActiveValue::Set(pnl_percent_decimal);
     position_update.updated_at = ActiveValue::Set(Some(Utc::now()));
     
     positions::Entity::update(position_update)
@@ -147,9 +163,10 @@ pub async fn update_position_price(
         return Ok(()); // Don't update closed positions
     }
     
-    let entry_price: f64 = position.entry_price.parse().unwrap_or(0.0);
-    let quantity: f64 = position.quantity.parse().unwrap_or(0.0);
-    let entry_value: f64 = position.entry_value.parse().unwrap_or(0.0);
+    // Convert Decimal to f64 for calculations
+    let entry_price: f64 = f64::from_str(&position.entry_price.to_string()).unwrap_or(0.0);
+    let quantity: f64 = f64::from_str(&position.quantity.to_string()).unwrap_or(0.0);
+    let entry_value: f64 = f64::from_str(&position.entry_value.to_string()).unwrap_or(0.0);
     
     // Calculate unrealized P&L
     let current_value = current_price * quantity;
@@ -160,10 +177,18 @@ pub async fn update_position_price(
         0.0
     };
     
+    // Convert f64 to Decimal for database
+    let current_price_decimal = Decimal::from_str(&current_price.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let unrealized_pnl_decimal = Decimal::from_str(&unrealized_pnl.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    let unrealized_pnl_percent_decimal = Decimal::from_str(&unrealized_pnl_percent.to_string())
+        .unwrap_or_else(|_| Decimal::ZERO);
+    
     let mut position_update: positions::ActiveModel = position.into();
-    position_update.current_price = ActiveValue::Set(Some(current_price.to_string()));
-    position_update.unrealized_pnl = ActiveValue::Set(unrealized_pnl.to_string());
-    position_update.unrealized_pnl_percent = ActiveValue::Set(unrealized_pnl_percent.to_string());
+    position_update.current_price = ActiveValue::Set(Some(current_price_decimal));
+    position_update.unrealized_pnl = ActiveValue::Set(unrealized_pnl_decimal);
+    position_update.unrealized_pnl_percent = ActiveValue::Set(unrealized_pnl_percent_decimal);
     position_update.updated_at = ActiveValue::Set(Some(Utc::now()));
     
     positions::Entity::update(position_update)
@@ -186,6 +211,16 @@ pub async fn get_open_positions(
         .await?;
     
     Ok(positions_list)
+}
+
+/// Check if user has an open position for a specific trading pair
+pub async fn has_open_position_for_pair(
+    db: &sea_orm::DatabaseConnection,
+    user_id: i64,
+    pair: &str,
+) -> Result<bool, anyhow::Error> {
+    let open_positions = get_open_positions(db, user_id).await?;
+    Ok(open_positions.iter().any(|p| p.pair == pair && p.status == "open"))
 }
 
 /// Get all closed trades for a user
@@ -222,8 +257,8 @@ pub async fn calculate_pnl_summary(
     let mut total_position_value = 0.0;
     
     for position in &open_positions {
-        let unrealized_pnl: f64 = position.unrealized_pnl.parse().unwrap_or(0.0);
-        let entry_value: f64 = position.entry_value.parse().unwrap_or(0.0);
+        let unrealized_pnl: f64 = f64::from_str(&position.unrealized_pnl.to_string()).unwrap_or(0.0);
+        let entry_value: f64 = f64::from_str(&position.entry_value.to_string()).unwrap_or(0.0);
         total_unrealized_pnl += unrealized_pnl;
         total_position_value += entry_value;
     }

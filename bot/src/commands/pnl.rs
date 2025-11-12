@@ -1,6 +1,7 @@
 //! PnL Command - View profit and loss statistics
 
 use std::sync::Arc;
+use std::str::FromStr;
 use anyhow::Result;
 use teloxide::prelude::*;
 use sea_orm::EntityTrait;
@@ -138,13 +139,13 @@ fn format_open_positions(positions: &[shared::entity::positions::Model], locale:
     let mut text = title.to_string();
     
     for position in positions.iter().take(5) {
-        let unrealized_pnl: f64 = position.unrealized_pnl.parse().unwrap_or(0.0);
-        let unrealized_pnl_percent: f64 = position.unrealized_pnl_percent.parse().unwrap_or(0.0);
-        let entry_price: f64 = position.entry_price.parse().unwrap_or(0.0);
+        let unrealized_pnl: f64 = f64::from_str(&position.unrealized_pnl.to_string()).unwrap_or(0.0);
+        let unrealized_pnl_percent: f64 = f64::from_str(&position.unrealized_pnl_percent.to_string()).unwrap_or(0.0);
+        let entry_price: f64 = f64::from_str(&position.entry_price.to_string()).unwrap_or(0.0);
         let current_price: f64 = position.current_price.as_ref()
-            .and_then(|p| p.parse().ok())
+            .map(|p| f64::from_str(&p.to_string()).unwrap_or(entry_price))
             .unwrap_or(entry_price);
-        let quantity: f64 = position.quantity.parse().unwrap_or(0.0);
+        let quantity: f64 = f64::from_str(&position.quantity.to_string()).unwrap_or(0.0);
         
         let pnl_emoji = if unrealized_pnl >= 0.0 { "🟢" } else { "🔴" };
         

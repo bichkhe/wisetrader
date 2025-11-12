@@ -60,7 +60,7 @@ impl StrategyExecutor {
         if let Some(state) = users.get(&user_id) {
             let exchange = state.exchange.clone();
             let pair = state.pair.clone();
-            users.remove(&user_id);
+        users.remove(&user_id);
             tracing::info!("🛑 Stopped trading for user {} ({} on {})", user_id, pair, exchange);
             Ok(Some((exchange, pair)))
         } else {
@@ -77,10 +77,17 @@ impl StrategyExecutor {
         let mut users = self.users.write().await;
         
         if let Some(state) = users.get_mut(&user_id) {
-            if state.is_active && state.pair == format!("{}/USDT", candle.timestamp) {
-                // Match pair logic here if needed
+            if state.is_active {
+                // Process candle regardless of pair match (pair matching is done at stream level)
+                // Log strategy evaluation for debugging
+                tracing::debug!("🔍 [User {}] Processing candle for strategy '{}' (pair: {}, timeframe: {})", 
+                    user_id, state.strategy.name(), state.pair, state.strategy.config().timeframe);
                 return state.strategy.process_candle(candle);
+            } else {
+                tracing::warn!("⚠️ [User {}] Strategy is not active, skipping candle processing", user_id);
             }
+        } else {
+            tracing::warn!("⚠️ [User {}] No trading state found, skipping candle processing", user_id);
         }
         
         None

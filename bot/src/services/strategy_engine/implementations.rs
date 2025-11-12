@@ -13,6 +13,8 @@ pub struct RsiStrategy {
     rsi: RelativeStrengthIndex,
     prices: Vec<f64>,
     period: usize,
+    last_rsi_value: Option<f64>, // Store last RSI value for logging
+    last_price: Option<f64>, // Store last price for logging
 }
 
 impl RsiStrategy {
@@ -23,6 +25,8 @@ impl RsiStrategy {
                 .map_err(|e| anyhow::anyhow!("Failed to create RSI: {}", e))?,
             prices: Vec::with_capacity(period + 10),
             period,
+            last_rsi_value: None,
+            last_price: None,
         })
     }
 }
@@ -41,16 +45,32 @@ impl Strategy for RsiStrategy {
         
         // Need enough prices for RSI calculation
         if self.prices.len() < self.period + 1 {
+            tracing::debug!("📊 RSI Strategy: Collecting prices {}/{} (need {} for RSI calculation)", 
+                self.prices.len(), self.period + 1, self.period + 1);
             return None;
         }
         
         let rsi_value = self.rsi.next(candle.close);
         
+        // Store RSI value and price for logging
+        self.last_rsi_value = Some(rsi_value);
+        self.last_price = Some(candle.close);
+        
+        // Always log RSI value for monitoring (especially for 1-minute timeframe)
+        tracing::info!("📊 RSI Strategy: Candle Close={:.4}, RSI={:.2}, Period={}, Prices={}, Buy Condition: {}, Sell Condition: {}", 
+            candle.close, rsi_value, self.period, self.prices.len(), 
+            self.config.buy_condition, self.config.sell_condition);
+        
         // Parse buy/sell conditions
         let buy_signal = parse_condition(&self.config.buy_condition, rsi_value);
         let sell_signal = parse_condition(&self.config.sell_condition, rsi_value);
         
+        tracing::debug!("📊 RSI Strategy: Buy signal={}, Sell signal={} (RSI={:.2})", 
+            buy_signal, sell_signal, rsi_value);
+        
         if buy_signal {
+            tracing::info!("🟢 RSI Strategy: BUY signal generated! RSI={:.2}, Price={:.4}, Condition: {}", 
+                rsi_value, candle.close, self.config.buy_condition);
             return Some(StrategySignal::Buy {
                 confidence: 0.8,
                 price: candle.close,
@@ -59,6 +79,8 @@ impl Strategy for RsiStrategy {
         }
         
         if sell_signal {
+            tracing::info!("🔴 RSI Strategy: SELL signal generated! RSI={:.2}, Price={:.4}, Condition: {}", 
+                rsi_value, candle.close, self.config.sell_condition);
             return Some(StrategySignal::Sell {
                 confidence: 0.8,
                 price: candle.close,
@@ -66,17 +88,27 @@ impl Strategy for RsiStrategy {
             });
         }
         
+        tracing::debug!("📊 RSI Strategy: No signal (RSI={:.2} in neutral zone)", rsi_value);
         None
     }
     
     fn reset(&mut self) {
         self.prices.clear();
+        self.last_rsi_value = None;
+        self.last_price = None;
         // RSI indicator maintains its own state, but we can reinitialize if needed
     }
     
     fn get_state_info(&self) -> String {
-        format!("RSI Strategy - Prices: {}, Period: {}", 
-            self.prices.len(), self.period)
+        let rsi_info = self.last_rsi_value
+            .map(|rsi| format!("RSI={:.2}", rsi))
+            .unwrap_or_else(|| "RSI=calculating".to_string());
+        let price_info = self.last_price
+            .map(|p| format!("Price={:.4}", p))
+            .unwrap_or_else(|| "Price=N/A".to_string());
+        format!("RSI Strategy - {}, {}, Prices: {}/{}, Period: {}, Buy: {}, Sell: {}", 
+            price_info, rsi_info, self.prices.len(), self.period + 1, 
+            self.period, self.config.buy_condition, self.config.sell_condition)
     }
 }
 

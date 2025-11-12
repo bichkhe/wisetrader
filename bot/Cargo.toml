@@ -39,6 +39,8 @@ futures = "0.3"
 
 # For technical analysis
 ta = "0.5"
+# For Decimal types (used in positions/trades entities)
+rust_decimal = { workspace = true, features = ["std"] }
 
 [[example]]
 name = "rsi_bnbusdt"

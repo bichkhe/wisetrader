@@ -388,3 +388,10 @@ algorithm_ema: "📉 EMA"
 algorithm_macd: "📊 MACD"
 algorithm_ma: "📊 MA"
 
+# Streams
+streams_title: "📡 <b>Active Market Data Streams</b>"
+streams_no_active: "ℹ️ <b>No Active Streams</b>\n\nThere are currently no active market data streams.\n\nStreams are created automatically when users start live trading."
+streams_subscribers: "👥 <b>Subscribers:</b> {count}"
+streams_subscribers_more: "... and {count} more"
+streams_footer: "💡 <i>Streams are shared across users for the same trading pair to optimize resource usage.</i>"
+

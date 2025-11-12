@@ -27,7 +27,7 @@ use crate::{commands::{handle_invalid, handle_version,
     handle_tokens, handle_tokens_callback,
     handle_back, handle_deposit, handle_balance, handle_deposit_callback,
     handle_ai, handle_my_trading, handle_stop_trading_callback,
-    handle_pnl, handle_command_invalid,
+    handle_pnl, handle_streams, handle_command_invalid,
     Command},  state::AppState};
 use state::{BotState, BacktestState};
 
@@ -53,6 +53,7 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::Ai(_question)].endpoint(handle_ai))
                 .branch(case![Command::MyTrading].endpoint(handle_my_trading))
                 .branch(case![Command::Pnl].endpoint(handle_pnl))
+                .branch(case![Command::Streams].endpoint(handle_streams))
                 .branch(dptree::endpoint(handle_command_invalid))
         );
 
@@ -124,7 +125,7 @@ fn schema() -> UpdateHandler<anyhow::Error> {
             })
             .endpoint(handle_stop_trading_callback)
         )
-        // Handle live trading callbacks from any state
+            // Handle live trading callbacks from any state
         .branch(
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| 
@@ -176,8 +177,18 @@ fn schema() -> UpdateHandler<anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // Initialize logging with support for RUST_LOG environment variable
+    // Examples:
+    //   RUST_LOG=debug - Show all debug logs
+    //   RUST_LOG=info - Show info and above (default)
+    //   RUST_LOG=warn - Show warnings and errors only
+    //   RUST_LOG=bot=debug - Show debug logs only for bot crate
+    //   RUST_LOG=bot::services::trading_signal=debug - Show debug for specific module
+    let env_filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| "info".to_string());
+    
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_env_filter(env_filter)
         .init();
 
     tracing::info!("Starting WiseTrader bot...");
@@ -201,6 +212,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // We'll configure error handling instead
     let bot = Bot::new(&app_state.bot_token);
     tracing::info!("Bot created");
+
+    // Restore active live trading sessions from database
+    info!("🔄 Restoring active live trading sessions...");
+    if let Err(e) = trading_signal::restore_active_sessions(app_state.clone(), bot.clone()).await {
+        error!("❌ Failed to restore active sessions: {}", e);
+        warn!("⚠️ Bot will continue without restoring sessions. Users may need to restart their trading manually.");
+    } else {
+        info!("✅ Active sessions restoration completed");
+    }
 
     // Spawn the dispatcher with error handler for network timeout recovery
     let mut dispatcher = Dispatcher::builder(bot.clone(), schema())

@@ -387,3 +387,10 @@ algorithm_ema: "📉 EMA"
 algorithm_macd: "📊 MACD"
 algorithm_ma: "📊 MA"
 
+# Streams
+streams_title: "📡 <b>Các Stream Dữ Liệu Thị Trường Đang Hoạt Động</b>"
+streams_no_active: "ℹ️ <b>Không Có Stream Nào Đang Hoạt Động</b>\n\nHiện tại không có stream dữ liệu thị trường nào đang hoạt động.\n\nStreams sẽ được tạo tự động khi người dùng bắt đầu live trading."
+streams_subscribers: "👥 <b>Số Người Đăng Ký:</b> {count}"
+streams_subscribers_more: "... và {count} người khác"
+streams_footer: "💡 <i>Streams được chia sẻ giữa các người dùng cho cùng một cặp tiền để tối ưu hóa việc sử dụng tài nguyên.</i>"
+

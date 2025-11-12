@@ -1,6 +1,7 @@
 //! `SeaORM` Entity, @generated manually
 
 use sea_orm::entity::prelude::*;
+use rust_decimal::Decimal;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "positions")]
@@ -17,18 +18,18 @@ pub struct Model {
     pub exchange: String,
     pub pair: String,
     pub side: String, // "buy" or "sell"
-    #[sea_orm(column_type = "Text")]
-    pub entry_price: String,
-    #[sea_orm(column_type = "Text")]
-    pub quantity: String,
-    #[sea_orm(column_type = "Text")]
-    pub entry_value: String,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub current_price: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub unrealized_pnl: String,
-    #[sea_orm(column_type = "Text")]
-    pub unrealized_pnl_percent: String,
+    #[sea_orm(column_type = "Decimal(Some((20, 8)))")]
+    pub entry_price: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((20, 8)))")]
+    pub quantity: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((20, 8)))")]
+    pub entry_value: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((20, 8)))", nullable)]
+    pub current_price: Option<Decimal>,
+    #[sea_orm(column_type = "Decimal(Some((20, 8)))")]
+    pub unrealized_pnl: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((10, 4)))")]
+    pub unrealized_pnl_percent: Decimal,
     pub status: String, // "open", "closed"
     pub entry_time: Option<DateTimeUtc>,
     pub close_time: Option<DateTimeUtc>,

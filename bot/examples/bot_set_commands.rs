@@ -54,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         { "command": "ai", "description": "🤖 Ask AI (Gemini) any question" },
         { "command": "mytrading", "description": "📊 View your live trading status" },
         { "command": "pnl", "description": "💰 View profit and loss statistics" },
+        { "command": "streams", "description": "📡 View active market data streams" },
         ],
         "scope": { "type": "default" }
     });

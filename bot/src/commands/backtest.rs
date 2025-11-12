@@ -1492,7 +1492,7 @@ pub async fn handle_backtest_callback(
                                                     tracing::info!("🔄 Starting background Gemini AI analysis...");
                                                     
                                                     let analysis_result = if locale.as_str() == "vi" {
-                                                        gemini.analyze_backtest(
+                                                    gemini.analyze_backtest(
                                                             &strategy_name_clone,
                                                             &exchange_clone,
                                                             &freqtrade_pair_clone,
@@ -1506,9 +1506,9 @@ pub async fn handle_backtest_callback(
                                                             result_clone.final_balance,
                                                             &tables_clone,
                                                             result_clone.stdout.as_deref(),
-                                                        ).await
-                                                    } else {
-                                                        gemini.analyze_backtest_en(
+                                                    ).await
+                                                } else {
+                                                    gemini.analyze_backtest_en(
                                                             &strategy_name_clone,
                                                             &exchange_clone,
                                                             &freqtrade_pair_clone,
@@ -1522,11 +1522,11 @@ pub async fn handle_backtest_callback(
                                                             result_clone.final_balance,
                                                             &tables_clone,
                                                             result_clone.stdout.as_deref(),
-                                                        ).await
-                                                    };
-                                                    
-                                                    match analysis_result {
-                                                        Ok(analysis) => {
+                                                    ).await
+                                                };
+                                                
+                                                match analysis_result {
+                                                    Ok(analysis) => {
                                                             tracing::info!("✅ Gemini AI analysis generated successfully (length: {} chars)", analysis.len());
                                                             
                                                             // Update HTML report with AI analysis
@@ -1546,11 +1546,11 @@ pub async fn handle_backtest_callback(
                                                             } else {
                                                                 tracing::info!("✅ HTML report successfully updated with AI analysis at: {}", filepath.display());
                                                             }
-                                                        }
-                                                        Err(e) => {
-                                                            tracing::warn!("⚠️ Failed to generate Gemini AI analysis: {}", e);
-                                                        }
                                                     }
+                                                    Err(e) => {
+                                                        tracing::warn!("⚠️ Failed to generate Gemini AI analysis: {}", e);
+                                                    }
+                                                }
                                                 });
                                             } else {
                                                 tracing::warn!("⚠️ Gemini API key not configured, skipping AI analysis");

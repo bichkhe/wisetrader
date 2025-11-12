@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::str::FromStr;
 use barter_data::{
     exchange::binance::spot::BinanceSpot,
     streams::Streams,
@@ -180,6 +181,29 @@ impl StreamManager {
             }
         }
         0
+    }
+    
+    /// Get all active streams with their information
+    /// Returns vector of (exchange, pair, subscriber_count, subscriber_ids)
+    pub async fn get_active_streams(&self) -> Vec<(String, String, usize, Vec<i64>)> {
+        let streams = self.streams.read().await;
+        let mut result = Vec::new();
+        
+        for (key, stream_info) in streams.iter() {
+            let subscribers = stream_info.subscribers.read().await;
+            let subscriber_ids = subscribers.clone();
+            let subscriber_count = subscriber_ids.len();
+            
+            let pair = format!("{}/{}", key.base.to_uppercase(), key.quote.to_uppercase());
+            result.push((
+                key.exchange.clone(),
+                pair,
+                subscriber_count,
+                subscriber_ids,
+            ));
+        }
+        
+        result
     }
     
     /// Run the actual stream and broadcast events to all subscribers
@@ -884,6 +908,13 @@ pub fn start_user_trading_service(
                                 info!("🔍 [User {}] Evaluating strategy '{}' on candle...", 
                                     user_id_for_stream, strategy_config_for_stream.strategy_type);
                                 
+                                // Check if user is still trading before processing
+                                let is_trading = app_state_for_stream.strategy_executor.is_user_trading(user_id_for_stream).await;
+                                if !is_trading {
+                                    warn!("⚠️ [User {}] User is not trading anymore, skipping candle processing", user_id_for_stream);
+                                    continue;
+                                }
+                                
                                 if let Some(signal) = app_state_for_stream.strategy_executor
                                     .process_candle(user_id_for_stream, &candle).await 
                                 {
@@ -916,43 +947,140 @@ pub fn start_user_trading_service(
                                     // Clone candle timestamp for save
                                     let candle_timestamp_for_save = DateTime::from_timestamp(candle.timestamp, 0).unwrap_or_else(|| Utc::now());
                                     
-                                    // Spawn task to save signal (non-blocking)
-                                    tokio::spawn(async move {
-                                        if let Err(e) = save_trading_order(
-                                            &app_state_for_db,
-                                            user_id_for_db,
-                                            &exchange_for_db,
-                                            &pair_for_db,
-                                            &strategy_config_for_db,
-                                            &signal_clone,
-                                            Some(candle_timestamp_for_save),
-                                            None, // Indicator values - TODO: extract from strategy state
-                                        ).await {
-                                            error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
+                                    // Check if we should send this signal based on existing positions
+                                    let should_send_signal = match &signal {
+                                        crate::services::strategy_engine::StrategySignal::Buy { .. } => {
+                                            // Only send BUY if user doesn't have an open position for this pair
+                                            match crate::services::position_service::has_open_position_for_pair(
+                                                app_state_for_stream.db.as_ref(),
+                                                user_id_for_stream,
+                                                &pair_for_stream,
+                                            ).await {
+                                                Ok(false) => {
+                                                    info!("✅ [User {}] No open position for {}, sending BUY signal", user_id_for_stream, pair_for_stream);
+                                                    true
+                                                }
+                                                Ok(true) => {
+                                                    info!("⏭️ [User {}] Already has open position for {}, skipping BUY signal", user_id_for_stream, pair_for_stream);
+                                                    false
+                                                }
+                                                Err(e) => {
+                                                    error!("❌ [User {}] Failed to check open position for {}: {}, will send signal anyway", user_id_for_stream, pair_for_stream, e);
+                                                    true // Send anyway if check fails
+                                                }
+                                            }
                                         }
-                                    });
+                                        crate::services::strategy_engine::StrategySignal::Sell { .. } => {
+                                            // Only send SELL if user has an open position for this pair
+                                            match crate::services::position_service::has_open_position_for_pair(
+                                                app_state_for_stream.db.as_ref(),
+                                                user_id_for_stream,
+                                                &pair_for_stream,
+                                            ).await {
+                                                Ok(true) => {
+                                                    info!("✅ [User {}] Has open position for {}, sending SELL signal", user_id_for_stream, pair_for_stream);
+                                                    true
+                                                }
+                                                Ok(false) => {
+                                                    info!("⏭️ [User {}] No open position for {}, skipping SELL signal", user_id_for_stream, pair_for_stream);
+                                                    false
+                                                }
+                                                Err(e) => {
+                                                    error!("❌ [User {}] Failed to check open position for {}: {}, will send signal anyway", user_id_for_stream, pair_for_stream, e);
+                                                    true // Send anyway if check fails
+                                                }
+                                            }
+                                        }
+                                        crate::services::strategy_engine::StrategySignal::Hold => {
+                                            false // Never send Hold signals
+                                        }
+                                    };
                                     
-                                    // Format and send signal to user
-                                    let message = format_user_signal_message(
-                                        &signal, 
-                                        &pair_for_stream, 
-                                        &bot_name_for_stream,
-                                        &strategy_config_for_stream
-                                    );
-                                    
-                                    if let Err(e) = bot_for_stream.send_message(
-                                        ChatId(user_chat_id_for_stream),
-                                        message
-                                    )
-                                    .parse_mode(teloxide::types::ParseMode::Html)
-                                    .await {
-                                        error!("Failed to send trading signal to user {}: {}", user_id_for_stream, e);
+                                    if should_send_signal {
+                                        // Spawn task to save signal (non-blocking)
+                                        let app_state_for_db = app_state_for_stream.clone();
+                                        let user_id_for_db = user_id_for_stream;
+                                        let exchange_for_db = exchange_for_stream.clone();
+                                        let pair_for_db = pair_for_stream.clone();
+                                        let strategy_config_for_db = strategy_config_for_stream.clone();
+                                        let signal_clone_for_db = signal.clone();
+                                        
+                                        tokio::spawn(async move {
+                                            if let Err(e) = save_trading_order(
+                                                &app_state_for_db,
+                                                user_id_for_db,
+                                                &exchange_for_db,
+                                                &pair_for_db,
+                                                &strategy_config_for_db,
+                                                &signal_clone_for_db,
+                                                Some(candle_timestamp_for_save),
+                                                None, // Indicator values - TODO: extract from strategy state
+                                            ).await {
+                                                error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
+                                            }
+                                        });
+                                        
+                                        // Format and send signal to user
+                                        let message = format_user_signal_message(
+                                            &signal, 
+                                            &pair_for_stream, 
+                                            &bot_name_for_stream,
+                                            &strategy_config_for_stream
+                                        );
+                                        
+                                        if message.is_empty() {
+                                            warn!("⚠️ [User {}] Message is empty for signal {:?}, skipping send", user_id_for_stream, signal);
+                                        } else {
+                                            info!("📤 [User {}] Sending signal message to chat {} (length: {} chars)", 
+                                                user_id_for_stream, user_chat_id_for_stream, message.len());
+                                            
+                                            if let Err(e) = bot_for_stream.send_message(
+                                                ChatId(user_chat_id_for_stream),
+                                                &message
+                                            )
+                                            .parse_mode(teloxide::types::ParseMode::Html)
+                                            .await {
+                                                error!("❌ [User {}] Failed to send trading signal to user {} (chat: {}): {}", 
+                                                    user_id_for_stream, user_id_for_stream, user_chat_id_for_stream, e);
+                                            } else {
+                                                info!("✅ [User {}] Trading signal sent successfully to user (chat: {})", 
+                                                    user_id_for_stream, user_chat_id_for_stream);
+                                            }
+                                        }
                                     } else {
-                                        info!("✅ [User {}] Trading signal sent to user (chat: {})", user_id_for_stream, user_chat_id_for_stream);
+                                        // Still save the signal to database for tracking, but don't send message
+                                        let app_state_for_db = app_state_for_stream.clone();
+                                        let user_id_for_db = user_id_for_stream;
+                                        let exchange_for_db = exchange_for_stream.clone();
+                                        let pair_for_db = pair_for_stream.clone();
+                                        let strategy_config_for_db = strategy_config_for_stream.clone();
+                                        let signal_clone_for_db = signal.clone();
+                                        
+                                        tokio::spawn(async move {
+                                            if let Err(e) = save_trading_order(
+                                                &app_state_for_db,
+                                                user_id_for_db,
+                                                &exchange_for_db,
+                                                &pair_for_db,
+                                                &strategy_config_for_db,
+                                                &signal_clone_for_db,
+                                                Some(candle_timestamp_for_save),
+                                                None,
+                                            ).await {
+                                                error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
+                                            }
+                                        });
                                     }
                                 } else {
-                                    info!("🔍 [User {}] Strategy '{}' evaluated: No signal generated (hold)", 
+                                    debug!("🔍 [User {}] Strategy '{}' evaluated: No signal generated (hold or None)", 
                                         user_id_for_stream, strategy_config_for_stream.strategy_type);
+                                    
+                                    // For RSI strategy, log why no signal was generated
+                                    if strategy_config_for_stream.strategy_type.to_uppercase() == "RSI" {
+                                        if let Some(state_info) = app_state_for_stream.strategy_executor.get_user_state_info(user_id_for_stream).await {
+                                            debug!("📊 [User {}] RSI Strategy state: {}", user_id_for_stream, state_info);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1002,6 +1130,7 @@ pub fn start_user_trading_service(
         
         let mut timer_count = 0u64;
         let mut last_heartbeat_timer = std::time::Instant::now();
+        let mut last_minute_log = std::time::Instant::now();
         
         loop {
             timer.tick().await;
@@ -1013,6 +1142,29 @@ pub fn start_user_trading_service(
                     user_id_timer, timer_count, strategy_config_timer.strategy_type, 
                     exchange_timer, pair_timer);
                 last_heartbeat_timer = std::time::Instant::now();
+            }
+            
+            // For RSI strategy, log detailed stats every 1 minute
+            if strategy_config_timer.strategy_type.to_uppercase() == "RSI" && last_minute_log.elapsed().as_secs() >= 60 {
+                // Get strategy state info for logging
+                if let Some(state_info) = app_state_timer.strategy_executor.get_user_state_info(user_id_timer).await {
+                    info!("📊 [User {}] RSI Strategy Status (1-min heartbeat): {}", user_id_timer, state_info);
+                } else {
+                    warn!("⚠️ [User {}] Could not get RSI strategy state info for 1-min log", user_id_timer);
+                }
+                
+                // Also log current candle state if available
+                let state_read = state_timer.read().await;
+                if let Some(ref candle) = state_read.current_candle {
+                    info!("📊 [User {}] RSI Strategy - Current Candle: O={:.4} H={:.4} L={:.4} C={:.4} ({} timeframe)", 
+                        user_id_timer, candle.open, candle.high, candle.low, candle.close,
+                        strategy_config_timer.timeframe);
+                } else {
+                    info!("📊 [User {}] RSI Strategy - No active candle yet (waiting for market data)", user_id_timer);
+                }
+                drop(state_read);
+                
+                last_minute_log = std::time::Instant::now();
             }
             
             let mut state_guard = state_timer.write().await;
@@ -1032,6 +1184,13 @@ pub fn start_user_trading_service(
                     // Process candle through user's strategy
                     info!("🔍 [User {}] Timer: Evaluating strategy '{}' on candle...", 
                         user_id_timer, strategy_config_timer.strategy_type);
+                    
+                    // Check if user is still trading before processing
+                    let is_trading = app_state_timer.strategy_executor.is_user_trading(user_id_timer).await;
+                    if !is_trading {
+                        warn!("⚠️ [User {}] User is not trading anymore, skipping candle processing", user_id_timer);
+                        continue;
+                    }
                     
                     if let Some(signal) = app_state_timer.strategy_executor
                         .process_candle(user_id_timer, &candle).await 
@@ -1065,55 +1224,149 @@ pub fn start_user_trading_service(
                         // Clone candle timestamp for save
                         let candle_timestamp_for_save = DateTime::from_timestamp(candle.timestamp, 0).unwrap_or_else(|| Utc::now());
                         
-                        // Spawn task to save signal (non-blocking)
-                        tokio::spawn(async move {
-                            if let Err(e) = save_trading_order(
-                                &app_state_for_db,
-                                user_id_for_db,
-                                &exchange_for_db,
-                                &pair_for_db,
-                                &strategy_config_for_db,
-                                &signal_clone,
-                                Some(candle_timestamp_for_save),
-                                None, // Indicator values - TODO: extract from strategy state
-                            ).await {
-                                error!("Failed to save trading signal for user {}: {}", user_id_for_db, e);
+                        // Check if we should send this signal based on existing positions
+                        let should_send_signal_timer = match &signal {
+                            crate::services::strategy_engine::StrategySignal::Buy { .. } => {
+                                // Only send BUY if user doesn't have an open position for this pair
+                                match crate::services::position_service::has_open_position_for_pair(
+                                    app_state_timer.db.as_ref(),
+                                    user_id_timer,
+                                    &pair_timer,
+                                ).await {
+                                    Ok(false) => {
+                                        info!("✅ [User {}] Timer: No open position for {}, sending BUY signal", user_id_timer, pair_timer);
+                                        true
+                                    }
+                                    Ok(true) => {
+                                        info!("⏭️ [User {}] Timer: Already has open position for {}, skipping BUY signal", user_id_timer, pair_timer);
+                                        false
+                                    }
+                                    Err(e) => {
+                                        error!("❌ [User {}] Timer: Failed to check open position for {}: {}, will send signal anyway", user_id_timer, pair_timer, e);
+                                        true // Send anyway if check fails
+                                    }
+                                }
                             }
-                        });
+                            crate::services::strategy_engine::StrategySignal::Sell { .. } => {
+                                // Only send SELL if user has an open position for this pair
+                                match crate::services::position_service::has_open_position_for_pair(
+                                    app_state_timer.db.as_ref(),
+                                    user_id_timer,
+                                    &pair_timer,
+                                ).await {
+                                    Ok(true) => {
+                                        info!("✅ [User {}] Timer: Has open position for {}, sending SELL signal", user_id_timer, pair_timer);
+                                        true
+                                    }
+                                    Ok(false) => {
+                                        info!("⏭️ [User {}] Timer: No open position for {}, skipping SELL signal", user_id_timer, pair_timer);
+                                        false
+                                    }
+                                    Err(e) => {
+                                        error!("❌ [User {}] Timer: Failed to check open position for {}: {}, will send signal anyway", user_id_timer, pair_timer, e);
+                                        true // Send anyway if check fails
+                                    }
+                                }
+                            }
+                            crate::services::strategy_engine::StrategySignal::Hold => {
+                                false // Never send Hold signals
+                            }
+                        };
                         
-                        let message = format_user_signal_message(
-                            &signal, 
-                            &pair_timer, 
-                            &bot_name_timer,
-                            &strategy_config_timer
-                        );
-                        
-                        if !message.is_empty() {
-                            if let Err(e) = bot_timer.send_message(
-                                ChatId(user_chat_id_timer),
-                                message
-                            )
-                            .parse_mode(teloxide::types::ParseMode::Html)
-                            .await {
-                                error!("Failed to send trading signal to user {}: {}", user_id_timer, e);
+                        if should_send_signal_timer {
+                            // Spawn task to save signal (non-blocking)
+                            let app_state_for_db_timer = app_state_timer.clone();
+                            let user_id_for_db_timer = user_id_timer;
+                            let exchange_for_db_timer = exchange_timer.clone();
+                            let pair_for_db_timer = pair_timer.clone();
+                            let strategy_config_for_db_timer = strategy_config_timer.clone();
+                            let signal_clone_for_db_timer = signal.clone();
+                            
+                            tokio::spawn(async move {
+                                if let Err(e) = save_trading_order(
+                                    &app_state_for_db_timer,
+                                    user_id_for_db_timer,
+                                    &exchange_for_db_timer,
+                                    &pair_for_db_timer,
+                                    &strategy_config_for_db_timer,
+                                    &signal_clone_for_db_timer,
+                                    Some(candle_timestamp_for_save),
+                                    None, // Indicator values - TODO: extract from strategy state
+                                ).await {
+                                    error!("Failed to save trading signal for user {}: {}", user_id_for_db_timer, e);
+                                }
+                            });
+                            
+                            let message = format_user_signal_message(
+                                &signal, 
+                                &pair_timer, 
+                                &bot_name_timer,
+                                &strategy_config_timer
+                            );
+                            
+                            if message.is_empty() {
+                                warn!("⚠️ [User {}] Timer: Message is empty for signal {:?}, skipping send", user_id_timer, signal);
                             } else {
-                                info!("✅ [User {}] Timer: Trading signal sent to user", user_id_timer);
+                                info!("📤 [User {}] Timer: Sending signal message to chat {} (length: {} chars)", 
+                                    user_id_timer, user_chat_id_timer, message.len());
+                                
+                                if let Err(e) = bot_timer.send_message(
+                                    ChatId(user_chat_id_timer),
+                                    &message
+                                )
+                                .parse_mode(teloxide::types::ParseMode::Html)
+                                .await {
+                                    error!("❌ [User {}] Timer: Failed to send trading signal to user {} (chat: {}): {}", 
+                                        user_id_timer, user_id_timer, user_chat_id_timer, e);
+                                } else {
+                                    info!("✅ [User {}] Timer: Trading signal sent successfully to user", user_id_timer);
+                                }
                             }
                         } else {
-                            info!("🔍 [User {}] Timer: Strategy '{}' evaluated: No signal generated (hold)", 
-                                user_id_timer, strategy_config_timer.strategy_type);
+                            // Still save the signal to database for tracking, but don't send message
+                            let app_state_for_db_timer = app_state_timer.clone();
+                            let user_id_for_db_timer = user_id_timer;
+                            let exchange_for_db_timer = exchange_timer.clone();
+                            let pair_for_db_timer = pair_timer.clone();
+                            let strategy_config_for_db_timer = strategy_config_timer.clone();
+                            let signal_clone_for_db_timer = signal.clone();
+                            
+                            tokio::spawn(async move {
+                                if let Err(e) = save_trading_order(
+                                    &app_state_for_db_timer,
+                                    user_id_for_db_timer,
+                                    &exchange_for_db_timer,
+                                    &pair_for_db_timer,
+                                    &strategy_config_for_db_timer,
+                                    &signal_clone_for_db_timer,
+                                    Some(candle_timestamp_for_save),
+                                    None,
+                                ).await {
+                                    error!("Failed to save trading signal for user {}: {}", user_id_for_db_timer, e);
+                                }
+                            });
                         }
                     }
                 } else {
                     info!("⏰ [User {}] Timer tick #{}: No active candle to process", user_id_timer, timer_count);
                 }
             } else {
-                info!("⏰ [User {}] Timer tick #{}: No candle initialized yet", user_id_timer, timer_count);
+                debug!("⏰ [User {}] Timer tick #{}: No candle initialized yet (waiting for market data)", user_id_timer, timer_count);
             }
         }
     });
 
     info!("✅ User Trading Service started successfully for user {}", user_id);
+}
+
+/// Helper function to escape HTML characters for Telegram messages
+/// Must escape & first to avoid double-escaping!
+fn escape_html(text: &str) -> String {
+    text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#x27;")
 }
 
 /// Format user-specific trading signal message
@@ -1124,8 +1377,16 @@ fn format_user_signal_message(
     strategy_config: &crate::services::strategy_engine::StrategyConfig,
 ) -> String {
     let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+    
+    // Escape all user input to prevent HTML parsing errors
+    let escaped_pair = escape_html(pair);
+    let escaped_bot_name = escape_html(bot_name);
+    let escaped_strategy_type = escape_html(&strategy_config.strategy_type);
+    let escaped_timeframe = escape_html(&strategy_config.timeframe);
+    
     match signal {
         crate::services::strategy_engine::StrategySignal::Buy { confidence, price, reason } => {
+            let escaped_reason = escape_html(reason);
             format!(
                 "🟢 <b>BUY SIGNAL - {}</b>\n\n\
 💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
@@ -1138,11 +1399,12 @@ fn format_user_signal_message(
 🤖 <b>Bot:</b> {}\n\
 🔄 <b>Status:</b> <code>Live Trading Active</code>\n\n\
 ⚠️ <i>This is a live trading signal. Always do your own research!</i>",
-                pair, price, confidence * 100.0, reason, timestamp, 
-                strategy_config.strategy_type, strategy_config.timeframe, pair, bot_name
+                escaped_pair, price, confidence * 100.0, escaped_reason, timestamp, 
+                escaped_strategy_type, escaped_timeframe, escaped_pair, escaped_bot_name
             )
         },
         crate::services::strategy_engine::StrategySignal::Sell { confidence, price, reason } => {
+            let escaped_reason = escape_html(reason);
             format!(
                 "🔴 <b>SELL SIGNAL - {}</b>\n\n\
 💰 <b>Price:</b> <code>{:.4}</code> USDT\n\
@@ -1155,8 +1417,8 @@ fn format_user_signal_message(
 🤖 <b>Bot:</b> {}\n\
 🔄 <b>Status:</b> <code>Live Trading Active</code>\n\n\
 ⚠️ <i>This is a live trading signal. Always do your own research!</i>",
-                pair, price, confidence * 100.0, reason, timestamp,
-                strategy_config.strategy_type, strategy_config.timeframe, pair, bot_name
+                escaped_pair, price, confidence * 100.0, escaped_reason, timestamp,
+                escaped_strategy_type, escaped_timeframe, escaped_pair, escaped_bot_name
             )
         },
         crate::services::strategy_engine::StrategySignal::Hold => {
@@ -1269,7 +1531,7 @@ async fn save_trading_order(
                 price,
             ).await {
                 Ok(trade_id) => {
-                    let pnl: f64 = position.unrealized_pnl.parse().unwrap_or(0.0);
+                    let pnl: f64 = f64::from_str(&position.unrealized_pnl.to_string()).unwrap_or(0.0);
                     info!("✅ Closed position {} and created trade {} for user {}: {} {} at {} (P&L: {:.2})", 
                         position.id, trade_id, user_id, side, pair, price, pnl);
                 }
@@ -1283,6 +1545,117 @@ async fn save_trading_order(
     }
     
     info!("✅ Saved trading signal {} to database for user {}: {} {} at {}", signal_id, user_id, side, pair, price);
+    
+    Ok(())
+}
+
+/// Restore active live trading sessions from database on bot startup
+/// This function queries all active sessions and restarts the trading services for them
+pub async fn restore_active_sessions(
+    app_state: Arc<crate::state::AppState>,
+    bot: teloxide::Bot,
+) -> Result<(), anyhow::Error> {
+    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+    use shared::entity::live_trading_sessions;
+    
+    info!("🔄 Restoring active live trading sessions from database...");
+    
+    // Query all active sessions
+    let active_sessions = live_trading_sessions::Entity::find()
+        .filter(live_trading_sessions::Column::Status.eq("active"))
+        .all(app_state.db.as_ref())
+        .await?;
+    
+    if active_sessions.is_empty() {
+        info!("ℹ️ No active sessions found to restore");
+        return Ok(());
+    }
+    
+    info!("📋 Found {} active session(s) to restore", active_sessions.len());
+    
+    let mut restored_count = 0;
+    let mut failed_count = 0;
+    
+    for session in active_sessions {
+        let user_id = session.user_id;
+        let user_chat_id = user_id; // In Telegram, user_id is typically the same as chat_id for private chats
+        let strategy_id = session.strategy_id;
+        let exchange = session.exchange.clone();
+        let pair = session.pair.clone();
+        let timeframe = session.timeframe.clone().unwrap_or_else(|| "1m".to_string());
+        
+        info!("🔄 Restoring session for user {}: strategy_id={:?}, exchange={}, pair={}, timeframe={}", 
+            user_id, strategy_id, exchange, pair, timeframe);
+        
+        // Get strategy from database if strategy_id exists
+        let strategy_config = if let Some(sid) = strategy_id {
+            match app_state.strategy_service.get_strategy_by_id(sid).await? {
+                Some(strategy) => {
+                    match app_state.strategy_service.strategy_to_config(&strategy) {
+                        Ok(config) => {
+                            info!("✅ Loaded strategy config for user {}: {}", user_id, config.strategy_type);
+                            config
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to convert strategy to config for user {}: {}", user_id, e);
+                            failed_count += 1;
+                            continue;
+                        }
+                    }
+                }
+                None => {
+                    warn!("⚠️ Strategy {} not found for user {}, skipping session restore", sid, user_id);
+                    failed_count += 1;
+                    continue;
+                }
+            }
+        } else {
+            // If no strategy_id, try to create a basic config from session data
+            warn!("⚠️ Session for user {} has no strategy_id, creating basic config from session data", user_id);
+            use crate::services::strategy_engine::StrategyConfig;
+            StrategyConfig {
+                strategy_type: session.strategy_name.clone().unwrap_or_else(|| "RSI".to_string()),
+                parameters: serde_json::json!({}),
+                pair: pair.clone(),
+                timeframe: timeframe.clone(),
+                buy_condition: "RSI < 30".to_string(), // Default
+                sell_condition: "RSI > 70".to_string(), // Default
+            }
+        };
+        
+        // Start strategy executor
+        match app_state.strategy_executor.start_trading(
+            user_id,
+            strategy_config.clone(),
+            Some(exchange.clone())
+        ).await {
+            Ok(_) => {
+                info!("✅ Strategy executor started for user {}", user_id);
+            }
+            Err(e) => {
+                error!("❌ Failed to start strategy executor for user {}: {}", user_id, e);
+                failed_count += 1;
+                continue;
+            }
+        }
+        
+        // Start user trading service (this will subscribe to stream and start monitoring)
+        start_user_trading_service(
+            app_state.clone(),
+            bot.clone(),
+            user_id,
+            user_chat_id,
+            strategy_config,
+            exchange.clone(),
+            pair.clone(),
+        );
+        
+        info!("✅ Restored live trading session for user {}: {} on {} ({})", 
+            user_id, session.strategy_name.as_ref().unwrap_or(&"Unknown".to_string()), exchange, pair);
+        restored_count += 1;
+    }
+    
+    info!("✅ Session restoration complete: {} restored, {} failed", restored_count, failed_count);
     
     Ok(())
 }
