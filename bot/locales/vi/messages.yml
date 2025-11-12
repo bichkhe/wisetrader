@@ -34,13 +34,26 @@ welcome_new_user: |
   📈 <b>Truy Cập Thư Viện Chiến Lược</b>
   Học từ các chiến lược đã được chứng minh và tùy chỉnh chúng cho nhu cầu giao dịch của bạn.
   
-  <b>Sẵn sàng bắt đầu?</b> Sử dụng <code>/help</code> để xem tất cả lệnh. ℹ️
+  <b>Sẵn sàng bắt đầu?</b> Sử dụng /help để xem tất cả lệnh. ℹ️
   
   💎 <b>Muốn nhiều tính năng hơn?</b> Sử dụng <code>/upgrade</code> để xem các gói cao cấp.
   
   <i>⚠️ <b>Lưu ý:</b> Giao dịch tiền điện tử có rủi ro. Bot này cung cấp công cụ, không phải lời khuyên tài chính.</i>
 welcome_back: |
   Chào mừng trở lại! 👋
+  
+  🚀 <b>WiseTrader - Nền tảng Trading Thông minh</b>
+  
+  <b>📋 3 Bước Chính:</b>
+  
+  <b>1️⃣ Tạo Chiến Thuật Của Bạn</b>
+  Xây dựng chiến lược giao dịch với hàng trăm chỉ số kỹ thuật (RSI, MACD, Bollinger Bands, EMA, MA, Stochastic, ADX...)
+  
+  <b>2️⃣ Backtest</b>
+  Kiểm tra hiệu quả với dữ liệu thật trong quá khứ trên các sàn Binance và OKX
+  
+  <b>3️⃣ Live Trading</b>
+  Giao dịch thực tế với dữ liệu realtime, tự động theo dõi và gửi tín hiệu
   
   ⚠️ <b>LƯU Ý:</b> Đảm bảo bạn đã thiết lập ngôn ngữ (vi/en) để nhận được tất cả thông báo bằng ngôn ngữ ưa thích của bạn.
   

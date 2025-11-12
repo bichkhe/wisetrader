@@ -17,6 +17,31 @@ fn escape_html(text: &str) -> String {
         .replace("'", "&#x27;")
 }
 
+// Helper function to strip HTML tags for plain text display (e.g., in callback query alerts)
+fn strip_html_tags(text: &str) -> String {
+    let mut result = String::new();
+    let mut in_tag = false;
+    
+    for ch in text.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    
+    // Clean up common HTML entities
+    result.replace("&lt;", "<")
+          .replace("&gt;", ">")
+          .replace("&amp;", "&")
+          .replace("&quot;", "\"")
+          .replace("&#x27;", "'")
+          .replace("&nbsp;", " ")
+          .trim()
+          .to_string()
+}
+
 // Helper function to get user locale from callback
 async fn get_locale_from_callback(state: &Arc<AppState>, user_id: i64) -> String {
     use shared::entity::users;
@@ -1240,13 +1265,16 @@ pub async fn handle_delete_strategy_callback(
                             ("strategy_name", &strategy_name),
                         ]));
                         
+                        // Strip HTML tags for callback query alert (doesn't support HTML)
+                        let plain_text = strip_html_tags(&success_msg);
+                        
                         bot.answer_callback_query(q.id)
-                            .text(&success_msg)
+                            .text(&plain_text)
                             .show_alert(true)
                             .await?;
 
                         if let Some(msg) = q.message {
-                            bot.edit_message_text(msg.chat().id, msg.id(), success_msg)
+                            bot.edit_message_text(msg.chat().id, msg.id(), &success_msg)
                                 .parse_mode(teloxide::types::ParseMode::Html)
                                 .await?;
                         }
@@ -1475,9 +1503,16 @@ pub async fn handle_delete_strategy_callback(
                 
                 if user_strategies.is_empty() {
                     let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
-                    bot.edit_message_text(msg.chat().id, msg.id(), empty_msg)
+                    // Ignore "message is not modified" error
+                    if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &empty_msg)
                         .parse_mode(teloxide::types::ParseMode::Html)
-                        .await?;
+                        .await
+                    {
+                        let error_str = format!("{}", e);
+                        if !error_str.contains("message is not modified") {
+                            tracing::warn!("Failed to edit message (empty strategies in back_to_my_strategies): {}", e);
+                        }
+                    }
                     return Ok(());
                 }
                 
@@ -1581,10 +1616,19 @@ pub async fn handle_delete_strategy_callback(
                     ],
                 ];
                 
-                bot.edit_message_text(msg.chat().id, msg.id(), msg_text)
+                // Edit message, but ignore "message is not modified" error
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
                     .parse_mode(teloxide::types::ParseMode::Html)
                     .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
-                    .await?;
+                    .await
+                {
+                    // Ignore "message is not modified" error - it means the message is already in the desired state
+                    let error_str = format!("{}", e);
+                    if !error_str.contains("message is not modified") {
+                        // Log other errors but don't fail
+                        tracing::warn!("Failed to edit message in back_to_my_strategies: {}", e);
+                    }
+                }
             }
         }
     }
