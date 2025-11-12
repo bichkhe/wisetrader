@@ -478,8 +478,8 @@ async fn generate_html_report(
         ai_analysis,
     );
     
-    // Render template
-    let html_content = template.render()?;
+    // Render template with AI analysis (if available)
+    let html_content = template.render_with_ai_analysis()?;
     
     // Write to file
     fs::write(&filepath, html_content)?;
@@ -541,8 +541,8 @@ async fn update_html_report_with_ai_analysis(
             template.ai_analysis_html.as_ref().map(|s| s.len()).unwrap_or(0));
     }
     
-    // Render template
-    let html_content = template.render()?;
+    // Render template with AI analysis (if available)
+    let html_content = template.render_with_ai_analysis()?;
     
     // Write to file (overwrite)
     fs::write(filepath, html_content)?;

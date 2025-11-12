@@ -121,6 +121,12 @@ struct AiAnalysisTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "ai_analysis_section.html.jinja", escape = "none")]
+struct AiAnalysisSectionTemplate {
+    ai_analysis_html: String,
+}
+
+#[derive(Template)]
 #[template(path = "backtest_report.html.jinja", escape = "html")]
 pub struct BacktestReportTemplate {
     pub strategy_name: String,
@@ -143,6 +149,35 @@ pub struct BacktestReportTemplate {
     pub logo_base64: String,
     pub ai_analysis: Option<String>,
     pub ai_analysis_html: Option<String>,
+    pub ai_analysis_section: Option<String>, // Pre-rendered HTML section (raw HTML, no escaping)
+}
+
+impl BacktestReportTemplate {
+    /// Custom render that handles AI analysis section without escaping
+    pub fn render_with_ai_analysis(&self) -> Result<String, askama::Error> {
+        // Render the main template without AI analysis section
+        let mut html = self.render()?;
+        
+        // If we have AI analysis section, insert it at the comment marker
+        if let Some(ref section_html) = self.ai_analysis_section {
+            // Find the comment marker where we should insert the AI analysis
+            if let Some(pos) = html.find("<!-- AI Analysis section will be inserted here by render_with_ai_analysis() -->") {
+                // Insert the section HTML at the comment position, replacing the comment
+                let comment_len = "<!-- AI Analysis section will be inserted here by render_with_ai_analysis() -->".len();
+                html.replace_range(pos..pos + comment_len, section_html);
+            } else {
+                // Fallback: append before footer
+                if let Some(pos) = html.find("<div class=\"footer\">") {
+                    html.insert_str(pos, section_html);
+                } else {
+                    // Last resort: append at end
+                    html.push_str(section_html);
+                }
+            }
+        }
+        
+        Ok(html)
+    }
 }
 
 impl BacktestReportTemplate {
@@ -176,6 +211,16 @@ impl BacktestReportTemplate {
                     .unwrap_or_else(|_| html_clone) // Fallback to raw HTML if template render fails
             });
         
+        // Pre-render AI analysis section with escape = "none" to avoid double escaping
+        // This section is already HTML, so we render it separately and embed as raw HTML
+        let ai_analysis_section = ai_analysis_html.as_ref()
+            .map(|html| {
+                // Render the section template with escape = "none"
+                AiAnalysisSectionTemplate { ai_analysis_html: html.clone() }
+                    .render()
+                    .unwrap_or_else(|_| String::new())
+            });
+        
         Self {
             strategy_name,
             exchange,
@@ -197,6 +242,7 @@ impl BacktestReportTemplate {
             logo_base64: load_logo_base64(),
             ai_analysis,
             ai_analysis_html,
+            ai_analysis_section,
         }
     }
 }

@@ -367,18 +367,7 @@
             </div>
             {% endif %}
             
-            {% match ai_analysis_html %}
-            {% when Some with (analysis_html) %}
-            <div class="section">
-                <h2>🤖 AI Analysis (Powered by Gemini)</h2>
-                <div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 25px; border-radius: 12px; border-left: 5px solid #667eea; margin-top: 20px;">
-                    <div class="ai-analysis-content" style="line-height: 1.8; color: #2c3e50; font-size: 1.05em;">
-                        {{ analysis_html }}
-                    </div>
-                </div>
-            </div>
-            {% when None %}
-            {% endmatch %}
+            <!-- AI Analysis section will be inserted here by render_with_ai_analysis() -->
         </div>
         
         <div class="footer">
