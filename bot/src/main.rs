@@ -73,7 +73,7 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         // IMPORTANT: Filter-based handlers (that check callback data) MUST come BEFORE state-based handlers
         // to ensure they get matched first, regardless of dialogue state
         
-        // Handle delete strategy callbacks from any state FIRST (before other handlers)
+        // Handle delete strategy callbacks and pagination from any state FIRST (before other handlers)
         .branch(
             dptree::filter(|q: CallbackQuery| {
                 q.data.as_ref().map(|d| {
@@ -81,7 +81,8 @@ fn schema() -> UpdateHandler<anyhow::Error> {
                     d.starts_with("delete_confirm_") || 
                     d == "delete_cancel" ||
                     d == "show_delete_strategies" ||
-                    d == "back_to_my_strategies"
+                    d == "back_to_my_strategies" ||
+                    d.starts_with("mystrategies_page_")
                 }).unwrap_or(false)
             })
             .endpoint(handle_delete_strategy_callback)

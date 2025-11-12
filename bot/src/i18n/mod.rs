@@ -320,6 +320,10 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         // Navigation buttons
         ("vi", "button_back") => "⬅️ Quay lại".to_string(),
         ("en", "button_back") => "⬅️ Back".to_string(),
+        ("vi", "button_previous") => "⬅️ Trước".to_string(),
+        ("en", "button_previous") => "⬅️ Previous".to_string(),
+        ("vi", "button_next") => "Tiếp ➡️".to_string(),
+        ("en", "button_next") => "Next ➡️".to_string(),
         
         // Tokens buttons
         ("vi", "tokens_revoke_all") => "🗑️ Hủy Tất Cả".to_string(),

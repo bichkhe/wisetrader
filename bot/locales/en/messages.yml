@@ -151,10 +151,31 @@ strategy_saved: "✅ Strategy saved! Use /mystrategies to view all your strategi
 strategy_saved_success: "✅ Strategy saved! Use /mystrategies to view all your strategies."
 strategy_saved_error: "❌ Error saving strategy. Please try again."
 strategy_already_saved: "✅ Strategy already saved! Use /strategies to view all your strategies."
-strategy_created_success: "✅ <b>Strategy Created Successfully!</b>\n\n📋 <b>Complete Summary:</b>\n\n🎯 <b>Strategy Name:</b> {strategy_name}\n📊 <b>Algorithm:</b> {algorithm}\n📈 <b>Buy Condition:</b> {buy_condition}\n📉 <b>Sell Condition:</b> {sell_condition}\n⏰ <b>Timeframe:</b> {timeframe}\n💱 <b>Trading Pair:</b> {pair}\n\nYour strategy has been saved and is ready to use!"
+strategy_created_success: |
+  🎉 <b>STRATEGY CREATED SUCCESSFULLY!</b>
+  
+  ════════════════════════════
+  📋 <b>STRATEGY DETAILS</b>
+  ════════════════════════════
+  
+  🎯 <b>Strategy Name:</b> {strategy_name}
+  📊 <b>Algorithm:</b> {algorithm}
+  📈 <b>Buy Condition:</b> <code>{buy_condition}</code>
+  📉 <b>Sell Condition:</b> <code>{sell_condition}</code>
+  ⏰ <b>Timeframe:</b> {timeframe}
+  💱 <b>Trading Pair:</b> {pair}
+  
+  ════════════════════════════
+  ⚡ <b>STATUS: READY</b> ⚡
+  ════════════════════════════
+  
+  ✅ Your strategy has been saved and is ready to use!
+  
+  💡 <i>Use /backtest to test your strategy or /mytrading to start live trading</i>
 strategy_my_strategies_title: "📋 <b>My Strategies</b> ({count})"
 strategy_my_strategies_empty: "📋 <b>My Strategies</b>\n\nYou haven't created any strategies yet.\n\nUse /createstrategy to create your first strategy!"
 strategy_my_strategies_tip: "\n💡 <b>Tip:</b> Use /backtest to test your strategies!"
+strategy_page_info: "📄 Page {page} of {total}"
 strategy_delete_confirm: "⚠️ <b>Are you sure you want to delete this strategy?</b>\n\n<b>Strategy:</b> {strategy_name}\n\nThis action cannot be undone!"
 strategy_delete_success: "✅ <b>Strategy deleted successfully!</b>\n\nThe strategy <b>{strategy_name}</b> has been removed from your list."
 strategy_delete_error: "❌ <b>Error deleting strategy!</b>\n\nFailed to delete the strategy. Please try again."
@@ -166,7 +187,20 @@ strategy_delete_confirm_no: "No, Cancel"
 strategy_choose_algorithm: "📊 <b>Choose Algorithm</b>\n\nPlease select an algorithm for your strategy:"
 strategy_choose_preset: "📚 <b>Preset Strategies</b>\n\nSelect a preset strategy to use as a template:"
 strategy_loading_preset: "⏳ <b>Loading Preset Strategy...</b>\n\n<b>Strategy:</b> {name}\n\nPlease wait..."
-strategy_preset_loaded: "✅ <b>Preset Strategy Loaded!</b>\n\n📋 <b>Strategy Summary:</b>\n\n📛 <b>Name:</b> {name}\n📊 <b>Algorithm:</b> {algorithm}\n📈 <b>Buy Condition:</b> <code>{buy_condition}</code>\n📉 <b>Sell Condition:</b> <code>{sell_condition}</code>\n⏰ <b>Timeframe:</b> {timeframe}"
+strategy_preset_loaded: |
+  ✅ <b>PRESET STRATEGY LOADED!</b>
+  
+  ════════════════════════════
+  📋 <b>STRATEGY CONFIGURATION</b>
+  ════════════════════════════
+  
+  📛 <b>Name:</b> {name}
+  📊 <b>Algorithm:</b> {algorithm}
+  📈 <b>Buy Condition:</b> <code>{buy_condition}</code>
+  📉 <b>Sell Condition:</b> <code>{sell_condition}</code>
+  ⏰ <b>Timeframe:</b> {timeframe}
+  
+  💡 <i>You can customize this strategy or save it as is</i>
 strategy_preset_load_error: "❌ <b>Failed to Load Preset Strategy</b>\n\n<b>Strategy:</b> {name}\n<b>Error:</b> {error}\n\nPlease try again or choose a different preset."
 strategy_enter_name: "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔴 <b><u>ENTER A NAME FOR YOUR STRATEGY</u></b> 🔴\n\n📝 <b>Please enter a name for your strategy:</b>\n\n💡 <i>Example: My RSI Strategy, BTC Scalping, etc.</i>\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 strategy_name_set: "✅ <b>Strategy Name Set!</b>\n\n📛 <b>Name:</b> {name}"

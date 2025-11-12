@@ -1047,52 +1047,36 @@ pub async fn handle_strategy_input_callback(
     Ok(())
 }
 
-
-/// Handler to list all strategies created by the current user
-pub async fn handle_my_strategies(
-    bot: Bot,
-    msg: Message,
-    state: Arc<AppState>,
-) -> anyhow::Result<()> {
-    let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
-    let db = state.db.clone();
-
-    // Query strategies filtered by telegram_id column
-    use sea_orm::ColumnTrait;
-    use shared::entity::strategies;
+/// Helper function to build strategies message with pagination
+/// Returns (message_text, buttons, current_page, total_pages)
+fn build_strategies_message_paginated(
+    strategies: &[strategies::Model],
+    locale: &str,
+    page: usize,
+    items_per_page: usize,
+) -> (String, Vec<Vec<InlineKeyboardButton>>, usize, usize) {
+    let total_pages = (strategies.len() + items_per_page - 1) / items_per_page;
+    let current_page = page.min(total_pages.max(1) - 1);
     
-    let user_strategies = strategies::Entity::find()
-        .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
-        .order_by_desc(strategies::Column::CreatedAt)
-        .all(db.as_ref())
-        .await?;
-
-    // Get user language
-    let user = users::Entity::find_by_id(telegram_id.parse::<i64>().unwrap_or(0))
-        .one(db.as_ref())
-        .await?;
-    let locale = user
-        .as_ref()
-        .and_then(|u| u.language.as_ref())
-        .map(|l| i18n::get_user_language(Some(l)))
-        .unwrap_or("en");
+    let start_idx = current_page * items_per_page;
+    let end_idx = (start_idx + items_per_page).min(strategies.len());
+    let page_strategies = &strategies[start_idx..end_idx];
     
-    if user_strategies.is_empty() {
-        let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
-        bot.send_message(msg.chat.id, empty_msg)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await?;
-        return Ok(());
-    }
-
+    let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &strategies.len().to_string())]));
+    let mut msg_text = format!("{}\n", title);
     
-    let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &user_strategies.len().to_string())]));
-    let mut msg_text = title + "\n\n";
+    // Add page info
+    let page_info = i18n::translate(locale, "strategy_page_info", Some(&[
+        ("page", &(current_page + 1).to_string()),
+        ("total", &total_pages.to_string()),
+    ]));
+    msg_text.push_str(&format!("{}\n\n", page_info));
     
     let unnamed_str = "Unnamed".to_string();
     let no_desc_str = "No description".to_string();
     
-    for (idx, strategy) in user_strategies.iter().enumerate() {
+    for (local_idx, strategy) in page_strategies.iter().enumerate() {
+        let global_idx = start_idx + local_idx;
         let name = strategy.name.as_ref().unwrap_or(&unnamed_str);
         let desc_str = strategy.description.as_ref().unwrap_or(&no_desc_str);
         
@@ -1131,9 +1115,9 @@ pub async fn handle_my_strategies(
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Build message with beautiful icons
-        msg_text.push_str(if idx == 0 { "⭐ " } else { "📌 " });
+        msg_text.push_str(if global_idx == 0 { "⭐ " } else { "📌 " });
         msg_text.push_str("<b>");
-        msg_text.push_str(&(idx + 1).to_string());
+        msg_text.push_str(&(global_idx + 1).to_string());
         msg_text.push_str(". ");
         msg_text.push_str(&escaped_name);
         msg_text.push_str("</b>\n\n");
@@ -1166,24 +1150,91 @@ pub async fn handle_my_strategies(
         msg_text.push_str(&strategy.id.to_string());
         msg_text.push_str("</code>\n\n");
     }
-
+    
     msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
+    
+    // Build buttons
+    let mut buttons = Vec::new();
+    
+    // Pagination buttons
+    if total_pages > 1 {
+        let mut pagination_row = Vec::new();
+        
+        // Previous button
+        if current_page > 0 {
+            pagination_row.push(InlineKeyboardButton::callback(
+                i18n::get_button_text(locale, "button_previous"),
+                format!("mystrategies_page_{}", current_page - 1)
+            ));
+        }
+        
+        // Page indicator (non-clickable text)
+        // Note: Telegram doesn't support non-clickable buttons, so we'll use a callback that does nothing
+        // Or we can just show it in the message text (already done above)
+        
+        // Next button
+        if current_page < total_pages - 1 {
+            pagination_row.push(InlineKeyboardButton::callback(
+                i18n::get_button_text(locale, "button_next"),
+                format!("mystrategies_page_{}", current_page + 1)
+            ));
+        }
+        
+        if !pagination_row.is_empty() {
+            buttons.push(pagination_row);
+        }
+    }
+    
+    // Action buttons
+    buttons.push(vec![
+        InlineKeyboardButton::callback(
+            i18n::get_button_text(locale, "strategy_delete_button"),
+            "show_delete_strategies"
+        )
+    ]);
+    
+    (msg_text, buttons, current_page, total_pages)
+}
 
-    // Build inline keyboard with only "Delete Strategy" and "Back" buttons
-    let buttons = vec![
-        vec![
-            InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "strategy_delete_button"),
-                "show_delete_strategies"
-            )
-        ],
-        vec![
-            InlineKeyboardButton::callback(
-                i18n::get_button_text(locale, "button_back"),
-                "back_to_my_strategies"
-            )
-        ],
-    ];
+/// Handler to list all strategies created by the current user
+pub async fn handle_my_strategies(
+    bot: Bot,
+    msg: Message,
+    state: Arc<AppState>,
+) -> anyhow::Result<()> {
+    let telegram_id = msg.from.as_ref().unwrap().id.0.to_string();
+    let db = state.db.clone();
+
+    // Query strategies filtered by telegram_id column
+    use sea_orm::ColumnTrait;
+    use shared::entity::strategies;
+    
+    let user_strategies = strategies::Entity::find()
+        .filter(strategies::Column::TelegramId.eq(telegram_id.clone()))
+        .order_by_desc(strategies::Column::CreatedAt)
+        .all(db.as_ref())
+        .await?;
+
+    // Get user language
+    let user = users::Entity::find_by_id(telegram_id.parse::<i64>().unwrap_or(0))
+        .one(db.as_ref())
+        .await?;
+    let locale = user
+        .as_ref()
+        .and_then(|u| u.language.as_ref())
+        .map(|l| i18n::get_user_language(Some(l)))
+        .unwrap_or("en");
+    
+    if user_strategies.is_empty() {
+        let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
+        bot.send_message(msg.chat.id, empty_msg)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await?;
+        return Ok(());
+    }
+
+    // Build message with pagination (page 1, 5 items per page)
+    let (msg_text, buttons, _, _) = build_strategies_message_paginated(&user_strategies, locale, 0, 3);
 
     let send_msg = bot.send_message(msg.chat.id, msg_text)
         .parse_mode(teloxide::types::ParseMode::Html)
@@ -1475,6 +1526,66 @@ pub async fn handle_delete_strategy_callback(
                     .await?;
             }
         }
+        // Handle pagination (mystrategies_page_{page})
+        else if data.starts_with("mystrategies_page_") {
+            bot.answer_callback_query(q.id).await?;
+            
+            if let Some(msg) = q.message {
+                let user_id = q.from.id.0.to_string();
+                let db = state.db.clone();
+                
+                // Get user locale
+                let user = users::Entity::find_by_id(user_id.parse::<i64>().unwrap_or(0))
+                    .one(db.as_ref())
+                    .await?;
+                let locale = user
+                    .as_ref()
+                    .and_then(|u| u.language.as_ref())
+                    .map(|l| i18n::get_user_language(Some(l)))
+                    .unwrap_or("en");
+                
+                // Parse page number
+                let page_str = data.strip_prefix("mystrategies_page_").unwrap();
+                let page = page_str.parse::<usize>().unwrap_or(0);
+                
+                // Query strategies filtered by telegram_id
+                use sea_orm::ColumnTrait;
+                let user_strategies = strategies::Entity::find()
+                    .filter(strategies::Column::TelegramId.eq(user_id.clone()))
+                    .order_by_desc(strategies::Column::CreatedAt)
+                    .all(db.as_ref())
+                    .await?;
+                
+                if user_strategies.is_empty() {
+                    let empty_msg = i18n::translate(locale, "strategy_my_strategies_empty", None);
+                    if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &empty_msg)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await
+                    {
+                        let error_str = format!("{}", e);
+                        if !error_str.contains("message is not modified") {
+                            tracing::warn!("Failed to edit message (empty strategies in pagination): {}", e);
+                        }
+                    }
+                    return Ok(());
+                }
+                
+                // Build message with pagination (5 items per page)
+                let (msg_text, buttons, _, _) = build_strategies_message_paginated(&user_strategies, locale, page, 3);
+                
+                // Edit message, but ignore "message is not modified" error
+                if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)
+                    .parse_mode(teloxide::types::ParseMode::Html)
+                    .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
+                    .await
+                {
+                    let error_str = format!("{}", e);
+                    if !error_str.contains("message is not modified") {
+                        tracing::warn!("Failed to edit message in mystrategies_page: {}", e);
+                    }
+                }
+            }
+        }
         // Handle back to my strategies (back_to_my_strategies)
         else if data == "back_to_my_strategies" {
             bot.answer_callback_query(q.id).await?;
@@ -1516,105 +1627,8 @@ pub async fn handle_delete_strategy_callback(
                     return Ok(());
                 }
                 
-                // Rebuild the original my strategies message
-                let title = i18n::translate(locale, "strategy_my_strategies_title", Some(&[("count", &user_strategies.len().to_string())]));
-                let mut msg_text = title + "\n\n";
-                
-                let unnamed_str = "Unnamed".to_string();
-                let no_desc_str = "No description".to_string();
-                
-                for (idx, strategy) in user_strategies.iter().enumerate() {
-                    let name = strategy.name.as_ref().unwrap_or(&unnamed_str);
-                    let desc_str = strategy.description.as_ref().unwrap_or(&no_desc_str);
-                    
-                    // Parse description to extract fields
-                    let mut algorithm = "N/A".to_string();
-                    let mut buy_condition = "N/A".to_string();
-                    let mut sell_condition = "N/A".to_string();
-                    let mut timeframe = "N/A".to_string();
-                    let mut pair = "N/A".to_string();
-                    
-                    for line in desc_str.lines() {
-                        if line.starts_with("Algorithm: ") {
-                            algorithm = line[11..].to_string();
-                        } else if line.starts_with("Buy: ") {
-                            buy_condition = line[5..].to_string();
-                        } else if line.starts_with("Sell: ") {
-                            sell_condition = line[6..].to_string();
-                        } else if line.starts_with("Timeframe: ") {
-                            timeframe = line[11..].to_string();
-                        } else if line.starts_with("Pair: ") {
-                            pair = line[6..].to_string();
-                        }
-                    }
-                    
-                    // HTML escape all user data
-                    let escaped_name = escape_html(name);
-                    let escaped_algorithm = escape_html(&algorithm);
-                    let escaped_buy = escape_html(&buy_condition);
-                    let escaped_sell = escape_html(&sell_condition);
-                    let escaped_timeframe = escape_html(&timeframe);
-                    let escaped_pair = escape_html(&pair);
-                    
-                    let created = strategy.created_at
-                        .as_ref()
-                        .map(|dt| escape_html(&dt.format("%Y-%m-%d %H:%M").to_string()))
-                        .unwrap_or_else(|| "Unknown".to_string());
-
-                    // Build message with beautiful icons
-                    msg_text.push_str(if idx == 0 { "⭐ " } else { "📌 " });
-                    msg_text.push_str("<b>");
-                    msg_text.push_str(&(idx + 1).to_string());
-                    msg_text.push_str(". ");
-                    msg_text.push_str(&escaped_name);
-                    msg_text.push_str("</b>\n\n");
-                    
-                    msg_text.push_str("📊 <b>Algorithm:</b> ");
-                    msg_text.push_str(&escaped_algorithm);
-                    msg_text.push_str("\n");
-                    
-                    msg_text.push_str("📈 <b>Buy:</b> <code>");
-                    msg_text.push_str(&escaped_buy);
-                    msg_text.push_str("</code>\n");
-                    
-                    msg_text.push_str("📉 <b>Sell:</b> <code>");
-                    msg_text.push_str(&escaped_sell);
-                    msg_text.push_str("</code>\n");
-                    
-                    msg_text.push_str("⏰ <b>Timeframe:</b> ");
-                    msg_text.push_str(&escaped_timeframe);
-                    msg_text.push_str("\n");
-                    
-                    msg_text.push_str("💱 <b>Pair:</b> ");
-                    msg_text.push_str(&escaped_pair);
-                    msg_text.push_str("\n");
-                    
-                    msg_text.push_str("📅 <b>Created:</b> ");
-                    msg_text.push_str(&created);
-                    msg_text.push_str("\n");
-                    
-                    msg_text.push_str("🆔 <b>ID:</b> <code>");
-                    msg_text.push_str(&strategy.id.to_string());
-                    msg_text.push_str("</code>\n\n");
-                }
-                
-                msg_text.push_str(&i18n::translate(locale, "strategy_my_strategies_tip", None));
-                
-                // Build inline keyboard with only "Delete Strategy" and "Back" buttons
-                let buttons = vec![
-                    vec![
-                        InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "strategy_delete_button"),
-                            "show_delete_strategies"
-                        )
-                    ],
-                    vec![
-                        InlineKeyboardButton::callback(
-                            i18n::get_button_text(locale, "button_back"),
-                            "back_to_my_strategies"
-                        )
-                    ],
-                ];
+                // Rebuild the original my strategies message with pagination (page 1)
+                let (msg_text, buttons, _, _) = build_strategies_message_paginated(&user_strategies, locale, 0, 3);
                 
                 // Edit message, but ignore "message is not modified" error
                 if let Err(e) = bot.edit_message_text(msg.chat().id, msg.id(), &msg_text)

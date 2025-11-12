@@ -147,10 +147,31 @@ strategy_creation_cancelled: "❌ Đã hủy tạo chiến lược."
 strategy_saved: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
 strategy_saved_success: "✅ Chiến lược đã được lưu! Sử dụng /mystrategies để xem tất cả chiến lược của bạn."
 strategy_saved_error: "❌ Lỗi khi lưu chiến lược. Vui lòng thử lại."
-strategy_created_success: "✅ <b>Chiến Lược Đã Được Tạo Thành Công!</b>\n\n📋 <b>Tóm Tắt Đầy Đủ:</b>\n\n🎯 <b>Tên Chiến Lược:</b> {strategy_name}\n📊 <b>Thuật Toán:</b> {algorithm}\n📈 <b>Điều Kiện Mua:</b> {buy_condition}\n📉 <b>Điều Kiện Bán:</b> {sell_condition}\n⏰ <b>Khung Thời Gian:</b> {timeframe}\n💱 <b>Cặp Giao Dịch:</b> {pair}\n\nChiến lược của bạn đã được lưu và sẵn sàng sử dụng!"
+strategy_created_success: |
+  🎉 <b>CHIẾN LƯỢC ĐÃ ĐƯỢC TẠO THÀNH CÔNG!</b>
+  
+  ════════════════════════════
+  📋 <b>CHI TIẾT CHIẾN LƯỢC</b>
+  ════════════════════════════
+  
+  🎯 <b>Tên Chiến Lược:</b> {strategy_name}
+  📊 <b>Thuật Toán:</b> {algorithm}
+  📈 <b>Điều Kiện Mua:</b> <code>{buy_condition}</code>
+  📉 <b>Điều Kiện Bán:</b> <code>{sell_condition}</code>
+  ⏰ <b>Khung Thời Gian:</b> {timeframe}
+  💱 <b>Cặp Giao Dịch:</b> {pair}
+  
+  ════════════════════════════
+  ⚡ <b>TRẠNG THÁI: SẴN SÀNG</b> ⚡
+  ════════════════════════════
+  
+  ✅ Chiến lược của bạn đã được lưu và sẵn sàng sử dụng!
+  
+  💡 <i>Sử dụng /backtest để test chiến lược hoặc /mytrading để bắt đầu live trading</i>
 strategy_my_strategies_title: "📋 <b>Chiến Lược Của Tôi</b> ({count})"
 strategy_my_strategies_empty: "📋 <b>Chiến Lược Của Tôi</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/createstrategy</code> để tạo chiến lược đầu tiên của bạn!"
 strategy_my_strategies_tip: "\n💡 <b>Mẹo:</b> Sử dụng <code>/backtest &lt;strategy_name&gt;</code> để test chiến lược của bạn!"
+strategy_page_info: "📄 Trang {page} / {total}"
 strategy_delete_confirm: "⚠️ <b>Bạn có chắc chắn muốn xóa chiến lược này không?</b>\n\n<b>Chiến Lược:</b> {strategy_name}\n\nHành động này không thể hoàn tác!"
 strategy_delete_success: "✅ <b>Chiến lược đã được xóa thành công!</b>\n\nChiến lược <b>{strategy_name}</b> đã được xóa khỏi danh sách của bạn."
 strategy_delete_error: "❌ <b>Lỗi khi xóa chiến lược!</b>\n\nKhông thể xóa chiến lược. Vui lòng thử lại."
@@ -164,7 +185,20 @@ strategy_delete_confirm_no: "Không, hủy"
 strategy_choose_algorithm: "📊 <b>Chọn Thuật Toán</b>\n\nVui lòng chọn một thuật toán cho chiến lược của bạn:"
 strategy_choose_preset: "📚 <b>Chiến Lược Có Sẵn</b>\n\nChọn một chiến lược có sẵn để sử dụng làm mẫu:"
 strategy_loading_preset: "⏳ <b>Đang Tải Chiến Lược Có Sẵn...</b>\n\n<b>Chiến Lược:</b> {name}\n\nVui lòng đợi..."
-strategy_preset_loaded: "✅ <b>Đã Tải Chiến Lược Có Sẵn!</b>\n\n📋 <b>Tóm Tắt Chiến Lược:</b>\n\n📛 <b>Tên:</b> {name}\n📊 <b>Thuật Toán:</b> {algorithm}\n📈 <b>Điều Kiện Mua:</b> <code>{buy_condition}</code>\n📉 <b>Điều Kiện Bán:</b> <code>{sell_condition}</code>\n⏰ <b>Khung Thời Gian:</b> {timeframe}"
+strategy_preset_loaded: |
+  ✅ <b>ĐÃ TẢI CHIẾN LƯỢC CÓ SẴN!</b>
+  
+  ════════════════════════════
+  📋 <b>CẤU HÌNH CHIẾN LƯỢC</b>
+  ════════════════════════════
+  
+  📛 <b>Tên:</b> {name}
+  📊 <b>Thuật Toán:</b> {algorithm}
+  📈 <b>Điều Kiện Mua:</b> <code>{buy_condition}</code>
+  📉 <b>Điều Kiện Bán:</b> <code>{sell_condition}</code>
+  ⏰ <b>Khung Thời Gian:</b> {timeframe}
+  
+  💡 <i>Bạn có thể tùy chỉnh chiến lược này hoặc lưu như hiện tại</i>
 strategy_preset_load_error: "❌ <b>Không Thể Tải Chiến Lược Có Sẵn</b>\n\n<b>Chiến Lược:</b> {name}\n<b>Lỗi:</b> {error}\n\nVui lòng thử lại hoặc chọn chiến lược có sẵn khác."
 strategy_enter_name: "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔴 <b><u>NHẬP TÊN CHO CHIẾN LƯỢC CỦA BẠN</u></b> 🔴\n\n📝 <b>Vui lòng nhập tên cho chiến lược:</b>\n\n💡 <i>Ví dụ: Chiến Lược RSI Của Tôi, BTC Scalping, v.v.</i>\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 strategy_name_set: "✅ <b>Đã Đặt Tên Chiến Lược!</b>\n\n📛 <b>Tên:</b> {name}"
