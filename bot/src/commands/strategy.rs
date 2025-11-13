@@ -263,8 +263,17 @@ pub async fn handle_strategy_callback(
                             let name_msg = i18n::translate(&locale, "strategy_enter_name", None);
                             let full_msg = format!("{}\n\n{}", summary_msg, name_msg);
                             
+                            // Add Cancel button
+                            let cancel_button = vec![vec![
+                                InlineKeyboardButton::callback(
+                                    i18n::get_button_text(&locale, "strategy_cancel_button"),
+                                    "cancel_strategy"
+                                )
+                            ]];
+                            
                             bot.edit_message_text(chat_id, message_id, full_msg)
                                 .parse_mode(teloxide::types::ParseMode::Html)
+                                .reply_markup(teloxide::types::InlineKeyboardMarkup::new(cancel_button))
                                 .await?;
                             
                             dialogue.update(BotState::CreateStrategy(CreateStrategyState::WaitingForPresetName {
@@ -618,17 +627,22 @@ pub async fn handle_strategy_callback(
 
                             match strategies::Entity::insert(new_strategy).exec(state.db.as_ref()).await {
                                 Ok(_) => {
-                                    // Use i18n translation with escaped values
-                                    // translate() will handle HTML escaping automatically
-                                    // locale is already available from callback handler scope
-                                    let success_msg = i18n::translate(&locale, "strategy_created_success", Some(&[
-                                        ("strategy_name", &final_strategy_name),
-                                        ("algorithm", &algorithm),
-                                        ("buy_condition", &buy_condition),
-                                        ("sell_condition", &sell_condition),
-                                        ("timeframe", &timeframe),
-                                        ("pair", &pair),
-                                    ]));
+                                    // Use short message for preset strategies (when strategy_name is not empty)
+                                    // Use long message for custom strategies (when strategy_name is empty)
+                                    let success_msg = if !strategy_name.is_empty() {
+                                        // Preset strategy - use short message
+                                        i18n::translate(&locale, "strategy_saved_success", None)
+                                    } else {
+                                        // Custom strategy - use detailed message
+                                        i18n::translate(&locale, "strategy_created_success", Some(&[
+                                            ("strategy_name", &final_strategy_name),
+                                            ("algorithm", &algorithm),
+                                            ("buy_condition", &buy_condition),
+                                            ("sell_condition", &sell_condition),
+                                            ("timeframe", &timeframe),
+                                            ("pair", &pair),
+                                        ]))
+                                    };
                                     
                                     bot.send_message(chat_id, success_msg)
                                         .parse_mode(teloxide::types::ParseMode::Html)
