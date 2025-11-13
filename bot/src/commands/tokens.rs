@@ -73,6 +73,13 @@ pub async fn handle_tokens(
         )
     ]);
     
+    buttons.push(vec![
+        InlineKeyboardButton::callback(
+            i18n::get_button_text(locale, "tokens_cancel"),
+            "tokens_cancel"
+        )
+    ]);
+    
     let msg_text = i18n::translate(locale, "tokens_list", Some(&[("count", &tokens.len().to_string())]));
     bot.send_message(msg.chat.id, msg_text)
         .parse_mode(teloxide::types::ParseMode::Html)
@@ -269,11 +276,24 @@ pub async fn handle_tokens_callback(
                     )
                 ]);
                 
+                buttons.push(vec![
+                    InlineKeyboardButton::callback(
+                        i18n::get_button_text(locale, "button_cancel"),
+                        "tokens_cancel"
+                    )
+                ]);
+                
                 let msg_text = i18n::translate(locale, "tokens_list", Some(&[("count", &tokens.len().to_string())]));
                 bot.edit_message_text(chat_id, msg_ref.id(), msg_text)
                     .parse_mode(teloxide::types::ParseMode::Html)
                     .reply_markup(teloxide::types::InlineKeyboardMarkup::new(buttons))
                     .await?;
+            }
+        } else if data == "tokens_cancel" {
+            bot.answer_callback_query(q.id).await?;
+            // Delete the message when Cancel is clicked
+            if let Some(msg_ref) = q.message {
+                bot.delete_message(msg_ref.chat().id, msg_ref.id()).await?;
             }
         }
     }

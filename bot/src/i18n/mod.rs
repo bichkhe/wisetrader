@@ -367,6 +367,9 @@ pub fn get_button_text(locale: &str, key: &str) -> String {
         ("vi", "mytrading_stop_button") => "🛑 Dừng Live Trading".to_string(),
         ("en", "mytrading_stop_button") => "🛑 Stop Live Trading".to_string(),
         
+
+        ("vi", "tokens_cancel") => "❌ Hủy".to_string(),
+        ("en", "tokens_cancel") => "❌ Cancel".to_string(),
         // Default fallback
         _ => key.to_string(),
     }
