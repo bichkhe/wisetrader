@@ -42,7 +42,7 @@ build-bot:
 
 run-bot:
 	cargo build --bin bot
-	cargo run --bin bot
+	RUST_LOG=debug cargo run --bin bot
 
 run-api:
 	cargo run --bin api

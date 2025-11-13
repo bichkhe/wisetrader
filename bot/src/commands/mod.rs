@@ -259,7 +259,6 @@ pub async fn handle_command_invalid(
     msg: Message,
     state: Arc<AppState>,
 ) -> anyhow::Result<()> {
-    use crate::state::{BotState, CreateStrategyState, BacktestState, LiveTradingState};
     use crate::i18n;
     use shared::entity::users;
     use tracing::debug;
@@ -290,14 +289,11 @@ pub async fn handle_command_invalid(
     debug!("🔍 [User {}] Invalid command received: '{}', Current state: {}", 
         telegram_id, command_text, state_info);
     
-    // Build debug message
-    let debug_msg = format!(
-        "❌ <b>Invalid Command</b>\n\n\
-        📝 <b>Command:</b> <code>{}</code>\n\
-        🔄 <b>Current State:</b> <code>{}</code>\n\n\
-        💡 <i>Use /help to see available commands</i>",
-        command_text, state_info
-    );
+    // Build debug message using i18n
+    let debug_msg = i18n::translate(locale, "error_invalid_command_with_state", Some(&[
+        ("command", &command_text),
+        ("state", &state_info),
+    ]));
     
     bot.send_message(msg.chat.id, debug_msg)
         .parse_mode(teloxide::types::ParseMode::Html)

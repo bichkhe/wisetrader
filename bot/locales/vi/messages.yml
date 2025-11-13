@@ -3,7 +3,18 @@
 # Language selection
 lang_selection_title: |
   🌐 <b>Chào mừng đến với WiseTrader!</b>
+   🎯 <b>Tín Hiệu Giao Dịch Thông Minh</b>
+  Không bao giờ bỏ lỡ cơ hội! Nhận tín hiệu giao dịch theo thời gian thực dựa trên các thuật toán đã được chứng minh (RSI, Bollinger Bands, EMA, MACD, MA).
   
+  🔬 <b>Backtest Trước Khi Giao Dịch</b>
+  Kiểm tra chiến lược của bạn mà không rủi ro! Chạy backtest trên dữ liệu lịch sử từ Binance và OKX để xác minh chiến lược trước khi rủi ro tiền thật.
+  
+  📊 <b>Tạo & Lưu Chiến Lược Của Bạn</b>
+  Tạo chiến lược giao dịch tùy chỉnh phù hợp với phong cách của bạn. Kết hợp các chỉ báo để tìm ra cách thức phù hợp với bạn.
+  
+  📈 <b>Truy Cập Thư Viện Chiến Lược</b>
+  Học từ các chiến lược đã được chứng minh và tùy chỉnh chúng cho nhu cầu giao dịch của bạn.
+
   ⚠️ <b>QUAN TRỌNG:</b> Vui lòng chọn ngôn ngữ của bạn (<b>Tiếng Việt</b> hoặc <b>English</b>) để tiếp tục sử dụng bot.
   
   <b>Please select your language (Vietnamese or English):</b>
@@ -36,7 +47,7 @@ welcome_new_user: |
   
   <b>Sẵn sàng bắt đầu?</b> Sử dụng /help để xem tất cả lệnh. ℹ️
   
-  💎 <b>Muốn nhiều tính năng hơn?</b> Sử dụng <code>/upgrade</code> để xem các gói cao cấp.
+  💎 <b>Muốn nhiều tính năng hơn?</b> Sử dụng /upgrade để xem các gói cao cấp.
   
   <i>⚠️ <b>Lưu ý:</b> Giao dịch tiền điện tử có rủi ro. Bot này cung cấp công cụ, không phải lời khuyên tài chính.</i>
 welcome_back: |
@@ -79,7 +90,8 @@ error_user_not_found: "❌ Không tìm thấy người dùng. Vui lòng chạy /
 error_language_not_set: "❌ Vui lòng chọn ngôn ngữ của bạn trước bằng /start"
 error_unknown_command: "❌ Lệnh không xác định. Sử dụng /help để xem các lệnh có sẵn."
 error_invalid_command: "❌ Lệnh không hợp lệ. Vui lòng sử dụng /help để xem các lệnh có sẵn."
-error_no_strategies: "❌ <b>Không Tìm Thấy Chiến Lược</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/createstrategy</code> để tạo chiến lược đầu tiên của bạn!"
+error_invalid_command_with_state: "❌ <b>Lệnh Không Hợp Lệ</b>\n\n📝 <b>Lệnh:</b> <code>{command}</code>\n🔄 <b>Trạng Thái Hiện Tại:</b> <code>{state}</code>\n\n💡 <i>Sử dụng /help để xem các lệnh có sẵn</i>\n\n💡 <i>Sử dụng /back để quay về menu chính</i>"
+error_no_strategies: "❌ <b>Không Tìm Thấy Chiến Lược</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng /createstrategy để tạo chiến lược đầu tiên của bạn!"
 error_state_waiting_language: "⚠️ <b>Vui lòng chọn ngôn ngữ trước!</b>\n\nSử dụng các nút ở trên để chọn 🇻🇳 Tiếng Việt hoặc 🇬🇧 English."
 error_state_strategy_waiting_algorithm: "⚠️ <b>Đang Tạo Chiến Lược</b>\n\nVui lòng chọn một thuật toán từ các nút ở trên để tiếp tục tạo chiến lược.\n\nHoặc sử dụng <code>/cancel</code> để hủy."
 error_state_strategy_waiting_buy: "⚠️ <b>Đang Tạo Chiến Lược</b>\n\n📊 <b>Thuật Toán:</b> {algorithm}\n\nVui lòng nhập <b>điều kiện mua</b> cho chiến lược của bạn.\n\nVí dụ: <code>RSI < 30</code> hoặc <code>Price < LowerBand</code>\n\nHoặc sử dụng <code>/cancel</code> để hủy."
@@ -92,7 +104,7 @@ error_state_backtest_waiting_timerange: "⚠️ <b>Đang Chạy Backtest</b>\n\n
 error_state_trading_waiting_pair: "⚠️ <b>Đang Giao Dịch</b>\n\nVui lòng nhập cặp giao dịch (ví dụ: <code>BTC/USDT</code>).\n\nHoặc sử dụng <code>/cancel</code> để hủy."
 error_state_trading_waiting_amount: "⚠️ <b>Đang Giao Dịch</b>\n\nVui lòng nhập số lượng bạn muốn giao dịch.\n\nHoặc sử dụng <code>/cancel</code> để hủy."
 error_state_trading_waiting_confirmation: "⚠️ <b>Đang Giao Dịch</b>\n\nVui lòng xác nhận giao dịch bằng các nút ở trên.\n\nHoặc sử dụng <code>/cancel</code> để hủy."
-back_success: "✅ <b>Đã Trở Về Trạng Thái Bình Thường</b>\n\nBạn có thể sử dụng tất cả các lệnh tự do.\n\nSử dụng <code>/help</code> để xem các lệnh có sẵn."
+back_success: "✅ <b>Đã Trở Về Trạng Thái Bình Thường</b>\n\nBạn có thể sử dụng tất cả các lệnh tự do.\n\nSử dụng /help để xem các lệnh có sẵn."
 back_already_normal: "ℹ️ <b>Đã Ở Trạng Thái Bình Thường</b>\n\nBạn đã ở trạng thái bình thường rồi. Sử dụng <code>/help</code> để xem các lệnh có sẵn."
 
 # Payment
@@ -169,14 +181,14 @@ strategy_created_success: |
   
   💡 <i>Sử dụng /backtest để test chiến lược hoặc /mytrading để bắt đầu live trading</i>
 strategy_my_strategies_title: "📋 <b>Chiến Lược Của Tôi</b> ({count})"
-strategy_my_strategies_empty: "📋 <b>Chiến Lược Của Tôi</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng <code>/createstrategy</code> để tạo chiến lược đầu tiên của bạn!"
-strategy_my_strategies_tip: "\n💡 <b>Mẹo:</b> Sử dụng <code>/backtest &lt;strategy_name&gt;</code> để test chiến lược của bạn!"
+strategy_my_strategies_empty: "📋 <b>Chiến Lược Của Tôi</b>\n\nBạn chưa tạo chiến lược nào.\n\nSử dụng /createstrategy để tạo chiến lược đầu tiên của bạn!"
+strategy_my_strategies_tip: "\n💡 <b>Mẹo:</b> Sử dụng /backtest để test chiến lược của bạn!"
 strategy_page_info: "📄 Trang {page} / {total}"
 strategy_delete_confirm: "⚠️ <b>Bạn có chắc chắn muốn xóa chiến lược này không?</b>\n\n<b>Chiến Lược:</b> {strategy_name}\n\nHành động này không thể hoàn tác!"
 strategy_delete_success: "✅ <b>Chiến lược đã được xóa thành công!</b>\n\nChiến lược <b>{strategy_name}</b> đã được xóa khỏi danh sách của bạn."
 strategy_delete_error: "❌ <b>Lỗi khi xóa chiến lược!</b>\n\nKhông thể xóa chiến lược. Vui lòng thử lại."
 strategy_delete_not_found: "❌ <b>Không tìm thấy chiến lược!</b>\n\nChiến lược bạn đang cố xóa không tồn tại hoặc không thuộc về bạn."
-strategy_delete_cancelled: "❌ <b>Đã hủy xóa.</b>\n\nSử dụng <code>/mystrategies</code> để xem lại chiến lược của bạn."
+strategy_delete_cancelled: "❌ <b>Đã hủy xóa.</b>\n\nSử dụng /mystrategies để xem lại chiến lược của bạn."
 strategy_delete_button: "🗑️ Xóa Chiến Lược"
 strategy_cancel: "❌ Hủy"
 strategy_already_saved: "✅ Chiến lược đã được lưu! Sử dụng /strategies để xem tất cả chiến lược của bạn."
@@ -207,7 +219,7 @@ strategy_delete_with_name: "🗑️ Xóa"
 strategy_delete_list_title: "🗑️ <b>Xóa Chiến Lược</b>\n\nChọn chiến lược để xóa:"
 strategy_type_custom_mix: "🔀 Mix Chiến Lược"
 strategy_choose_mix: "🔀 <b>Chọn Chiến Lược Để Mix</b>\n\nChọn một hoặc nhiều chiến lược từ danh sách của bạn để tạo chiến lược mix:\n\n💡 <i>Nhấn vào các chiến lược để chọn/bỏ chọn, sau đó nhấn \"Hoàn thành\"</i>"
-strategy_mix_no_strategies: "❌ <b>Bạn chưa có chiến lược nào!</b>\n\nVui lòng tạo ít nhất một chiến lược trước khi mix. Sử dụng <code>/createstrategy</code> để tạo chiến lược mới."
+strategy_mix_no_strategies: "❌ <b>Bạn chưa có chiến lược nào!</b>\n\nVui lòng tạo ít nhất một chiến lược trước khi mix. Sử dụng /createstrategy để tạo chiến lược mới."
 strategy_mix_done: "✅ Hoàn thành"
 strategy_mix_selected: "🔀 <b>Chọn Chiến Lược Để Mix</b>\n\nĐã chọn <b>{count}</b> chiến lược. Nhấn \"Hoàn thành\" để tiếp tục."
 strategy_mix_no_selection: "⚠️ Vui lòng chọn ít nhất một chiến lược!"
@@ -224,7 +236,7 @@ pair_dot_usdt: "● DOT/USDT"
 pair_manual: "✏️ Nhập Thủ Công"
 
 # Trading
-trading_already_active: "⚠️ Bạn đã có một chiến lược đang chạy. Vui lòng dừng trước khi bắt đầu chiến lược mới."
+trading_already_active: "⚠️ Bạn đã có một chiến lược đang chạy. Vui lòng dừng trước khi bắt đầu chiến lược mới.\n\n💡 Sử dụng /mytrading và dừng session live trading đó."
 trading_no_strategies: "❌ Bạn chưa tạo chiến lược nào. Hãy sử dụng /createstrategy để tạo chiến lược trước."
 trading_select_strategy: "📊 <b>Chọn Chiến Lược để Bắt Đầu Giao Dịch</b>\n\nVui lòng chọn một chiến lược từ danh sách:"
 trading_cancel: "❌ Hủy"
@@ -276,7 +288,7 @@ button_next: "➡️ Tiếp theo"
 
 # Live Trading
 live_trading_no_tokens: "⚠️ <b>Chưa có Token Exchange</b>\n\nBạn cần thiết lập OAuth tokens cho ít nhất một sàn giao dịch (Binance hoặc OKX) trước khi bắt đầu live trading.\n\nVui lòng thiết lập thông tin API của bạn:"
-live_trading_tokens_configured: "✅ <b>Trạng thái Token Exchange</b>\n\n🔐 <b>Các sàn đã thiết lập:</b> {exchanges}\n📊 <b>Tổng số token active:</b> {count}\n\nBạn có thể:\n• Thiết lập thêm sàn giao dịch\n• Cập nhật token hiện có\n• Bắt đầu live trading với chiến lược của bạn"
+live_trading_tokens_configured: "✅ <b>Trạng thái Token Exchange</b>\n\n🔐 <b>Các sàn đã thiết lập:</b> {exchanges}\n📊 <b>Tổng số token active:</b> {count}\n\nBạn có thể:\n• Thiết lập thêm sàn giao dịch\n• Cập nhật token hiện có\n• Bắt đầu live trading với chiến lược của bạn\n\n💡 <b>Tip:</b> Nhấn vào 🚀 <b>Bắt đầu giao dịch</b> để bắt đầu live trading"
 live_trading_setup_binance: "🔵 Thiết lập Binance"
 live_trading_setup_okx: "🟢 Thiết lập OKX"
 live_trading_start_trading: "🚀 Bắt đầu giao dịch"

@@ -3,6 +3,19 @@
 # Language selection
 lang_selection_title: |
   🌐 <b>Welcome to WiseTrader!</b>
+    <b>✨ What You Get:</b>
+  
+  🎯 <b>Smart Trading Signals</b>
+  Never miss opportunities! Get real-time trading signals based on proven algorithms (RSI, Bollinger Bands, EMA, MACD, MA).
+  
+  🔬 <b>Backtest Before You Trade</b>
+  Test your strategies risk-free! Run backtests on historical data across Binance and OKX to validate strategies before risking real money.
+  
+  📊 <b>Build & Save Your Strategies</b>
+  Create custom trading strategies tailored to your style. Mix and match indicators to find what works for you.
+  
+  📈 <b>Strategy Library Access</b>
+  Learn from proven strategies and customize them for your trading needs.
   
   ⚠️ <b>IMPORTANT:</b> Please select your language (<b>Vietnamese</b> or <b>English</b>) to continue using the bot.
   
@@ -81,6 +94,7 @@ error_user_not_found: "❌ User not found. Please run /start first."
 error_language_not_set: "❌ Please select your language first using /start"
 error_unknown_command: "❌ Unknown command. Use /help to see available commands."
 error_invalid_command: "❌ Invalid command. Please use /help to see available commands."
+error_invalid_command_with_state: "❌ <b>Invalid Command</b>\n\n📝 <b>Command:</b> <code>{command}</code>\n🔄 <b>Current State:</b> <code>{state}</code>\n\n💡 <i>Use /help to see available commands</i>\n\n💡 <i>Use /back to return to home menu</i>"
 error_no_strategies: "❌ <b>No Strategies Found</b>\n\nYou haven't created any strategies yet.\n\nUse <code>/createstrategy</code> to create your first strategy!"
 error_state_waiting_language: "⚠️ <b>Please select your language first!</b>\n\nUse the buttons above to choose between 🇻🇳 Vietnamese or 🇬🇧 English."
 error_state_strategy_waiting_algorithm: "⚠️ <b>Strategy Creation in Progress</b>\n\nPlease select an algorithm from the buttons above to continue creating your strategy.\n\nOr use <code>/cancel</code> to cancel."
@@ -226,7 +240,7 @@ pair_dot_usdt: "● DOT/USDT"
 pair_manual: "✏️ Enter Manually"
 
 # Trading
-trading_already_active: "⚠️ You already have a strategy running. Please stop it before starting a new one."
+trading_already_active: "⚠️ You already have a strategy running. Please stop it before starting a new one.\n\n💡 Using /mytrading and stop that live trading session."
 trading_no_strategies: "❌ You haven't created any strategies yet. Use /createstrategy to create one first."
 trading_select_strategy: "📊 <b>Select Strategy to Start Trading</b>\n\nPlease select a strategy from the list:"
 trading_cancel: "❌ Cancel"
@@ -238,7 +252,7 @@ trading_strategy_not_found: "❌ Strategy not found."
 
 # Live Trading
 live_trading_no_tokens: "⚠️ <b>No Exchange Tokens Configured</b>\n\nYou need to configure OAuth tokens for at least one exchange (Binance or OKX) before starting live trading.\n\nPlease set up your exchange API credentials:"
-live_trading_tokens_configured: "✅ <b>Exchange Tokens Status</b>\n\n🔐 <b>Configured Exchanges:</b> {exchanges}\n📊 <b>Total Active Tokens:</b> {count}\n\nYou can:\n• Setup additional exchanges\n• Update existing tokens\n• Start live trading with your strategies"
+live_trading_tokens_configured: "✅ <b>Exchange Tokens Status</b>\n\n🔐 <b>Configured Exchanges:</b> {exchanges}\n📊 <b>Total Active Tokens:</b> {count}\n\nYou can:\n• Setup additional exchanges\n• Update existing tokens\n• Start live trading with your strategies\n\n💡 <b>Tip:</b> Click on <b>🚀 Start Trading</b> to begin live trading"
 live_trading_setup_binance: "🔵 Setup Binance"
 live_trading_setup_okx: "🟢 Setup OKX"
 live_trading_start_trading: "🚀 Start Trading"

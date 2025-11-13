@@ -147,7 +147,7 @@ pub async fn handle_live_trading(
         .reply_markup(teloxide::types::InlineKeyboardMarkup::new(setup_buttons))
         .await?;
     
-    dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchangeSetup)).await?;
+    // dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchangeSetup)).await?;
     
     Ok(())
 }
@@ -616,6 +616,12 @@ pub async fn handle_live_trading_input(
     msg: Message,
     state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
+    // Print the current dialogue state for debugging
+    if let Ok(state) = dialogue.get().await {
+        tracing::info!("handle_live_trading_input | Dialogue state: {:?}", state);
+    } else {
+        tracing::warn!("handle_live_trading_input | Failed to get dialogue state.");
+    }
     let telegram_id = msg.from.as_ref().map(|f| f.id.0 as i64).unwrap_or(0);
     
     // Get text first before moving msg
@@ -805,7 +811,7 @@ pub async fn handle_live_trading_input(
                 .reply_markup(teloxide::types::InlineKeyboardMarkup::new(setup_buttons))
                 .await?;
             
-            dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchangeSetup)).await?;
+            // dialogue.update(BotState::LiveTrading(LiveTradingState::WaitingForExchangeSetup)).await?;
         }
     }
     
@@ -923,7 +929,7 @@ pub async fn handle_my_trading(
             .unwrap_or_else(|| "N/A".to_string());
         
         let status_msg = format!(
-            "{}\n\n{}\n\n{}\n{}\n{}\n{}\n{}\n\n{}",
+            "{}\n{}\n\n{}\n{}\n{}\n{}\n{}\n\n{}",
             i18n::translate(locale, "mytrading_status_title", None),
             i18n::translate(locale, "mytrading_status_running", None),
             i18n::translate(locale, "mytrading_strategy", Some(&[("strategy", &strategy_name)])),
