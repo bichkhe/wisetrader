@@ -199,7 +199,7 @@ strategy_choose_preset: "📚 <b>Chiến Lược Có Sẵn</b>\n\nChọn một c
 strategy_loading_preset: "⏳ <b>Đang Tải Chiến Lược Có Sẵn...</b>\n\n<b>Chiến Lược:</b> {name}\n\nVui lòng đợi..."
 strategy_preset_loaded: "✅ <b>Đã Tải Chiến Lược Có Sẵn</b>\n\n📛 <b>Tên:</b> {name}\n📊 <b>Thuật Toán:</b> {algorithm}\n📈 <b>Mua:</b> <code>{buy_condition}</code>\n📉 <b>Bán:</b> <code>{sell_condition}</code>\n⏰ <b>Khung Thời Gian:</b> {timeframe}"
 strategy_preset_load_error: "❌ <b>Không Thể Tải Chiến Lược Có Sẵn</b>\n\n<b>Chiến Lược:</b> {name}\n<b>Lỗi:</b> {error}\n\nVui lòng thử lại hoặc chọn chiến lược có sẵn khác."
-strategy_enter_name: "📝 <b>Nhập Tên Chiến Lược</b>\n\nVui lòng nhập tên cho chiến lược:\n\n💡 <i>Ví dụ: Chiến Lược RSI Của Tôi, BTC Scalping</i>"
+strategy_enter_name: "📝 <b>Nhập Tên Chiến Lược</b>\n\n🛑 <b>Vui lòng nhập tên cho chiến lược: </b>\n\n💡 <i>Ví dụ: Chiến Lược RSI Của Tôi, BTC Scalping</i>"
 strategy_name_set: "✅ <b>Đã Đặt Tên Chiến Lược!</b>\n\n📛 <b>Tên:</b> {name}"
 strategy_name_empty: "❌ <b>Tên chiến lược không thể để trống!</b>\n\nVui lòng nhập tên hợp lệ cho chiến lược của bạn."
 strategy_delete_with_name: "🗑️ Xóa"

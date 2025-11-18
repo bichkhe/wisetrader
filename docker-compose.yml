@@ -127,9 +127,9 @@ services:
       # This enables bot container to execute commands in freqtrade container
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_TOKEN=${BOT_TOKEN:-8222061674:AAGU2JiydFyAA4AhX1g6vqueSmNhAs3psLs}
       - BOT_NAME=${BOT_NAME:-wisetrader}
-      - TELOXIDE_TOKEN=${TELOXIDE_TOKEN}
+      - TELOXIDE_TOKEN=${TELOXIDE_TOKEN:-8222061674:AAGU2JiydFyAA4AhX1g6vqueSmNhAs3psLs}
       - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
       - REDIS_URL=redis://redis:6379
       - API_BASE_URL=http://api:9999
