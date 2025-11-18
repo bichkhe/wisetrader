@@ -133,7 +133,7 @@ services:
       - DATABASE_URL=mysql://wisetrader:wisetrader2025@db:3306/wisetrader_db
       - REDIS_URL=redis://redis:6379
       - API_BASE_URL=http://api:9999
-      - GENERATE_HTML_REPORTS=${GENERATE_HTML_REPORTS:-false}
+      - GENERATE_HTML_REPORTS=${GENERATE_HTML_REPORTS:-true}
       - HTML_REPORTS_DIR=/app/html_reports
       - HTML_REPORTS_BASE_URL=${HTML_REPORTS_BASE_URL:-http://localhost:9999/reports}
       - TRADING_SIGNAL_CHANNEL_ID=${TRADING_SIGNAL_CHANNEL_ID}
